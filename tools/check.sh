@@ -61,6 +61,22 @@ step "visual values"
 # in the token contract's reference file.
 node tools/guards/visual-values.mjs
 
+step "keel fixtures"
+# The wire fixtures are a byte copy of Keel's golden frames at a pinned tag.
+# This step reruns that copy against the recorded tag and fails when a byte
+# differs, so a hand edit cannot pass. CI never sees the Keel checkout, so the
+# step prints why it skips and carries on there.
+keel=${KEEL_DIR:-/home/nryn/work/keel}
+if [ ! -e "$keel/.git" ]; then
+	echo "No Keel checkout at $keel. The gate parses the committed fixtures only, so it skips the copy check."
+else
+	keel_tag=$(cat src/lib/wire/fixtures/KEEL_TAG)
+	keel_staging=$(mktemp -d)
+	trap 'rm -rf "$keel_staging"' EXIT
+	git -C "$keel" archive "$keel_tag" testdata/wire | tar -x -C "$keel_staging"
+	diff -ru --exclude=KEEL_TAG "$keel_staging/testdata/wire" src/lib/wire/fixtures
+fi
+
 step "vitest"
 npm run test
 

@@ -27,6 +27,8 @@ Published as `@nrynss/chaaya`.
   role a theme block leaves out.
 - `@nrynss/chaaya/tokens/reference.css`: the reference stylesheet a new app
   copies.
+- `@nrynss/chaaya/wire`: the error envelope and job event types, with a parser
+  for each that returns a typed failure instead of throwing.
 
 ## Status
 

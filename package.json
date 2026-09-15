@@ -33,6 +33,11 @@
     },
     "./tokens/reference.css": {
       "default": "./dist/tokens/reference.css"
+    },
+    "./wire": {
+      "types": "./dist/wire/index.d.ts",
+      "svelte": "./dist/wire/index.js",
+      "default": "./dist/wire/index.js"
     }
   },
   "files": [
