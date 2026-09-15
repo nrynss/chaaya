@@ -1,9 +1,9 @@
 # Chaaya
 
-> **Chaaya** (ഛായ) — likeness, shade.
+> **Chaaya** (ഛായ): likeness, shade.
 
 A Svelte 5 kit of behaviour, not looks. Each app that uses it keeps its own
-visual identity; Chaaya supplies the parts that are hard to get right and the
+visual identity. Chaaya supplies the parts that are hard to get right and the
 same in every app.
 
 ## Scope
