@@ -1,0 +1,151 @@
+<script lang="ts">
+	import { onMount } from "svelte"
+	import { LiveLevel } from "$lib/audio/levels/live-level.svelte"
+	import { computePeaksInWorker } from "$lib/audio/levels/peaks-client"
+
+	type Phase = "idle" | "running" | "done" | "failed"
+
+	let hydrated = $state(false)
+	let phase = $state<Phase>("idle")
+	let silenceRms = $state("")
+	let silencePeak = $state("")
+	let toneRms = $state("")
+	let tonePeak = $state("")
+	let peaksMs = $state("")
+	let maxGap = $state("")
+	let peakMin = $state("")
+	let peakMax = $state("")
+	let loopState = $state("idle")
+	let failure = $state("")
+
+	onMount(() => {
+		hydrated = true
+	})
+
+	const TONE_SECONDS = 20 * 60
+	const SAMPLE_RATE = 48000
+	const BUCKETS = TONE_SECONDS * 20
+
+	const format = (value: number) => value.toFixed(3)
+
+	/** Let the page rest so the audio graph fills its analyser buffer. */
+	function wait(ms: number): Promise<void> {
+		const { promise, resolve } = Promise.withResolvers<void>()
+		setTimeout(resolve, ms)
+		return promise
+	}
+
+	/** A full scale square wave, looped, so the peak lands on one. */
+	function buildTone(context: AudioContext): AudioBufferSourceNode {
+		const buffer = context.createBuffer(1, context.sampleRate, context.sampleRate)
+		const data = buffer.getChannelData(0)
+		for (let index = 0; index < data.length; index += 1) {
+			data[index] = index % 100 < 50 ? 1 : -1
+		}
+		const source = context.createBufferSource()
+		source.buffer = buffer
+		source.loop = true
+		return source
+	}
+
+	/** A long quiet signal with a known high and low, used for the peaks. */
+	function synthesize(durationSeconds: number, rate: number): Float32Array {
+		const frames = Math.floor(durationSeconds * rate)
+		const samples = new Float32Array(frames)
+		for (let index = 0; index < frames; index += 1) {
+			samples[index] = index % 8000 < 4000 ? 0.5 : -0.9
+		}
+		return samples
+	}
+
+	/** Watch the gap between animation frames. The stop waits for one more
+	 * frame, so a gap that spans a long block is recorded before the worst
+	 * value is read. The gap is read from the clock at callback time, because
+	 * a frame timestamp can carry the time before the block. A blocked main
+	 * thread shows up as a long gap. */
+	function frameGaps(): () => Promise<number> {
+		let last = performance.now()
+		let worst = 0
+		let frame = requestAnimationFrame(function tick() {
+			const now = performance.now()
+			const gap = now - last
+			if (gap > worst) worst = gap
+			last = now
+			frame = requestAnimationFrame(tick)
+		})
+		return async () => {
+			const { promise, resolve } = Promise.withResolvers<void>()
+			requestAnimationFrame(() => resolve())
+			await promise
+			cancelAnimationFrame(frame)
+			return worst
+		}
+	}
+
+	async function run(): Promise<void> {
+		phase = "running"
+		failure = ""
+		try {
+			const context = new AudioContext()
+			await context.resume()
+			const analyser = context.createAnalyser()
+			analyser.fftSize = 2048
+			/* A muted path to the destination keeps the graph pulled. */
+			const mute = context.createGain()
+			mute.gain.value = 0
+			analyser.connect(mute)
+			mute.connect(context.destination)
+			const live = new LiveLevel(analyser)
+
+			const silence = live.read()
+			silenceRms = format(silence.rmsDb)
+			silencePeak = format(silence.peakDb)
+
+			const stopLoop = live.watch()
+			const started = live.running ? "running" : "idle"
+			stopLoop()
+			loopState = `${started}->${live.running ? "running" : "idle"}`
+
+			const source = buildTone(context)
+			source.connect(analyser)
+			source.start()
+			await wait(150)
+			const tone = live.read()
+			source.stop()
+			source.disconnect()
+			toneRms = format(tone.rmsDb)
+			tonePeak = format(tone.peakDb)
+
+			/* Build the buffer before arming the meter, so the fixture cost stays
+			 * out of the reading and the gap tracks the compute alone. */
+			const samples = synthesize(TONE_SECONDS, SAMPLE_RATE)
+			const stopGaps = frameGaps()
+			const computed = performance.now()
+			const peaks = await computePeaksInWorker([samples], BUCKETS)
+			peaksMs = format(performance.now() - computed)
+			maxGap = format(await stopGaps())
+			peakMin = format(peaks.min.reduce((low, value) => Math.min(low, value), Infinity))
+			peakMax = format(peaks.max.reduce((high, value) => Math.max(high, value), -Infinity))
+			phase = "done"
+		} catch (error) {
+			failure = String(error)
+			phase = "failed"
+		}
+	}
+</script>
+
+<main>
+	<h1>Audio levels</h1>
+	<button type="button" data-testid="run" disabled={!hydrated} onclick={run}>Measure</button>
+	<p data-testid="phase">{phase}</p>
+	<p data-testid="failure">{failure}</p>
+	<p data-testid="silence-rms">{silenceRms}</p>
+	<p data-testid="silence-peak">{silencePeak}</p>
+	<p data-testid="tone-rms">{toneRms}</p>
+	<p data-testid="tone-peak">{tonePeak}</p>
+	<p data-testid="peaks-ms">{peaksMs}</p>
+	<p data-testid="max-frame-gap">{maxGap}</p>
+	<p data-testid="peak-min">{peakMin}</p>
+	<p data-testid="peak-max">{peakMax}</p>
+	<p data-testid="loop-state">{loopState}</p>
+</main>
