@@ -101,8 +101,8 @@ export class AudioRecorder {
 	#mediaRecorder: MediaRecorder | null = null
 	#blocks: CaptureChunk[] = []
 	#parts: Blob[] = []
-	#ticker: number | null = null
-	#timer: number | null = null
+	#ticker: ReturnType<typeof setInterval> | null = null
+	#timer: ReturnType<typeof setTimeout> | null = null
 	#sampleRate = FALLBACK_SAMPLE_RATE
 	#autoStop: number
 	#chunkFrames: number

@@ -1,6 +1,3 @@
-// The package ships no node type package, so the builtin that reads the
-// stylesheet has no declaration. Suppress the one missing type here.
-// @ts-expect-error node:fs has no type declarations in this project
 import { readFileSync } from "node:fs"
 import { expect, test } from "vitest"
 import { checkTokens } from "./index"
