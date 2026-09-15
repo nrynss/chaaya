@@ -6,6 +6,7 @@ AGENTS.md
 node_modules/
 dist/
 .svelte-kit/
+build/
 package/
 coverage/
 playwright-report/

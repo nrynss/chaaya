@@ -35,6 +35,7 @@ export default defineConfig(
   globalIgnores([
     ".svelte-kit/",
     "dist/",
+    "build/",
     "node_modules/",
     "playwright-report/",
     "test-results/"

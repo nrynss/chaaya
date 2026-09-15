@@ -10,8 +10,10 @@
   },
   "scripts": {
     "dev": "vite dev",
+    "build": "vite build",
+    "start": "node build/index.js",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "lint": "eslint .",
+    "lint": "eslint $(git ls-files --cached --others --exclude-standard | grep -E '\\.(js|mjs|cjs|ts|svelte)$')",
     "test": "vitest run",
     "test:browser": "playwright test",
     "package": "svelte-package -i src/lib -o dist",
@@ -37,6 +39,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.0",
     "@playwright/test": "^1.63.0",
+    "@sveltejs/adapter-node": "^5.0.0",
     "@sveltejs/kit": "^2.70.3",
     "@sveltejs/package": "^2.5.8",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",

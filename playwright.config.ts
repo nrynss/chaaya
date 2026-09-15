@@ -1,8 +1,9 @@
 import { defineConfig } from "@playwright/test"
 
-/** The browser gate proves what jsdom cannot. The dev server hosts the page
- * because the library ships no bundle of its own. Three engines keep engine
- * specific behaviour honest. */
+/** The browser gate proves what jsdom cannot. The library ships no server of
+ * its own, so the leg serves the production node build. Three engines keep
+ * engine specific behaviour honest, and one invocation shares one server for
+ * all of them. */
 export default defineConfig({
   testDir: "./tests/playwright",
   timeout: 30_000,
@@ -12,9 +13,14 @@ export default defineConfig({
     trace: "retain-on-failure"
   },
   webServer: {
-    command: "npm run dev -- --host 127.0.0.1 --port 4173 --strictPort",
+    command: "npm run build && node build/index.js",
     url: "http://127.0.0.1:4173",
-    reuseExistingServer: !process.env.CI
+    reuseExistingServer: false,
+    env: {
+      PORT: "4173",
+      HOST: "127.0.0.1",
+      ORIGIN: "http://127.0.0.1:4173"
+    }
   },
   projects: [
     { name: "chromium", use: { browserName: "chromium" } },

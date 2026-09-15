@@ -21,8 +21,10 @@ scan_tracked_files() {
 	local pattern=$1 exclude=${2:-} file status
 	local -a hits=()
 	mapfile -d '' files < <(git ls-files --cached --others --exclude-standard -z)
+	# An untracked symlink to a directory lists as one path. Skip directories,
+	# so grep never reads one and fails the scan.
 	for file in "${files[@]}"; do
-		if [ "$file" = "$exclude" ]; then continue; fi
+		if [ "$file" = "$exclude" ] || [ -d "$file" ]; then continue; fi
 		status=0
 		grep -iIlE -- "$pattern" "$file" || status=$?
 		case $status in
@@ -63,26 +65,21 @@ step "vitest"
 npm run test
 
 step "playwright"
-# Three engines, run bare. A workstation can lack the system libraries the
-# webkit engine needs, so a bare webkit launch failure re-runs that one project
-# inside the pinned image. Chromium and Firefox never fall back, and a genuine
-# test failure never does either.
+# The browser leg runs against a production build, not the dev server. All
+# three engines share one invocation and one server, so no engine can
+# adopt a server another engine is shutting down. WebKit cannot launch on every
+# workstation, so a bare launch failure re-runs that one project inside the
+# pinned image, where it builds and serves on its own. Chromium and Firefox
+# never fall back, and a genuine test failure never does either.
 launches() {
 	node --input-type=module -e "import { webkit } from 'playwright-core'; const browser = await webkit.launch(); await browser.close();" 2>/dev/null
 }
-npm run test:browser -- --project=chromium
-npm run test:browser -- --project=firefox
-
-bare_status=0
-npm run test:browser -- --project=webkit || bare_status=$?
-if [ "$bare_status" -eq 0 ]; then
-	echo "webkit ran on the host."
-elif launches; then
-	echo "The webkit project failed while its engine launches. This is a test failure, not an environment gap." >&2
-	exit 1
+if launches; then
+	npm run test:browser
 else
 	image="mcr.microsoft.com/playwright:v$(node -p "require('@playwright/test/package.json').version")-noble"
-	echo "webkit cannot launch on this host. The webkit project runs inside $image."
+	echo "webkit cannot launch on this host. chromium and firefox run bare, webkit runs inside $image."
+	npm run test:browser -- --project=chromium --project=firefox
 	docker run --rm --init --ipc=host --name "chaaya-webkit-$$" \
 		-u "$(id -u):$(id -g)" -e HOME=/tmp/pw-home \
 		-v "$PWD:/work" -w /work "$image" \
