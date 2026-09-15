@@ -15,6 +15,7 @@
     "test": "vitest run",
     "test:browser": "playwright test",
     "package": "svelte-package -i src/lib -o dist",
+    "prepare": "npm run package",
     "publint": "publint"
   },
   "exports": {

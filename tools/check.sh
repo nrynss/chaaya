@@ -47,6 +47,18 @@ npm run check
 step "eslint"
 npm run lint
 
+step "svelte 4 leakage"
+# A Svelte 4 idiom inside a Svelte 5 file compiles clean and then never
+# reacts. No compiler warns, so this scan hunts the idioms in src/lib: an
+# export let prop, a $: reactive label, an import from svelte/store.
+node tools/guards/svelte4-leakage.mjs
+
+step "visual values"
+# Components ship behaviour, not looks. Colours and font families come from
+# the consumer's tokens. The scan fails on literal values in src/lib, except
+# in the token contract's reference file.
+node tools/guards/visual-values.mjs
+
 step "vitest"
 npm run test
 
@@ -83,6 +95,13 @@ npm run package
 
 step "publint"
 npm run publint
+
+step "server safety"
+# Consumers render on the server and prerender. This step imports every entry
+# in the exports map with plain node and no DOM. An import-time touch of
+# window, document, navigator or localStorage fails it. The step needs the
+# build above, because the exports map points at dist.
+node tools/guards/server-safety.mjs
 
 step "consumer names"
 # No consumer project may leave its name in a tracked file. Case does not
