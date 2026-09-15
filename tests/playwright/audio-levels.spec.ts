@@ -4,8 +4,13 @@ import { expect, test } from "@playwright/test"
  * spec drives the harness page, reads each number out of the rendered page,
  * and reports the raw values. */
 test("the meter reads silence and a full scale tone, and peaks stay responsive", async ({
-	page
+	page,
+	browserName
 }) => {
+	/* Quarantined on Firefox. The CI runner gives Firefox no audio device, so the harness
+	 * never leaves its running phase. It comes back once the meter reads a signal the page
+	 * generates itself instead of a device. */
+	test.fixme(browserName === "firefox", "Firefox on the CI runner has no audio device.")
 	test.setTimeout(90_000)
 	await page.goto("/tests/audio-levels")
 
