@@ -21,6 +21,13 @@ Accessible primitives such as dialogs and tooltips come from
 
 Published as `@nrynss/chaaya`.
 
+## Exports
+
+- `@nrynss/chaaya/tokens`: the fixed role names and a checker that reports a
+  role a theme block leaves out.
+- `@nrynss/chaaya/tokens/reference.css`: the reference stylesheet a new app
+  copies.
+
 ## Status
 
 Pre-release.
