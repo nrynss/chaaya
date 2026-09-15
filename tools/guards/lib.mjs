@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
+import { dirname, isAbsolute, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 /** The repository root, resolved from this file, so a guard runs from any
@@ -24,10 +24,14 @@ export function listLibFiles() {
  * with arrows, everything else closes them with stars. A comment opener counts
  * only outside a string or a regex, so code holding a comment marker inside a
  * literal keeps the lines after it. A `//` preceded by a colon is a URL scheme
- * and stays. */
-export function activeLines(file) {
+ * and stays. The default `js` mode strips line and block comments. The `css`
+ * mode strips block comments only, since a pair of slashes is not a comment in
+ * a stylesheet, and it throws when a block comment never closes. */
+export function activeLines(file, { mode = "js" } = {}) {
+	const css = mode === "css"
 	const svelte = file.endsWith(".svelte")
-	const text = readFileSync(join(repoRoot, file), "utf8")
+	const filePath = isAbsolute(file) ? file : join(repoRoot, file)
+	const text = readFileSync(filePath, "utf8")
 	const lines = []
 	let kept = ""
 	let number = 1
@@ -110,7 +114,7 @@ export function activeLines(file) {
 			i++
 			continue
 		}
-		if (char === "/" && next === "/" && text[i - 1] !== ":") {
+		if (!css && char === "/" && next === "/" && text[i - 1] !== ":") {
 			const end = text.indexOf("\n", i)
 			i = end === -1 ? text.length : end
 			continue
@@ -132,7 +136,7 @@ export function activeLines(file) {
 			i++
 			continue
 		}
-		if (char === "/" && !postfixBefore(i) && opensRegex(last)) {
+		if (!css && char === "/" && !postfixBefore(i) && opensRegex(last)) {
 			inRegex = true
 			inClass = false
 			kept += char
@@ -143,6 +147,7 @@ export function activeLines(file) {
 		if (char.trim() !== "") last = char
 		i++
 	}
+	if (css && inBlock) throw new Error(`${file} opens a block comment that never closes`)
 	flush()
 	return lines
 }
