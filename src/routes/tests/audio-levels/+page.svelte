@@ -100,12 +100,15 @@
 			await context.resume()
 			const analyser = context.createAnalyser()
 			analyser.fftSize = 2048
-			/* Two paths leave the analyser. The muted gain keeps the graph
-			 * pulled wherever a device exists, which a stream sink alone
-			 * does not do on every engine. The stream sink keeps the graph
-			 * alive on a machine with no device at all. */
-			const sink = context.createMediaStreamDestination()
-			analyser.connect(sink)
+			/* Nothing outside this page consumes the signal, so the graph is
+			 * pulled structurally. A muted gain into the audio context's real
+			 * destination is the pull. Rendering to a destination node is the
+			 * browser's obligation on every engine, with or without a device
+			 * or a sound server, so the analyser advances wherever the capture
+			 * recorder and the other harness routes drive the same shape. A
+			 * MediaStreamAudioDestinationNode pulls nothing unless its stream
+			 * is read, so it never goes in this graph and the meter never
+			 * depends on an outside consumer. */
 			const mute = context.createGain()
 			mute.gain.value = 0
 			analyser.connect(mute)
