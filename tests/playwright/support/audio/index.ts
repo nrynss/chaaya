@@ -9,19 +9,22 @@
  *
  * | Check | Chromium | Firefox | WebKit |
  * |---|---|---|---|
- * | generated input | yes | yes | no |
+ * | generated input | yes | yes | partial |
  * | capture | yes | yes | partial |
  * | upload | yes | yes | no |
  * | playback | yes | yes | yes |
- * | levels | yes | yes | no |
+ * | levels | yes | yes | yes |
  *
  * WebKit on Linux runs the PCM capture path, the denied path and the
  * track-stop path. Its headless build defines no MediaRecorder, so the
- * compressed capture records nothing there.
+ * compressed capture records nothing there. The upload cases and the three
+ * generated take cases skip on WebKit for the same absence. WebKit runs the
+ * stream-shape case of the generated input and the whole levels spec.
  *
- * Chromium and Firefox run the generated input. The page builds the signal
- * with Web Audio and MediaRecorder writes a container, so neither engine needs
- * a device or a launch flag. A clean clone proves both stay deterministic.
+ * Chromium and Firefox run every generated-input case. The page builds the
+ * signal with Web Audio and MediaRecorder writes a container, so neither
+ * engine needs a device or a launch flag. A clean clone proves both stay
+ * deterministic.
  *
  * A check that skips an engine states the reason in the spec, so a skip never
  * hides a defect.

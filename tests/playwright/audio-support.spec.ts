@@ -14,11 +14,6 @@ const OMITTED_MARKER_INDEX = 5
  * five millisecond windows, so a slot boundary can land on either side. */
 const MARKER_TOLERANCE_SECONDS = 0.02
 
-/* Skip WebKit on Linux. Its headless build opens no capture graph, so a
- * generated take records nothing there. The support module's coverage table
- * records this skip, and the reason travels with it. */
-test.skip(({ browserName }) => browserName === "webkit", "WebKit on Linux runs playback only.")
-
 /** One saved take beside what the Node marker reader made of it. */
 interface Recorded {
 	readonly take: GeneratedTake
@@ -50,8 +45,13 @@ async function recordTake(page: Page, button: string, file: string): Promise<Rec
 }
 
 test("a generated take carries its markers in order and at the fixed spacing", async ({
-	page
+	page,
+	browserName
 }, testInfo) => {
+	// WebKitGTK's headless build defines no MediaRecorder, so the take
+	// records nothing there and the case would fail for an engine reason,
+	// not a support defect. The stream-shape case runs on WebKit.
+	test.skip(browserName === "webkit", "WebKitGTK headless defines no MediaRecorder, so a generated take records nothing there.")
 	test.setTimeout(90_000)
 	await open(page)
 	const { take, reading } = await recordTake(page, "record", testInfo.outputPath("take.webm"))
@@ -79,8 +79,13 @@ test("a generated take carries its markers in order and at the fixed spacing", a
 })
 
 test("a take that drops one marker reads as a gap where the marker stood", async ({
-	page
+	page,
+	browserName
 }, testInfo) => {
+	// WebKitGTK's headless build defines no MediaRecorder, so the take
+	// records nothing there and the case would fail for an engine reason,
+	// not a support defect. The stream-shape case runs on WebKit.
+	test.skip(browserName === "webkit", "WebKitGTK headless defines no MediaRecorder, so a generated take records nothing there.")
 	test.setTimeout(90_000)
 	await open(page)
 	const full = await recordTake(page, "record", testInfo.outputPath("full.webm"))
@@ -112,8 +117,13 @@ test("a take that drops one marker reads as a gap where the marker stood", async
 })
 
 test("captured samples match the page clock within one recorder block", async ({
-	page
+	page,
+	browserName
 }, testInfo) => {
+	// WebKitGTK's headless build defines no MediaRecorder, so the take
+	// records nothing there and the case would fail for an engine reason,
+	// not a support defect. The stream-shape case runs on WebKit.
+	test.skip(browserName === "webkit", "WebKitGTK headless defines no MediaRecorder, so a generated take records nothing there.")
 	test.setTimeout(90_000)
 	await open(page)
 	const { take, reading } = await recordTake(page, "record", testInfo.outputPath("clock.webm"))

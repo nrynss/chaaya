@@ -132,10 +132,11 @@ function digestOf(bytes: Buffer): string {
 	return createHash("sha256").update(bytes).digest("hex")
 }
 
-/* Skip WebKit on Linux. Its headless build opens no capture graph, so a
- * generated take records nothing there. The support module's coverage table
+/* Skip WebKit on Linux. Its headless build defines no MediaRecorder, so the
+ * take records nothing and no upload starts. Both cases would fail there for
+ * an engine reason, not an upload defect. The support module's coverage table
  * records this skip, and the reason travels with it. */
-test.skip(({ browserName }) => browserName === "webkit", "WebKit on Linux runs playback only.")
+test.skip(({ browserName }) => browserName === "webkit", "WebKitGTK headless defines no MediaRecorder, so the take records nothing and no upload starts.")
 
 test("a take streams in chunks through a brief network drop and arrives whole", async ({
 	page,

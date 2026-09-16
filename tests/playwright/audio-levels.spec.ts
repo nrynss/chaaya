@@ -1,15 +1,10 @@
 import { expect, test } from "@playwright/test"
 
-/* WebKit on Linux runs playback only. Its headless build opens no capture
- * graph, so the meter reads nothing there. The support module's coverage
- * table records this skip, and the reason travels with it. */
-test.skip(({ browserName }) => browserName === "webkit", "WebKit on Linux runs playback only.")
-
 /** The level meter and the peak computation both need a real browser. This
  * spec drives the harness page, reads each number out of the rendered page,
  * and reports the raw values. The page builds its own source, so the signal
- * needs no capture device, but the browser still opens an AudioContext, and
- * the meter only advances where a sound server exists to pull the graph. */
+ * needs no capture device. The generated stream keeps the graph pulled, so
+ * the meter advances on every engine, even where no sound server runs. */
 test("the meter reads silence and a full scale tone, and peaks stay responsive", async ({
 	page
 }) => {
