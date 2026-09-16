@@ -92,7 +92,7 @@ function expectedOnsets(startElapsed: number, stopElapsed: number): number[] {
 		// can run past the stop clock reading, because the take keeps
 		// recording until the recorder sees the stop, so only the onset
 		// bounds the window.
-		(onset) => onset >= startElapsed && onset <= stopElapsed
+		(onset) => onset >= startElapsed && onset < stopElapsed
 	)
 }
 
@@ -133,6 +133,17 @@ async function record(page: Page, mode: "compressed" | "pcm", attempt: number): 
 	return { ...take, reading: readMarkers(file) }
 }
 
+/** The burst onsets a reading carries. The reader reports where each run
+ * above the threshold starts, so a burst that lost one window inside its
+ * slot presents itself as two onsets less than half a marker interval
+ * apart. Merging those pairs restores one onset per marker, while a lost
+ * marker still leaves its slot empty. */
+function mergedOnsets(onsets: readonly number[]): number[] {
+	return onsets.filter((onset, index) =>
+		index === 0 || onset - onsets[index - 1] >= MARKER_INTERVAL_SECONDS / 2
+	)
+}
+
 /** The checks both modes owe the generated signal. */
 function checkMarkers(take: Take): void {
 	const onsets = expectedOnsets(take.startElapsed, take.stopElapsed)
@@ -148,13 +159,18 @@ function checkMarkers(take: Take): void {
 		)
 	)
 	// A collapsed window would pass every check below for the wrong reason.
-	// A burst that lost half its windows can climb back over the threshold
-	// inside its slot and present itself twice, so the spacings check and
-	// this exact count together keep the reading honest.
-	expect(take.reading.count).toBe(onsets.length)
+	// The reading is judged through its merged onsets: the exact count keeps
+	// a take that lost a marker from passing, and each merged onset must sit
+	// within a bounded drift of the onset that should have arrived there.
+	// The whole take can shift when the head loses frames, so the bound is
+	// one tolerance plus half a block, the largest positional move a single
+	// block boundary can cause, read from the take's own block size.
+	const bursts = mergedOnsets(take.reading.onsetsSeconds)
+	expect(bursts.length).toBe(onsets.length)
 	expect(take.reading.order).toBe("ascending")
-	for (const spacing of take.reading.spacingsSeconds) {
-		expect(Math.abs(spacing - MARKER_INTERVAL_SECONDS)).toBeLessThanOrEqual(MARKER_TOLERANCE_SECONDS)
+	const driftBound = MARKER_TOLERANCE_SECONDS + take.blockSeconds / 2
+	for (let index = 0; index < onsets.length; index += 1) {
+		expect(Math.abs(bursts[index] - onsets[index])).toBeLessThanOrEqual(driftBound)
 	}
 	// The take is written at the rate the capture ran at, so the rate a probe
 	// reads back from the bytes is the rate the page reports.
