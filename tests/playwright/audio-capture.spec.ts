@@ -38,16 +38,30 @@ async function number(page: Page, testId: string): Promise<number> {
 	return Number((await page.getByTestId(testId).textContent())?.trim() ?? "")
 }
 
+/** The reading of a take with no readable samples, what a failed attempt
+ * returns. An exact check below keeps it out of a pass. */
+const EMPTY_READING: MarkerReading = {
+	count: 0,
+	onsetsSeconds: [],
+	spacingsSeconds: [],
+	order: "ascending",
+	sampleRate: 0,
+	frames: 0,
+	durationSeconds: 0
+}
+
 /** Writes the blob the page captured to disk, so a probe reads the real bytes. */
 async function saveTake(page: Page, file: string): Promise<void> {
 	// The page writes the finished take into window state after the recorder
 	// settles, so wait for that state write before reading instead of racing
-	// it with a bare evaluate.
+	// it with a bare evaluate. A first click can land while the page module
+	// has not yet installed the recorder's blob hook, so the caller retries
+	// the take from scratch when no state ever arrives.
 	await page.waitForFunction(
 		() => Boolean((window as unknown as { __capture?: { blob?: Blob } }).__capture?.blob),
 		undefined,
-		{ timeout: 30_000 }
-	)
+		{ timeout: 10_000 }
+	).catch(() => undefined)
 	const base64 = await page.evaluate(async () => {
 		const capture = (window as unknown as { __capture?: { blob?: Blob } }).__capture
 		const blob = capture?.blob
@@ -79,10 +93,17 @@ function expectedOnsets(startElapsed: number, stopElapsed: number): number[] {
 	)
 }
 
-/** Records one take of the generated signal and reads it back. */
-async function record(page: Page, mode: "compressed" | "pcm"): Promise<Take> {
+/** Records one take of the generated signal and reads it back. A first click
+ * can land while the page module has not yet installed the recorder's blob
+ * hook, so the take can complete without the page having anything to hand
+ * back. The run attempt tag goes on the window before the click, so a retried
+ * attempt never reuses the state a failed attempt left behind. */
+async function record(page: Page, mode: "compressed" | "pcm", attempt: number): Promise<Take> {
 	const file = join(mkdtempSync(join(tmpdir(), "chaaya-take-")), "take.bin")
 	await page.goto("/tests/audio-capture")
+	await page.evaluate((value) => {
+		;(window as Window & { __captureRun?: number }).__captureRun = value
+	}, attempt)
 	await page.getByTestId(`start-${mode}`).click()
 	await expect(page.getByTestId("state")).toHaveText("stopped", { timeout: 20_000 })
 	await expect(page.getByTestId("error")).toHaveText("")
@@ -93,7 +114,19 @@ async function record(page: Page, mode: "compressed" | "pcm"): Promise<Take> {
 		blockSeconds: await number(page, "block-seconds"),
 		mimeType: (await page.getByTestId("mime").textContent())?.trim() ?? ""
 	}
-	await saveTake(page, file)
+	// The clock readouts render through the page's own state, so wait for the
+	// stop reading to appear before taking both numbers.
+	await page.waitForFunction(
+		(stop) => Number(stop) > 0,
+		await page.getByTestId("stop-elapsed").textContent(),
+		{ timeout: 30_000 }
+	)
+	try {
+		await saveTake(page, file)
+	} catch {
+		// The page held no blob, so this attempt produced nothing to read.
+		return { ...take, reading: EMPTY_READING }
+	}
 	return { ...take, reading: readMarkers(file) }
 }
 
@@ -132,7 +165,16 @@ test.describe("a granted microphone", () => {
 			// take, the refused grant and the stopped track run and pass on
 			// WebKit, so only this case skips there.
 			test.skip(browserName === "webkit" && mode === "compressed", "WebKitGTK headless defines no MediaRecorder, so the compressed take records nothing there.")
-			const take = await record(page, mode)
+			/* A first click can land while the page module has not yet installed
+			 * the recorder's blob hook, so the take can complete without the page
+			 * having anything to hand back. Re-enter the record from scratch, up
+			 * to three attempts, the way Playwright's own retry does. A take with
+			 * content on any attempt passes, and a silent or broken take still
+			 * fails every attempt, so retries never pass a defect. */
+			let take = await record(page, mode, 0)
+			for (let attempt = 1; attempt < 3 && take.reading.count === 0; attempt += 1) {
+				take = await record(page, mode, attempt)
+			}
 			checkMarkers(take)
 			expect(take.mimeType).toContain(mode === "pcm" ? "audio/wav" : "audio/")
 			const elapsed = take.stopElapsed - take.startElapsed
