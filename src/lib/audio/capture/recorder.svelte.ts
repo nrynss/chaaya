@@ -1,4 +1,6 @@
 import { CAPTURE_PROCESSOR_NAME, CAPTURE_PROCESSOR_SOURCE } from "./pcm-worklet"
+import { resampleChunks } from "./resample"
+import { nextState } from "./state"
 import type { CaptureChunk, CaptureMode, CaptureOptions, CaptureResult, CaptureState } from "./types"
 import { encodeWav } from "./wav"
 
@@ -28,6 +30,10 @@ const COMPRESSED_TIMESLICE_MS = 1000
 
 /** The longest a stop waits for the audio thread to hand back its last block. */
 const FLUSH_TIMEOUT_MS = 1000
+
+/** How often a running take rechecks its tracks. A stopped track sets its own
+ * state without an event, so the take has to look for itself. */
+const TRACK_CHECK_MS = 250
 
 interface WorkletChunk {
 	samples: Float32Array
@@ -104,6 +110,7 @@ export class AudioRecorder {
 	#ticker: ReturnType<typeof setInterval> | null = null
 	#timer: ReturnType<typeof setTimeout> | null = null
 	#sampleRate = FALLBACK_SAMPLE_RATE
+	#renderRate = FALLBACK_SAMPLE_RATE
 	#autoStop: number
 	#chunkFrames: number
 	#constraints: MediaTrackConstraints
@@ -111,6 +118,7 @@ export class AudioRecorder {
 	#session = 0
 	#awaitStop: (() => void) | null = null
 	#flushed: (() => void) | null = null
+	#trackWatch: ReturnType<typeof setInterval> | null = null
 
 	constructor(options: CaptureOptions = {}) {
 		this.mode = options.mode ?? "compressed"
@@ -142,7 +150,7 @@ export class AudioRecorder {
 		const session = this.#session
 		this.#clearData()
 		this.#closing = false
-		this.state = "requesting"
+		this.state = nextState(this.state, "start")
 		this.error = null
 		try {
 			const stream = await this.#openMicrophone()
@@ -154,6 +162,7 @@ export class AudioRecorder {
 			this.#sampleRate = readSampleRate(stream)
 			// Watch the tracks before startup, so a track lost during the awaits still fails.
 			this.#watchTracks(stream, session)
+			this.#beginTrackWatch(session)
 			if (this.state !== "requesting") return
 			if (this.mode === "pcm") await this.#startPcm(stream, session)
 			else this.#startCompressed(stream, session)
@@ -163,13 +172,13 @@ export class AudioRecorder {
 				this.#trackLost(session)
 				return
 			}
-			this.state = "recording"
+			this.state = nextState(this.state, "granted")
 			this.#beginCountdown()
 		} catch (error) {
 			if (session !== this.#session || this.state !== "requesting") return
 			this.#release()
 			this.error = error
-			this.state = isDenied(error) ? "denied" : "failed"
+			this.state = nextState(this.state, isDenied(error) ? "denied" : "failed")
 		}
 	}
 
@@ -195,7 +204,7 @@ export class AudioRecorder {
 		this.#release()
 		this.#clearData()
 		this.error = null
-		this.state = "idle"
+		this.state = nextState(this.state, "reset")
 		this.#resolveStop()
 		this.#closing = false
 	}
@@ -225,13 +234,9 @@ export class AudioRecorder {
 			if (session !== this.#session) return
 			this.#release()
 			const mimeType = recorder.mimeType || type
-			// A failed take keeps its parts, so build the blob before the state check.
+			// A failed take keeps its parts, so build the blob before the state moves.
 			this.#buildResult(new Blob(this.#parts, { type: mimeType }), mimeType)
-			if (this.state === "failed") {
-				this.#resolveStop()
-				return
-			}
-			this.state = "stopped"
+			this.state = nextState(this.state, "finished")
 			this.#resolveStop()
 		}
 		recorder.start(COMPRESSED_TIMESLICE_MS)
@@ -243,6 +248,7 @@ export class AudioRecorder {
 		if (!Context) throw new Error("This browser cannot open an audio context.")
 		const context = new Context({ sampleRate: this.#sampleRate })
 		this.#context = context
+		this.#renderRate = context.sampleRate
 		const module = URL.createObjectURL(
 			new Blob([CAPTURE_PROCESSOR_SOURCE], { type: "text/javascript" })
 		)
@@ -303,7 +309,10 @@ export class AudioRecorder {
 			}
 			worklet.port.postMessage("stop")
 		})
-		const blob = encodeWav(this.#blocks, this.#sampleRate)
+		const blob = encodeWav(
+			resampleChunks(this.#blocks, this.#renderRate, this.#sampleRate),
+			this.#sampleRate
+		)
 		this.#release()
 		this.#finish(blob, "audio/wav")
 	}
@@ -315,6 +324,12 @@ export class AudioRecorder {
 			if (track.readyState === "ended") note()
 			else track.addEventListener("ended", note)
 		}
+	}
+
+	#beginTrackWatch(session: number): void {
+		this.#trackWatch = setInterval(() => {
+			if (this.#tracksEnded()) this.#trackLost(session)
+		}, TRACK_CHECK_MS)
 	}
 
 	#tracksEnded(): boolean {
@@ -333,9 +348,19 @@ export class AudioRecorder {
 		this.#closing = true
 		this.#stopCountdown()
 		if (this.#mediaRecorder?.state === "recording") this.#mediaRecorder.stop()
+		// A failed take keeps what it captured, so encode the blocks it holds.
+		if (this.mode === "pcm" && this.#blocks.length > 0) {
+			this.#buildResult(
+				encodeWav(
+					resampleChunks(this.#blocks, this.#renderRate, this.#sampleRate),
+					this.#sampleRate
+				),
+				"audio/wav"
+			)
+		}
 		this.#release()
 		this.error = error
-		this.state = "failed"
+		this.state = nextState(this.state, "failed")
 		this.#resolveStop()
 	}
 
@@ -345,7 +370,7 @@ export class AudioRecorder {
 
 	#finish(blob: Blob, mimeType: string): void {
 		this.#buildResult(blob, mimeType)
-		this.state = "stopped"
+		this.state = nextState(this.state, "finished")
 		this.#resolveStop()
 	}
 
@@ -383,6 +408,8 @@ export class AudioRecorder {
 
 	#release(): void {
 		this.#stopCountdown()
+		if (this.#trackWatch !== null) clearInterval(this.#trackWatch)
+		this.#trackWatch = null
 		if (this.#worklet) this.#worklet.port.onmessage = null
 		this.#worklet = null
 		for (const link of this.#links) link.disconnect()

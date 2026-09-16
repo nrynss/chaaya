@@ -1,96 +1,53 @@
 import { expect, test, type Page } from "@playwright/test"
-import { execFileSync } from "node:child_process"
-import { writeFileSync } from "node:fs"
-import { fileURLToPath } from "node:url"
+import { mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { markerOnsetsSeconds, readMarkers, type MarkerReading } from "./support/audio"
 
-/** The known tone the fake device plays, 48 kHz mono for three seconds. */
-const TONE = fileURLToPath(new URL("../../tests/fixtures/audio/tone-48k.wav", import.meta.url))
+/** The signal the harness records in place of a microphone carries one marker
+ * every 100 ms, and each burst runs for 25 ms. */
+const MARKER_INTERVAL_SECONDS = 0.1
+const MARKER_SECONDS = 0.025
 
-/** The source length in seconds. */
-const SOURCE_SECONDS = 3
+/** How far an onset may sit from its slot. The reader averages over five
+ * millisecond windows, so a slot boundary can land either side of it. */
+const MARKER_TOLERANCE_SECONDS = 0.02
 
-/** The PCM block the recorder hands back, one tolerance for a short tail. */
-const PCM_BLOCK_SECONDS = 4096 / 48000
+/** The harness omits the first marker of the signal, so a take can open there
+ * without cutting a burst in half. */
+const OMIT_MARKER_INDEX = 0
 
-/** The compressed block interval the recorder asks MediaRecorder for. */
-const COMPRESSED_BLOCK_SECONDS = 1
+/** WebKit on Linux opens no capture graph, so a take there records nothing. */
+test.skip(({ browserName }) => browserName === "webkit", "WebKit on Linux runs playback only.")
 
-interface Measurement {
-	codec: string | null
-	sampleRate: number | null
-	duration: number | null
+/** One take of the generated signal, read back from the page and from disk. */
+interface Take {
+	/** What the marker reader found in the saved bytes. */
+	readonly reading: MarkerReading
+	/** The rate the recorder reported for the take. */
+	readonly reportedRate: number
+	/** The context clock when the take entered its running state. */
+	readonly startElapsed: number
+	/** The context clock when the take reached its end. */
+	readonly stopElapsed: number
+	/** The span of one captured block, the tolerance a length check allows. */
+	readonly blockSeconds: number
+	/** The container type the recorder reported. */
+	readonly mimeType: string
 }
 
-test.use({
-	// The default headless shell ships no audio stack. The fake device flags
-	// need the full Chromium build that Playwright also installs.
-	channel: "chromium",
-	launchOptions: {
-		args: ["--use-fake-device-for-media-stream", `--use-file-for-fake-audio-capture=${TONE}`],
-	},
-})
-
-test.beforeEach(({ browserName }) => {
-	test.skip(browserName !== "chromium", "The fake audio device exists only in Chromium.")
-})
-
-/**
- * Reads the audio length out of the saved file. ffprobe reports a container
- * duration when the file carries one, and a plain webm often does not. The
- * packet timestamps then give the span of the audio that actually arrived.
- */
-function measure(file: string): Measurement {
-	const raw = execFileSync(
-		"ffprobe",
-		[
-			"-v",
-			"error",
-			"-select_streams",
-			"a:0",
-			"-show_entries",
-			"stream=codec_name,sample_rate,duration:format=duration",
-			"-of",
-			"json",
-			file,
-		],
-		{ encoding: "utf8" }
-	)
-	const parsed = JSON.parse(raw) as {
-		streams?: { codec_name?: string; sample_rate?: string; duration?: string }[]
-		format?: { duration?: string }
-	}
-	const stream = parsed.streams?.[0] ?? {}
-	const candidates = [stream.duration, parsed.format?.duration]
-	const container = candidates.map(Number).find((value) => Number.isFinite(value) && value > 0)
-	console.log("ffprobe", file, raw.trim().replace(/\s+/g, " "))
-	return {
-		codec: stream.codec_name ?? null,
-		sampleRate: stream.sample_rate ? Number(stream.sample_rate) : null,
-		duration: container ?? packetSpan(file),
-	}
-}
-
-/** The last packet timestamp plus its own length, the span when no header exists. */
-function packetSpan(file: string): number | null {
-	const raw = execFileSync(
-		"ffprobe",
-		["-v", "error", "-select_streams", "a:0", "-show_entries", "packet=pts_time,duration_time", "-of", "csv=p=0", file],
-		{ encoding: "utf8" }
-	)
-	const lines = raw.split("\n").filter((line) => line.trim().length > 0)
-	const last = lines[lines.length - 1]
-	if (!last) return null
-	const [pts, length] = last.split(",").map(Number)
-	if (!Number.isFinite(pts)) return null
-	return pts + (Number.isFinite(length) ? length : 0)
+/** Reads one number the page prints for a test id. */
+async function number(page: Page, testId: string): Promise<number> {
+	return Number((await page.getByTestId(testId).textContent())?.trim() ?? "")
 }
 
 /** Writes the blob the page captured to disk, so a probe reads the real bytes. */
 async function saveTake(page: Page, file: string): Promise<void> {
 	const base64 = await page.evaluate(async () => {
-		const capture = (window as unknown as { __capture?: { blob: Blob } }).__capture
-		if (!capture) return ""
-		const bytes = new Uint8Array(await capture.blob.arrayBuffer())
+		const capture = (window as unknown as { __capture?: { blob?: Blob } }).__capture
+		const blob = capture?.blob
+		if (!blob) return ""
+		const bytes = new Uint8Array(await blob.arrayBuffer())
 		let binary = ""
 		const step = 0x8000
 		for (let index = 0; index < bytes.length; index += step) {
@@ -107,109 +64,83 @@ async function saveTake(page: Page, file: string): Promise<void> {
 	writeFileSync(file, bytes)
 }
 
-async function take(page: Page, button: string, file: string): Promise<Measurement> {
-	await page.goto("/tests/audio-capture")
-	await page.getByTestId(button).click()
-	await expect(page.getByTestId("state")).toHaveText("recording")
-	await expect(page.getByTestId("state")).toHaveText("stopped", { timeout: 15_000 })
-	await expect(page.getByTestId("error")).toHaveText("")
-	await saveTake(page, file)
-	return measure(file)
+/** The onsets a take should carry. The take opens at the clock reading the
+ * page reports, so a marker before it never arrives and a marker that runs
+ * past the end is cut short. The opening gap is empty, so every marker inside
+ * the window arrives whole. */
+function expectedOnsets(startElapsed: number, stopElapsed: number): number[] {
+	return markerOnsetsSeconds({ omitMarkerIndex: OMIT_MARKER_INDEX }).filter(
+		(onset) => onset >= startElapsed && onset + MARKER_SECONDS <= stopElapsed
+	)
 }
 
-/* Quarantined. Both checks read the saved take with ffprobe, which the CI runner does not
- * install. Both also compare the take's length with the source length, and that length is
- * set by how long the page recorded, which varies with host load. They come back once
- * ffprobe runs wherever the gate runs and the length is judged against a fixed input. */
-test.describe.fixme("a granted microphone", () => {
-	test.use({ permissions: ["microphone"] })
+/** Records one take of the generated signal and reads it back. */
+async function record(page: Page, mode: "compressed" | "pcm"): Promise<Take> {
+	const file = join(mkdtempSync(join(tmpdir(), "chaaya-take-")), "take.bin")
+	await page.goto("/tests/audio-capture")
+	await page.getByTestId(`start-${mode}`).click()
+	await expect(page.getByTestId("state")).toHaveText("stopped", { timeout: 20_000 })
+	await expect(page.getByTestId("error")).toHaveText("")
+	const take = {
+		reportedRate: await number(page, "rate"),
+		startElapsed: await number(page, "start-elapsed"),
+		stopElapsed: await number(page, "stop-elapsed"),
+		blockSeconds: await number(page, "block-seconds"),
+		mimeType: (await page.getByTestId("mime").textContent())?.trim() ?? ""
+	}
+	await saveTake(page, file)
+	return { ...take, reading: readMarkers(file) }
+}
 
-	test("a compressed take keeps the source rate and length", async ({ page }, testInfo) => {
-		const measured = await take(page, "start-compressed", testInfo.outputPath("capture.webm"))
-		console.log("compressed take", JSON.stringify(measured))
-		expect(measured.sampleRate).toBe(48000)
-		expect(measured.duration).not.toBeNull()
-		expect(Math.abs((measured.duration ?? 0) - SOURCE_SECONDS)).toBeLessThanOrEqual(
-			COMPRESSED_BLOCK_SECONDS
-		)
-	})
+/** The checks both modes owe the generated signal. */
+function checkMarkers(take: Take): void {
+	const onsets = expectedOnsets(take.startElapsed, take.stopElapsed)
+	// A collapsed window would pass every check below for the wrong reason.
+	expect(onsets.length).toBeGreaterThan(10)
+	expect(take.reading.count).toBe(onsets.length)
+	expect(take.reading.order).toBe("ascending")
+	for (const spacing of take.reading.spacingsSeconds) {
+		expect(Math.abs(spacing - MARKER_INTERVAL_SECONDS)).toBeLessThanOrEqual(MARKER_TOLERANCE_SECONDS)
+	}
+	// The take is written at the rate the capture ran at, so the rate a probe
+	// reads back from the bytes is the rate the page reports.
+	expect(take.reading.sampleRate).toBe(take.reportedRate)
+	expect(take.reading.sampleRate).toBeGreaterThan(0)
+}
 
-	test("a pcm take keeps the source rate and length", async ({ page }, testInfo) => {
-		const measured = await take(page, "start-pcm", testInfo.outputPath("capture.wav"))
-		console.log("pcm take", JSON.stringify(measured))
-		expect(measured.codec).toBe("pcm_s16le")
-		expect(measured.sampleRate).toBe(48000)
-		expect(measured.duration).not.toBeNull()
-		expect(Math.abs((measured.duration ?? 0) - SOURCE_SECONDS)).toBeLessThanOrEqual(
-			PCM_BLOCK_SECONDS
-		)
-		await expect(page.getByTestId("chunks")).not.toHaveText("0")
-	})
+test.describe("a granted microphone", () => {
+	for (const mode of ["compressed", "pcm"] as const) {
+		test(`a ${mode} take carries the generated markers`, async ({ page }) => {
+			const take = await record(page, mode)
+			checkMarkers(take)
+			expect(take.mimeType).toContain(mode === "pcm" ? "audio/wav" : "audio/")
+			const elapsed = take.stopElapsed - take.startElapsed
+			expect(Math.abs(take.reading.durationSeconds - elapsed)).toBeLessThanOrEqual(
+				take.blockSeconds
+			)
+		})
+	}
 })
 
-test.describe("a lost microphone", () => {
-	test.use({ permissions: ["microphone"] })
-
-	test("a compressed take that loses its track mid take keeps its bytes", async ({ page }) => {
-		await page.addInitScript(() => {
-			const media = navigator.mediaDevices
-			const original = media.getUserMedia.bind(media)
-			const streams: MediaStream[] = []
-			;(window as unknown as { __streams?: MediaStream[] }).__streams = streams
-			media.getUserMedia = async (constraints?: MediaStreamConstraints) => {
-				const stream = await original(constraints)
-				streams.push(stream)
-				return stream
-			}
-		})
+test.describe("a microphone that is not there", () => {
+	test("a refused grant ends in denied", async ({ page }) => {
 		await page.goto("/tests/audio-capture")
-		await page.getByTestId("start-compressed").click()
-		await expect(page.getByTestId("state")).toHaveText("recording")
-		await page.waitForTimeout(1500)
-		await page.evaluate(() => {
-			const streams = (window as unknown as { __streams?: MediaStream[] }).__streams ?? []
-			streams[streams.length - 1].getAudioTracks()[0].dispatchEvent(new Event("ended"))
-		})
-		await expect(page.getByTestId("state")).toHaveText("failed")
+		await page.getByTestId("start-refused").click()
+		await expect(page.getByTestId("state")).toHaveText("denied")
 		await expect(page.getByTestId("error")).not.toHaveText("")
-		await expect
-			.poll(() =>
-				page.evaluate(() => {
-					const capture = (window as unknown as { __capture?: { blob?: Blob } }).__capture
-					return capture?.blob?.size ?? 0
-				})
-			)
-			.toBeGreaterThan(0)
 	})
 
-	test("a pcm take that loses its track during startup lands in failed", async ({ page }) => {
-		await page.addInitScript(() => {
-			const media = navigator.mediaDevices
-			const original = media.getUserMedia.bind(media)
-			const streams: MediaStream[] = []
-			media.getUserMedia = async (constraints?: MediaStreamConstraints) => {
-				const stream = await original(constraints)
-				streams.push(stream)
-				return stream
-			}
-			const resume = AudioContext.prototype.resume
-			AudioContext.prototype.resume = function (this: AudioContext) {
-				for (const stream of streams) {
-					for (const track of stream.getAudioTracks()) track.stop()
-				}
-				return resume.call(this)
-			}
-		})
+	test("a track stopped mid take ends in failed and keeps its chunks", async ({ page }) => {
 		await page.goto("/tests/audio-capture")
 		await page.getByTestId("start-pcm").click()
-		await expect(page.getByTestId("state")).toHaveText("failed", { timeout: 15_000 })
+		await expect(page.getByTestId("state")).toHaveText("recording")
+		// Wait for the first captured block, so the take holds audio to keep.
+		await expect(page.getByTestId("chunks")).not.toHaveText("0")
+		const held = await number(page, "chunks")
+		await page.getByTestId("stop-track").click()
+		await expect(page.getByTestId("state")).toHaveText("failed", { timeout: 10_000 })
 		await expect(page.getByTestId("error")).not.toHaveText("")
+		expect(await number(page, "chunks")).toBeGreaterThanOrEqual(held)
+		expect(await number(page, "size")).toBeGreaterThan(0)
 	})
-})
-
-test("a refused microphone grant lands in the denied state", async ({ page }) => {
-	await page.goto("/tests/audio-capture")
-	await page.getByTestId("start-compressed").click()
-	await expect(page.getByTestId("state")).toHaveText("denied")
-	await expect(page.getByTestId("error")).not.toHaveText("")
 })
