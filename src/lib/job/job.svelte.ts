@@ -1,6 +1,6 @@
-import { parseJobEvent, type ErrorBody, type JobEvent } from "../wire"
-import { isTerminalStatus, JobFollower, takeFrames } from "./follow"
-import type { JobConnection, JobError, JobSnapshot, JobStatus, JobStreamOptions } from "./types"
+import { parseJobEvent, type ErrorBody, type JobEvent } from "../wire/index.js"
+import { isTerminalStatus, JobFollower, takeFrames } from "./follow.js"
+import type { JobConnection, JobError, JobSnapshot, JobStatus, JobStreamOptions } from "./types.js"
 
 /** The delay before the first reconnect, in milliseconds. */
 const baseReconnectDelayMs = 500

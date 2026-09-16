@@ -8,5 +8,5 @@
  * it. Call attach() from a component to follow the job for that component's
  * life.
  */
-export { JobStream } from "./job.svelte"
-export type { JobConnection, JobError, JobSnapshot, JobStatus, JobStreamOptions } from "./types"
+export { JobStream } from "./job.svelte.js"
+export type { JobConnection, JobError, JobSnapshot, JobStatus, JobStreamOptions } from "./types.js"

@@ -1,5 +1,5 @@
-import type { ErrorEvent, ProgressEvent, StatusEvent } from "../wire"
-import type { JobStatus } from "./types"
+import type { ErrorEvent, ProgressEvent, StatusEvent } from "../wire/index.js"
+import type { JobStatus } from "./types.js"
 
 /** One event that reports on a job. A heartbeat carries no job state, so it
  * never reaches this module. */

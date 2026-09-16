@@ -1,4 +1,4 @@
-import { parseErrorEnvelope } from "../wire"
+import { parseErrorEnvelope } from "../wire/index.js"
 
 /** A request that reached the API but was refused, or never left the host.
  * The error carries the contract's stable code, so a caller branches on code
