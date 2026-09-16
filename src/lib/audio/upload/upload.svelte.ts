@@ -121,6 +121,7 @@ export class ChunkUploader {
 				chunkSize,
 				startedAt: Date.now()
 			})
+			if (this.#failure !== undefined) return
 			this.state = "streaming"
 		} catch (error) {
 			this.#fail(toUploadFailure(error))
