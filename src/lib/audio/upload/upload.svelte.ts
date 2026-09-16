@@ -108,8 +108,10 @@ export class ChunkUploader {
 			if (!response.ok) throw await refusal(response)
 			const parsed = parseUploadSnapshot(await response.text())
 			if (!parsed.ok) throw new UploadFailure("invalid_response", parsed.failure.message)
+			if (this.#failure !== undefined) return
 			this.id = parsed.value.id
 			this.stored = parsed.value.storedBytes
+			this.#drainHeld()
 			await this.#store.putSession({
 				id: parsed.value.id,
 				url: options.url,
@@ -120,7 +122,6 @@ export class ChunkUploader {
 				startedAt: Date.now()
 			})
 			this.state = "streaming"
-			this.#drainHeld()
 		} catch (error) {
 			this.#fail(toUploadFailure(error))
 		}
