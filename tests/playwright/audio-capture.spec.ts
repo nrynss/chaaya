@@ -17,9 +17,6 @@ const MARKER_TOLERANCE_SECONDS = 0.02
  * without cutting a burst in half. */
 const OMIT_MARKER_INDEX = 0
 
-/** WebKit on Linux opens no capture graph, so a take there records nothing. */
-test.skip(({ browserName }) => browserName === "webkit", "WebKit on Linux runs playback only.")
-
 /** One take of the generated signal, read back from the page and from disk. */
 interface Take {
 	/** What the marker reader found in the saved bytes. */
@@ -110,7 +107,13 @@ function checkMarkers(take: Take): void {
 
 test.describe("a granted microphone", () => {
 	for (const mode of ["compressed", "pcm"] as const) {
-		test(`a ${mode} take carries the generated markers`, async ({ page }) => {
+		test(`a ${mode} take carries the generated markers`, async ({ page, browserName }) => {
+			// WebKitGTK's headless build defines no MediaRecorder, so the
+			// recorder cannot encode the compressed take there and it would
+			// fail there for an engine reason, not a capture defect. The PCM
+			// take, the refused grant and the stopped track run and pass on
+			// WebKit, so only this case skips there.
+			test.skip(browserName === "webkit" && mode === "compressed", "WebKitGTK headless defines no MediaRecorder, so the compressed take records nothing there.")
 			const take = await record(page, mode)
 			checkMarkers(take)
 			expect(take.mimeType).toContain(mode === "pcm" ? "audio/wav" : "audio/")

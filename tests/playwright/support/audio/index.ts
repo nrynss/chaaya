@@ -10,13 +10,14 @@
  * | Check | Chromium | Firefox | WebKit |
  * |---|---|---|---|
  * | generated input | yes | yes | no |
- * | capture | yes | yes | no |
+ * | capture | yes | yes | partial |
  * | upload | yes | yes | no |
  * | playback | yes | yes | yes |
  * | levels | yes | yes | no |
  *
- * WebKit on Linux runs playback only. Its headless build opens no capture
- * graph, so every other check records nothing there.
+ * WebKit on Linux runs the PCM capture path, the denied path and the
+ * track-stop path. Its headless build defines no MediaRecorder, so the
+ * compressed capture records nothing there.
  *
  * Chromium and Firefox run the generated input. The page builds the signal
  * with Web Audio and MediaRecorder writes a container, so neither engine needs
