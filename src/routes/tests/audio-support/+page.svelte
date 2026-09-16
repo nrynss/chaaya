@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount } from "svelte"
 	import {
+		buildGeneratedStream,
+		installGeneratedMicrophone,
 		recordGeneratedTake,
 		type GeneratedTake
 	} from "../../../../tests/playwright/support/audio/input"
@@ -13,6 +15,10 @@
 	let phase = $state<"idle" | "recording" | "done" | "failed">("idle")
 	let failure = $state("")
 	let take = $state<GeneratedTake | null>(null)
+	let streamState = $state("")
+	let streamTracks = $state(0)
+	let microphoneState = $state("")
+	let microphoneTracks = $state(0)
 
 	onMount(() => {
 		hydrated = true
@@ -35,6 +41,32 @@
 			phase = "failed"
 		}
 	}
+
+	async function buildStream(): Promise<void> {
+		streamState = "building"
+		try {
+			const generated = await buildGeneratedStream()
+			streamTracks = generated.stream.getAudioTracks().length
+			streamState = generated.stream.active ? "active" : "inactive"
+			generated.stop()
+		} catch (error) {
+			streamState = `failed: ${String(error)}`
+		}
+	}
+
+	async function readMicrophone(): Promise<void> {
+		microphoneState = "reading"
+		const microphone = installGeneratedMicrophone()
+		try {
+			const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+			microphoneTracks = stream.getAudioTracks().length
+			microphoneState = stream.active ? "active" : "inactive"
+		} catch (error) {
+			microphoneState = `failed: ${String(error)}`
+		} finally {
+			microphone.restore()
+		}
+	}
 </script>
 
 <main>
@@ -55,5 +87,15 @@
 		onclick={() => record(OMITTED_MARKER_INDEX)}
 	>
 		Record take with a marker left out
+	</button>
+	<p data-testid="stream-state">{streamState}</p>
+	<p data-testid="stream-tracks">{streamTracks}</p>
+	<p data-testid="microphone-state">{microphoneState}</p>
+	<p data-testid="microphone-tracks">{microphoneTracks}</p>
+	<button type="button" data-testid="stream" disabled={!hydrated} onclick={buildStream}>
+		Build a generated stream
+	</button>
+	<button type="button" data-testid="microphone" disabled={!hydrated} onclick={readMicrophone}>
+		Read the generated microphone
 	</button>
 </main>

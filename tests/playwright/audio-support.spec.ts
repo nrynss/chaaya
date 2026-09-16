@@ -136,3 +136,25 @@ test("captured samples match the page clock within one recorder block", async ({
 		take.blockSeconds
 	)
 })
+
+test("the generated stream and the microphone patch both carry one audio track", async ({
+	page
+}) => {
+	test.setTimeout(90_000)
+	await open(page)
+
+	await page.getByTestId("stream").click()
+	await expect(page.getByTestId("stream-state")).toHaveText("active")
+	const streamTracks = await page.getByTestId("stream-tracks").textContent()
+
+	await page.getByTestId("microphone").click()
+	await expect(page.getByTestId("microphone-state")).toHaveText("active")
+	const microphoneTracks = await page.getByTestId("microphone-tracks").textContent()
+
+	console.log(JSON.stringify({ streamTracks, microphoneTracks }))
+
+	/* The page builds the stream itself, so a recorder can consume it in place
+	 * of a device. Both paths must hand back a live audio track. */
+	expect(streamTracks).toBe("1")
+	expect(microphoneTracks).toBe("1")
+})
