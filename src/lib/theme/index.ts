@@ -2,5 +2,5 @@
  * the system preference live, and an inline head script paints the stored
  * mode before first paint. The consumer renders its own control. */
 export { theme } from "./theme.svelte.js"
-export { resolveTheme, themeToggleLabel, THEME_KEY, themeScript } from "./theme.js"
+export { themeToggleLabel, themeScript } from "./theme.js"
 export type { Theme, ThemeMode } from "./theme.js"
