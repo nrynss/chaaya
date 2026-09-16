@@ -1,4 +1,4 @@
-import { QUIET_DB, measureAnalyser, type Level } from "./measure"
+import { QUIET_DB, measureAnalyser, type Level } from "./measure.js"
 
 /** A live level meter fed by an analyser. The meter reads one block per
  * animation frame while a watcher holds it, and stops the frame loop when

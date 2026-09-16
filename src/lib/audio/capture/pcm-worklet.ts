@@ -1,4 +1,4 @@
-import { createChunkState, stepChunker } from "./chunker"
+import { createChunkState, stepChunker } from "./chunker.js"
 
 /** The name the PCM processor registers under on the audio thread. */
 export const CAPTURE_PROCESSOR_NAME = "chaaya-capture"

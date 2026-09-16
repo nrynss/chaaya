@@ -1,4 +1,4 @@
-import type { CaptureState } from "./types"
+import type { CaptureState } from "./types.js"
 
 /**
  * The lifecycle of a take as one table. Every move the recorder makes between

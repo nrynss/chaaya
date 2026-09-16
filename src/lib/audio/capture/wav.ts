@@ -1,4 +1,4 @@
-import type { CaptureChunk } from "./types"
+import type { CaptureChunk } from "./types.js"
 
 /** The bytes a canonical WAV header occupies before the audio. */
 const HEADER_BYTES = 44

@@ -35,6 +35,10 @@ Published as `@nrynss/chaaya`.
   a typed error branched on a stable code.
 - `@nrynss/chaaya/job`: the job stream client that follows a job's events to
   its end and stops at the first terminal event.
+- `@nrynss/chaaya/audio`: microphone capture in compressed and PCM modes,
+  chunked upload that survives a network drop and a reload, playback through
+  one element unlocked by the first gesture, and live levels and waveform
+  peaks.
 - `@nrynss/chaaya/testing`: a contrast gate and an accessibility gate a
   consumer points at its own stylesheet and container.
 

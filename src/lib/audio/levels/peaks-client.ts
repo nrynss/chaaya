@@ -1,4 +1,4 @@
-import { computePeaks, type Peaks, type PeaksRequest } from "./peaks"
+import { computePeaks, type Peaks, type PeaksRequest } from "./peaks.js"
 
 /** Compute peaks in a worker so a long file never blocks the page. The call
  * transfers the channel buffers, so the caller gives up its copy and gets

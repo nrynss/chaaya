@@ -1,4 +1,4 @@
-import type { CaptureChunk } from "./types"
+import type { CaptureChunk } from "./types.js"
 
 /**
  * Rate conversion for a captured take. The audio thread renders at the rate

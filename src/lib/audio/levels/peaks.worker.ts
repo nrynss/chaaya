@@ -1,4 +1,4 @@
-import { computePeaks, type PeaksRequest } from "./peaks"
+import { computePeaks, type PeaksRequest } from "./peaks.js"
 
 /** Worker entry for peak computation. A long file runs here, so the page
  * that asked for the peaks keeps answering input while the numbers form. */

@@ -1,8 +1,8 @@
-import { CAPTURE_PROCESSOR_NAME, CAPTURE_PROCESSOR_SOURCE } from "./pcm-worklet"
-import { resampleChunks } from "./resample"
-import { nextState } from "./state"
-import type { CaptureChunk, CaptureMode, CaptureOptions, CaptureResult, CaptureState } from "./types"
-import { encodeWav } from "./wav"
+import { CAPTURE_PROCESSOR_NAME, CAPTURE_PROCESSOR_SOURCE } from "./pcm-worklet.js"
+import { resampleChunks } from "./resample.js"
+import { nextState } from "./state.js"
+import type { CaptureChunk, CaptureMode, CaptureOptions, CaptureResult, CaptureState } from "./types.js"
+import { encodeWav } from "./wav.js"
 
 /**
  * The container types a browser may accept for a compressed take, best first.
