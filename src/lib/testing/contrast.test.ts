@@ -61,3 +61,25 @@ test("a stylesheet with no theme block fails", () => {
     /no theme block/
   )
 })
+
+test("a pair below the minimum fails in a forced theme block", () => {
+  // The system themes pass here. Only the forced blocks carry a low pair, so
+  // a gate that skips a data-theme block reports nothing and this case fails.
+  const css =
+    themes(
+      `--text: ${hex(0x11, 0x11, 0x11)}; --surface: ${hex(0xff, 0xff, 0xff)};`,
+      `--text: ${hex(0xff, 0xff, 0xff)}; --surface: ${hex(0x11, 0x11, 0x11)};`
+    ) +
+    [
+      `\n:root[data-theme="light"] { color-scheme: light; --text: ${hex(0x76, 0x76, 0x76)}; --surface: ${hex(0x78, 0x78, 0x78)}; }`,
+      `\n:root[data-theme="dark"] { color-scheme: dark; --text: ${hex(0x11, 0x11, 0x11)}; --surface: ${hex(0x13, 0x13, 0x13)}; }`
+    ].join("")
+  let message = ""
+  try {
+    contrastGate(css, [["text", "surface"]])
+  } catch (error) {
+    message = (error as Error).message
+  }
+  expect(message).toContain("forced light")
+  expect(message).toContain("forced dark")
+})

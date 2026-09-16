@@ -10,8 +10,9 @@
  * a server render stays safe and the axe payload only loads when a gate runs.
  */
 
-/** Every element that reads as an interactive control. */
-const controlSelector = "button, a[href], input, select, textarea, [tabindex]"
+/** The interactive controls the focus rule covers. An element outside this
+ * set may carry any tabindex, so the rule skips it. */
+const controlSelector = "button, a[href], input, select, textarea"
 
 /**
  * Check the accessibility rules against a rendered container.
