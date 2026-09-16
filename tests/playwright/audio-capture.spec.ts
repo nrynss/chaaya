@@ -7,7 +7,6 @@ import { markerOnsetsSeconds, readMarkers, type MarkerReading } from "./support/
 /** The signal the harness records in place of a microphone carries one marker
  * every 100 ms, and each burst runs for 25 ms. */
 const MARKER_INTERVAL_SECONDS = 0.1
-const MARKER_SECONDS = 0.025
 
 /** How far an onset may sit from its slot. The reader averages over five
  * millisecond windows, so a slot boundary can land either side of it. */
@@ -89,7 +88,11 @@ async function saveTake(page: Page, file: string): Promise<void> {
  * the window arrives whole. */
 function expectedOnsets(startElapsed: number, stopElapsed: number): number[] {
 	return markerOnsetsSeconds({ omitMarkerIndex: OMIT_MARKER_INDEX }).filter(
-		(onset) => onset >= startElapsed && onset + MARKER_SECONDS <= stopElapsed
+		// A marker whose onset sits inside the window arrives. Its burst tail
+		// can run past the stop clock reading, because the take keeps
+		// recording until the recorder sees the stop, so only the onset
+		// bounds the window.
+		(onset) => onset >= startElapsed && onset <= stopElapsed
 	)
 }
 
@@ -145,6 +148,9 @@ function checkMarkers(take: Take): void {
 		)
 	)
 	// A collapsed window would pass every check below for the wrong reason.
+	// A burst that lost half its windows can climb back over the threshold
+	// inside its slot and present itself twice, so the spacings check and
+	// this exact count together keep the reading honest.
 	expect(take.reading.count).toBe(onsets.length)
 	expect(take.reading.order).toBe("ascending")
 	for (const spacing of take.reading.spacingsSeconds) {
