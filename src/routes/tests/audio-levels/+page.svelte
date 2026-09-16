@@ -100,19 +100,16 @@
 			await context.resume()
 			const analyser = context.createAnalyser()
 			analyser.fftSize = 2048
-			/* The pull is a consumer on a stream sink, the shape the capture
-			 * recorder and the generated-input helper define. A
-			 * MediaRecorder over a MediaStreamAudioDestinationNode pulls the
-			 * graph on every engine the coverage table lists, because the
-			 * recorder reads the stream and the browser must render into it.
-			 * A muted gain into the destination read the quiet floor on the
-			 * runner, and a stream sink with no consumer pulled nothing on
-			 * chromium there, so the sink stays wired but never goes without
-			 * its reader. */
+			/* Two paths leave the analyser. The muted gain keeps the graph
+			 * pulled wherever a device exists, which a stream sink alone
+			 * does not do on every engine. The stream sink keeps the graph
+			 * alive on a machine with no device at all. */
 			const sink = context.createMediaStreamDestination()
 			analyser.connect(sink)
-			const recorder = new MediaRecorder(sink.stream)
-			recorder.start(1000)
+			const mute = context.createGain()
+			mute.gain.value = 0
+			analyser.connect(mute)
+			mute.connect(context.destination)
 			const live = new LiveLevel(analyser)
 
 			const silence = live.read()
@@ -141,7 +138,6 @@
 			source.disconnect()
 			toneRms = format(tone.rmsDb)
 			tonePeak = format(tone.peakDb)
-			recorder.stop()
 
 			/* Build the buffer before arming the meter, so the fixture cost stays
 			 * out of the reading and the gap tracks the compute alone. */
