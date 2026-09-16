@@ -29,6 +29,14 @@ Published as `@nrynss/chaaya`.
   copies.
 - `@nrynss/chaaya/wire`: the error envelope and job event types, with a parser
   for each that returns a typed failure instead of throwing.
+- `@nrynss/chaaya/theme`: the three-state theme mechanism and the head
+  script that paints the stored mode before first paint.
+- `@nrynss/chaaya/api`: the fetch client that turns a failed response into
+  a typed error branched on a stable code.
+- `@nrynss/chaaya/job`: the job stream client that follows a job's events to
+  its end and stops at the first terminal event.
+- `@nrynss/chaaya/testing`: a contrast gate and an accessibility gate a
+  consumer points at its own stylesheet and container.
 
 ## Status
 

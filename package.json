@@ -38,6 +38,26 @@
       "types": "./dist/wire/index.d.ts",
       "svelte": "./dist/wire/index.js",
       "default": "./dist/wire/index.js"
+    },
+    "./theme": {
+      "types": "./dist/theme/index.d.ts",
+      "svelte": "./dist/theme/index.js",
+      "default": "./dist/theme/index.js"
+    },
+    "./api": {
+      "types": "./dist/api/index.d.ts",
+      "svelte": "./dist/api/index.js",
+      "default": "./dist/api/index.js"
+    },
+    "./job": {
+      "types": "./dist/job/index.d.ts",
+      "svelte": "./dist/job/index.js",
+      "default": "./dist/job/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "svelte": "./dist/testing/index.js",
+      "default": "./dist/testing/index.js"
     }
   },
   "files": [
