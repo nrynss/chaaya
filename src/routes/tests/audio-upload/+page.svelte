@@ -47,10 +47,6 @@
 	let timer: ReturnType<typeof setTimeout> | null = null
 	/** The chain that keeps every block's append in arrival order. */
 	let chain: Promise<void> = Promise.resolve()
-	/** The blocks recorded while the upload was still opening. The recorder
-	 * starts at the signal top, so blocks arrive before the open answers, and
-	 * these wait to enter the chunker in arrival order. */
-	let held: Uint8Array<ArrayBuffer>[] = []
 
 	/** Pick the container this browser records into. */
 	function pickType(): string {
@@ -87,6 +83,8 @@
 
 	/** End the take and complete the upload. */
 	async function stop(): Promise<void> {
+		if (timer !== null) clearTimeout(timer)
+		timer = null
 		const media = recorder
 		recorder = null
 		if (media !== null && media.state !== "inactive") {
@@ -98,7 +96,6 @@
 		await chain
 		exposeRecorded()
 		microphone?.restore()
-		microphone = null
 		const next = uploader
 		if (next === null) return
 		phase = "uploading"
@@ -107,32 +104,11 @@
 		if (next.state !== "done") failure = next.error?.message ?? "the upload did not finish"
 	}
 
-	/** Hand one recorded block to a streaming uploader, or hold it until the
-	 * upload opens. Blocks reach the chunker in arrival order either way. */
-	function deliver(bytes: Uint8Array<ArrayBuffer>): void {
-		const next = uploader
-		if (next === null || next.state !== "streaming") {
-			held.push(bytes)
-			return
-		}
-		next.append(bytes)
-	}
-
-	/** Release every held block into the opened upload, oldest first. */
-	function drain(): void {
-		const next = uploader
-		while (next !== null && next.state === "streaming" && held.length > 0) {
-			const bytes = held.shift()
-			if (bytes !== undefined) next.append(bytes)
-		}
-	}
-
 	/** Record the generated signal, and stream it to the server as it arrives. */
 	async function start(): Promise<void> {
 		if (phase === "recording" || phase === "uploading") return
 		failure = ""
 		blocks = []
-		held = []
 		blockCount = 0
 		recordedBytes = 0
 		resumed = false
@@ -141,11 +117,14 @@
 			microphone = installGeneratedMicrophone({ totalSeconds: signalSeconds })
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
 			const type = pickType()
+			const next = new ChunkUploader({ url: base, owner, contentType: type, chunkSize })
+			uploader = next
 			/* The recorder starts before the upload opens. The signal begins
 			 * inside getUserMedia, so a recorder that waits for the open
 			 * misses the first span of the take, and firefox's slower open
-			 * clips the first marker away. Blocks that arrive while the open
-			 * is in flight wait in held. */
+			 * clips the first marker away. The uploader holds the blocks that
+			 * arrive while the open is in flight and streams them once it
+			 * answers. */
 			const media = new MediaRecorder(stream, { mimeType: type })
 			recorder = media
 			media.ondataavailable = (event) => {
@@ -155,18 +134,16 @@
 					blocks.push(bytes)
 					blockCount += 1
 					recordedBytes += bytes.byteLength
-					deliver(bytes)
+					next.append(bytes)
 				})
 			}
+			const opening = next.start()
 			media.start(blockMs)
-			const next = new ChunkUploader({ url: base, owner, contentType: type, chunkSize })
-			uploader = next
-			await next.start()
+			await opening
 			if (next.state !== "streaming") {
 				throw new Error(next.error?.message ?? "the upload did not open")
 			}
 			phase = "uploading"
-			drain()
 			timer = setTimeout(() => void stop(), recordSeconds * 1000)
 		} catch (error) {
 			failure = error instanceof Error ? error.message : String(error)

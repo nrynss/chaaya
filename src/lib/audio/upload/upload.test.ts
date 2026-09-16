@@ -439,6 +439,36 @@ describe("streaming one capture", () => {
 		expect(server.completions).toBe(1)
 	})
 
+	test("a block appended while the open is in flight streams once it answers", async () => {
+		const server = new UploadServer()
+		vi.stubGlobal("fetch", server.handle)
+		const uploader = new ChunkUploader({ url: base, owner: "owner-1", contentType: "audio/webm", chunkSize, store: new MemoryStore() })
+		const opening = uploader.start()
+		uploader.append(bytesOf(goldenChunks[0]))
+		await opening
+		expect(uploader.state).toBe("streaming")
+		expect(uploader.error).toBeUndefined()
+		for (const text of goldenChunks.slice(1)) uploader.append(bytesOf(text))
+		await uploader.finish()
+		expect(uploader.state).toBe("done")
+		expect(uploader.receipt?.sha256).toBe(goldenDigest)
+		expect(server.writes).toBe(goldenChunks.length)
+		expect(server.completions).toBe(1)
+		expect(server.paths[0]).toBe(`POST /uploads`)
+	})
+
+	test("a second finish while one is in flight sends no second completion", async () => {
+		const server = new UploadServer()
+		vi.stubGlobal("fetch", server.handle)
+		const uploader = new ChunkUploader({ url: base, owner: "owner-1", contentType: "audio/webm", chunkSize, store: new MemoryStore() })
+		await uploader.start()
+		for (const text of goldenChunks) uploader.append(bytesOf(text))
+		await Promise.all([uploader.finish(), uploader.finish()])
+		expect(uploader.state).toBe("done")
+		expect(uploader.receipt?.sha256).toBe(goldenDigest)
+		expect(server.completions).toBe(1)
+	})
+
 	test("nothing waits when the store holds no session", async () => {
 		expect(await ChunkUploader.resume(new MemoryStore())).toBeUndefined()
 	})

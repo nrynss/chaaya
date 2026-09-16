@@ -15,7 +15,6 @@ import { retryDelayMs, retryMaxAttempts } from "./retry.js"
 import { IndexedDbStore } from "./store.js"
 import type {
 	SessionRecord,
-	StoredChunk,
 	UploadChunk,
 	UploadError,
 	UploadOptions,
@@ -76,6 +75,12 @@ export class ChunkUploader {
 	#failure: UploadFailure | undefined = undefined
 	#running: Promise<void> | undefined = undefined
 	#frozen = false
+	/** Blocks captured while the open was still in flight. They enter the
+	 * chunker in arrival order once the open answers. */
+	#held: Uint8Array<ArrayBuffer>[] = []
+	/** The finish one capture runs, while it runs. A second finish() awaits
+	 * it instead of sending a second completion. */
+	#finishing: Promise<void> | undefined
 
 	constructor(options: UploadOptions) {
 		this.#options = options
@@ -115,6 +120,7 @@ export class ChunkUploader {
 				startedAt: Date.now()
 			})
 			this.state = "streaming"
+			this.#drainHeld()
 		} catch (error) {
 			this.#fail(toUploadFailure(error))
 		}
@@ -122,14 +128,30 @@ export class ChunkUploader {
 
 	/**
 	 * Hand one captured block to the upload. The chunker splits it, and every
-	 * chunk persists before it is sent. A block that arrives after finish() is
-	 * ignored.
+	 * chunk persists before it is sent. A block that arrives before the open
+	 * answers waits, and enters the chunker in arrival order once the open
+	 * resolves, so a caller streams with start() followed by appends straight
+	 * from ondataavailable. A block that arrives after finish() is ignored.
 	 */
 	append(bytes: Uint8Array<ArrayBuffer>): void {
 		if (this.#frozen || this.#failure !== undefined)
 			return
 		this.capturedBytes += bytes.byteLength
+		if (this.id === undefined) {
+			this.#held.push(bytes)
+			return
+		}
 		for (const chunk of this.#buffer.append(bytes)) this.#accept(chunk)
+	}
+
+	/** Hand the blocks that waited for the open to the chunker, oldest
+	 * first. */
+	#drainHeld(): void {
+		const held = this.#held
+		this.#held = []
+		for (const bytes of held) {
+			for (const chunk of this.#buffer.append(bytes)) this.#accept(chunk)
+		}
 	}
 
 	/**
@@ -139,9 +161,29 @@ export class ChunkUploader {
 	 * acknowledges every chunk it holds, and only then sends the completion.
 	 * The whole file digest comes from the stored chunks, so a resumed page
 	 * completes with exactly the bytes it recovered.
+	 *
+	 * A second finish() while one is in flight awaits the first instead of
+	 * sending a second completion. A real server deletes the live upload as
+	 * it completes, so a second POST answers not_found and would flip a
+	 * finished upload to failed after the receipt arrived.
 	 */
 	async finish(): Promise<void> {
 		if (this.state === "done" || this.state === "failed") return
+		if (this.#finishing !== undefined) {
+			await this.#finishing
+			return
+		}
+		const finishing = this.#close()
+		this.#finishing = finishing
+		try {
+			await finishing
+		} finally {
+			if (this.#finishing === finishing) this.#finishing = undefined
+		}
+	}
+
+	/** Finish one capture. Only one runs at a time. */
+	async #close(): Promise<void> {
 		this.#frozen = true
 		this.state = "finishing"
 		const tail = this.#buffer.flush()
@@ -189,9 +231,8 @@ export class ChunkUploader {
 			if (last !== undefined) this.#nextIndex = last.index + 1
 			this.pending = this.#queue.length
 			const state = await this.#attempt(() => this.#readState())
-			const held = new Set(state.received)
-			this.#queue = this.#queue.filter((chunk) => !held.has(chunk.index))
-			this.acknowledged = held.size
+			this.#queue = this.#queue.filter((chunk) => !state.received.includes(chunk.index))
+			this.acknowledged = state.received.length
 			this.stored = state.storedBytes
 			this.pending = this.#queue.length
 			this.#kick()
@@ -312,11 +353,9 @@ export class ChunkUploader {
 	 */
 	async #resend(missing: readonly number[]): Promise<void> {
 		if (missing.length === 0) return
-		const stored = new Map(
-			(await this.#store.listChunks(this.#openId())).map((chunk: StoredChunk) => [chunk.index, chunk])
-		)
+		const stored = await this.#store.listChunks(this.#openId())
 		for (const index of missing) {
-			const chunk = stored.get(index)
+			const chunk = stored.find((candidate) => candidate.index === index)
 			if (chunk === undefined) continue
 			this.#queue.push({ index, bytes: new Uint8Array(chunk.bytes), sha256: chunk.sha256 })
 		}
