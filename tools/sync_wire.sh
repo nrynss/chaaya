@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 keel=${KEEL_DIR:-/home/nryn/work/keel}
-tag=${1:-v0.0.1}
+tag=${1:-v0.1.1}
 dest=src/lib/wire/fixtures
 
 if [ ! -e "$keel/.git" ]; then

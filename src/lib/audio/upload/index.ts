@@ -1,0 +1,22 @@
+/**
+ * Chunked upload of a capture.
+ *
+ * The uploader splits a capture into fixed size chunks, hashes each chunk with
+ * Web Crypto, persists it in IndexedDB, and streams it to Keel's upload
+ * protocol. A failed chunk retries with backoff, the upload survives a short
+ * network drop, and a reloaded page resumes the upload it left behind.
+ */
+export { ChunkUploader } from "./upload.svelte.js"
+export { IndexedDbStore } from "./store.js"
+export { UploadFailure } from "./protocol.js"
+export type {
+	SessionRecord,
+	StoredChunk,
+	UploadChunk,
+	UploadError,
+	UploadOptions,
+	UploadReceipt,
+	UploadSnapshot,
+	UploadState,
+	UploadStore
+} from "./types.js"
