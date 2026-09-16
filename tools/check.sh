@@ -107,9 +107,21 @@ else
 	image="mcr.microsoft.com/playwright:v$(node -p "require('@playwright/test/package.json').version")-noble"
 	echo "webkit cannot launch on this host. chromium and firefox run bare, webkit runs inside $image."
 	npm run test:browser -- --project=chromium --project=firefox
+	# The marker reader measures a take with ffprobe, and the pinned image
+	# carries no ffmpeg. The static pair the workflow installs comes from
+	# the same image here, extracted to the work directory, so the container
+	# finds the binaries on its own PATH without a mount beside /work.
+	tool_dir=".playwright-image-tools"
+	rm -rf "$tool_dir"
+	mkdir -p "$tool_dir"
+	tool_cid=$(docker create mwader/static-ffmpeg:7.1@sha256:a8090df5f5608daef387e1b2e93b98aaacb4d92153ad904e7d715c725724fca4)
+	docker cp "${tool_cid}:/ffmpeg" "$tool_dir/ffmpeg"
+	docker cp "${tool_cid}:/ffprobe" "$tool_dir/ffprobe"
+	docker rm "$tool_cid" >/dev/null
 	docker run --rm --init --ipc=host --name "chaaya-webkit-$$" \
 		-u "$(id -u):$(id -g)" -e HOME=/tmp/pw-home \
 		-v "$PWD:/work" -w /work "$image" \
+		env PATH="/work/$tool_dir:$PATH" \
 		timeout 900 npx playwright test --project=webkit
 fi
 
