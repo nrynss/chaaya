@@ -12,6 +12,17 @@ git rev-parse --is-inside-work-tree >/dev/null
 
 step() { printf '\n== %s ==\n' "$1"; }
 
+step "audio tools"
+# The browser audio checks measure a recorded take with ffmpeg and ffprobe.
+# Both tools must be present before the browser leg runs. A missing tool fails
+# here by name, so no audio check turns into a silent skip.
+for measurement_tool in ffprobe ffmpeg; do
+  if ! command -v "$measurement_tool" >/dev/null; then
+    printf 'Blocked. %s is not installed, so the audio checks cannot measure a take.\n' "$measurement_tool" >&2
+    exit 1
+  fi
+done
+
 # Fail when any tracked or staged-for-review file matches a forbidden pattern.
 # The listing is git ls-files for tracked work, plus the untracked files git
 # would add, so the gate judges uncommitted work the same way. Exit 1 on a
