@@ -6,6 +6,14 @@
 		type GeneratedMicrophone
 	} from "../../../../tests/playwright/support/audio/input"
 
+	/** The shape the wrapper reads. The type lives in the browser's DOM
+	 * library, which svelte-check resolves and eslint's globals list does
+	 * not, so the alias spells out the member the page actually passes. */
+	type StreamOptions = {
+		audio?: { deviceId?: string } | boolean
+		video?: boolean
+	}
+
 	/** How long a take runs before it stops itself. The generated signal runs
 	 * shorter, so a take covers every marker the signal carries. */
 	const TAKE_SECONDS = 2
@@ -53,7 +61,7 @@
 		microphone = installGeneratedMicrophone({ omitMarkerIndex: 0 })
 		const media = navigator.mediaDevices
 		const inner = media.getUserMedia.bind(media)
-		media.getUserMedia = async (constraints?: MediaStreamConstraints) => {
+		media.getUserMedia = async (constraints?: StreamOptions) => {
 			const opened = await inner(constraints)
 			stream = opened
 			return opened
