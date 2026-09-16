@@ -32,10 +32,12 @@ scan_tracked_files() {
 	local pattern=$1 exclude=${2:-} file status
 	local -a hits=()
 	mapfile -d '' files < <(git ls-files --cached --others --exclude-standard -z)
-	# An untracked symlink to a directory lists as one path. Skip directories,
-	# so grep never reads one and fails the scan.
+	# An untracked symlink to a directory lists as one path. Skip it, so grep
+	# never reads a directory and fails the scan. A tracked file deleted in
+	# the working tree but not staged also still lists. Skip it the same way
+	# the lint step does, so the scan judges the tree and not the index.
 	for file in "${files[@]}"; do
-		if [ "$file" = "$exclude" ] || [ -d "$file" ]; then continue; fi
+		if [ "$file" = "$exclude" ] || [ ! -f "$file" ]; then continue; fi
 		status=0
 		grep -iIlE -- "$pattern" "$file" || status=$?
 		case $status in

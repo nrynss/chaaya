@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process"
-import { readFileSync } from "node:fs"
+import { readFileSync, statSync } from "node:fs"
 import { dirname, isAbsolute, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -9,14 +9,19 @@ export const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", ".."
 
 /** Every source file the library ships, tracked or waiting to be added. The
  * listing matches the gate's other scans: tracked files, plus the untracked
- * files git would add, so the gate judges uncommitted work the same way. */
+ * files git would add, so the gate judges uncommitted work the same way. A
+ * tracked file deleted in the working tree but not staged still lists. The
+ * stat filter skips it, so the scans judge the tree and not the index. */
 export function listLibFiles() {
 	const listing = execFileSync(
 		"git",
 		["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
 		{ cwd: repoRoot, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }
 	)
-	return listing.split("\0").filter((file) => file.startsWith("src/lib/"))
+	return listing
+		.split("\0")
+		.filter((file) => file.startsWith("src/lib/"))
+		.filter((file) => statSync(join(repoRoot, file), { throwIfNoEntry: false })?.isFile())
 }
 
 /** The code lines of a source file with comments cut out, so prose about a

@@ -13,7 +13,7 @@
     "build": "vite build",
     "start": "node build/index.js",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "lint": "eslint $(git ls-files --cached --others --exclude-standard | grep -E '\\.(js|mjs|cjs|ts|svelte)$')",
+    "lint": "eslint $(git ls-files --cached --others --exclude-standard | grep -E '\\.(js|mjs|cjs|ts|svelte)$' | while IFS= read -r f; do [ -f \"$f\" ] && printf '%s\\n' \"$f\"; done)",
     "test": "vitest run",
     "test:browser": "playwright test",
     "package": "svelte-package -i src/lib -o dist",
