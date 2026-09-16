@@ -370,7 +370,9 @@ export class ChunkUploader {
 	 *
 	 * It reads the state, re-sends anything missing, waits for every
 	 * acknowledgement, and digests the stored chunks. A completion sent early
-	 * would fail, because the server assembles only a complete upload.
+	 * would fail, because the server assembles only a complete upload. The
+	 * store cleanup follows the receipt, and a cleanup that refuses does not
+	 * fail an upload the server already holds.
 	 */
 	async #complete(): Promise<void> {
 		try {
@@ -392,8 +394,15 @@ export class ChunkUploader {
 			if (!parsed.ok) throw new UploadFailure("invalid_response", parsed.failure.message)
 			this.receipt = parsed.value
 			this.state = "done"
-			await this.#store.deleteChunks(parsed.value.id)
-			await this.#store.deleteSession(parsed.value.id)
+			try {
+				await this.#store.deleteChunks(parsed.value.id)
+				await this.#store.deleteSession(parsed.value.id)
+			} catch {
+				// The receipt stands and the upload is the server's. A store
+				// that refuses the cleanup, over a closed connection for
+				// instance, cannot unpick it, so the refusal stays here and
+				// the state stays done.
+			}
 		} catch (error) {
 			this.#fail(toUploadFailure(error))
 		}
