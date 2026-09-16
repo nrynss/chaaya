@@ -1,16 +1,18 @@
 import { expect, test } from "@playwright/test"
 
+/* WebKit on Linux runs playback only. Its headless build opens no capture
+ * graph, so the meter reads nothing there. The support module's coverage
+ * table records this skip, and the reason travels with it. */
+test.skip(({ browserName }) => browserName === "webkit", "WebKit on Linux runs playback only.")
+
 /** The level meter and the peak computation both need a real browser. This
  * spec drives the harness page, reads each number out of the rendered page,
- * and reports the raw values. */
+ * and reports the raw values. The page builds its own source, so the signal
+ * needs no capture device, but the browser still opens an AudioContext, and
+ * the meter only advances where a sound server exists to pull the graph. */
 test("the meter reads silence and a full scale tone, and peaks stay responsive", async ({
-	page,
-	browserName
+	page
 }) => {
-	/* Quarantined on Firefox. The CI runner gives Firefox no audio device, so the harness
-	 * never leaves its running phase. It comes back once the meter reads a signal the page
-	 * generates itself instead of a device. */
-	test.fixme(browserName === "firefox", "Firefox on the CI runner has no audio device.")
 	test.setTimeout(90_000)
 	await page.goto("/tests/audio-levels")
 
@@ -41,15 +43,15 @@ test("the meter reads silence and a full scale tone, and peaks stay responsive",
 
 	expect(silenceRms).toBeLessThan(-60)
 	expect(silencePeak).toBeLessThan(-60)
-	expect(Math.abs(tonePeak)).toBeLessThanOrEqual(1)
-	/* The tone is full scale, so an honest meter reads its RMS near 0 dB.
-	 * A live analyser window on a real sink can hold the tone for only part
-	 * of its length, and the RMS then reads low. The worst value measured
-	 * across the workstation and the CI runner is about -9 dB. The floor sits
-	 * well under that and far above the -100 a silent meter reads, so
-	 * silence still fails. */
-	expect(toneRms).toBeGreaterThan(-20)
-	expect(toneRms).toBeLessThanOrEqual(3)
+	/* A full scale sine drives the meter to its ceiling, so the peak reads zero
+	 * and holds there on a single frame of signal. A gap inside a window lowers
+	 * the rms alone, so the rms check is the loose floor that silence fails.
+	 * The worst window measured read minus 9.1 in a gapped container and minus
+	 * 6.0 on the CI runner. The floor at minus 12 sits under every reading and
+	 * 88 dB above the minus 100 a silent meter reads. The unit cases pin the
+	 * exact scaling of both meters. */
+	expect(tonePeak).toBeCloseTo(0, 1)
+	expect(toneRms).toBeGreaterThan(-12)
 	/* A worker keeps the main thread free, so the gap holds at one frame while
 	 * the compute runs. When the compute lands on the main thread the gap grows
 	 * to the compute's own duration. The ratio of the gap to that duration does

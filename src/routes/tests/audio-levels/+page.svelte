@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from "svelte"
+	import { generateSamples } from "../../../../tests/playwright/support/audio/input"
 	import { LiveLevel } from "$lib/audio/levels/live-level.svelte"
 	import { computePeaksInWorker } from "$lib/audio/levels/peaks-client"
 
@@ -25,6 +26,16 @@
 	const TONE_SECONDS = 20 * 60
 	const SAMPLE_RATE = 48000
 	const BUCKETS = TONE_SECONDS * 20
+	/** A full scale sine, so the peak meter reads zero dBFS. The generator
+	 * drives its markers through the same level, so a zero marker level leaves
+	 * the plain tone. */
+	const TONE = {
+		sampleRate: SAMPLE_RATE,
+		totalSeconds: 1,
+		toneHz: 440,
+		toneAmplitude: 1,
+		markerAmplitude: 0
+	}
 
 	const format = (value: number) => value.toFixed(3)
 
@@ -35,13 +46,12 @@
 		return promise
 	}
 
-	/** A full scale square wave, looped, so the peak lands on one. */
+	/** The shared generated signal as a looped source. The meter reads it in
+	 * place of a device, so the check needs no microphone in any engine. */
 	function buildTone(context: AudioContext): AudioBufferSourceNode {
-		const buffer = context.createBuffer(1, context.sampleRate, context.sampleRate)
-		const data = buffer.getChannelData(0)
-		for (let index = 0; index < data.length; index += 1) {
-			data[index] = index % 100 < 50 ? 1 : -1
-		}
+		const samples = generateSamples(TONE)
+		const buffer = context.createBuffer(1, samples.length, SAMPLE_RATE)
+		buffer.getChannelData(0).set(samples)
 		const source = context.createBufferSource()
 		source.buffer = buffer
 		source.loop = true
@@ -90,7 +100,12 @@
 			await context.resume()
 			const analyser = context.createAnalyser()
 			analyser.fftSize = 2048
-			/* A muted path to the destination keeps the graph pulled. */
+			/* Two paths leave the analyser. The muted gain keeps the graph
+			 * pulled wherever a device exists, which a stream sink alone
+			 * does not do on every engine. The stream sink keeps the graph
+			 * alive on a machine with no device at all. */
+			const sink = context.createMediaStreamDestination()
+			analyser.connect(sink)
 			const mute = context.createGain()
 			mute.gain.value = 0
 			analyser.connect(mute)
@@ -109,8 +124,16 @@
 			const source = buildTone(context)
 			source.connect(analyser)
 			source.start()
-			await wait(150)
-			const tone = live.read()
+			/* A slow renderer can hand back a window that still holds a start up
+			 * underrun, so the meter is read until it reports a live signal. The
+			 * strongest window wins, because a gap only lowers a reading. */
+			let tone = live.read()
+			for (let attempt = 0; attempt < 12; attempt += 1) {
+				await wait(50)
+				const next = live.read()
+				if (next.rmsDb > tone.rmsDb) tone = next
+				if (tone.rmsDb > -6) break
+			}
 			source.stop()
 			source.disconnect()
 			toneRms = format(tone.rmsDb)
