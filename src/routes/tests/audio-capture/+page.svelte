@@ -1,6 +1,10 @@
 <script lang="ts">
-	import type { CaptureMode, CaptureResult } from "$lib/audio/capture"
+	import { page } from "$app/state"
+	import type { CaptureChunk, CaptureMode, CaptureResult } from "$lib/audio/capture"
 	import { AudioRecorder } from "$lib/audio/capture"
+	import { ChunkUploader } from "$lib/audio/upload"
+	import { sha256Hex } from "$lib/audio/upload/chunk.js"
+	import { onMount } from "svelte"
 	import {
 		installGeneratedMicrophone,
 		type GeneratedMicrophone
@@ -21,6 +25,18 @@
 	/** The name a browser gives the refusal of a microphone grant. */
 	const REFUSAL_NAME = "NotAllowedError"
 
+	/** How long a streaming take runs before it stops itself. A check stops
+	 * it early or reloads mid take, so the span only bounds a runaway. */
+	const STREAM_TAKE_SECONDS = 30
+
+	/** The longest chunk the streaming check uploads with. Raw frames fill
+	 * chunks fast, so a wide chunk keeps a short take under the fixture
+	 * ceiling. */
+	const STREAM_CHUNK_BYTES = 32768
+
+	/** The owner every harness upload belongs to. */
+	const STREAM_OWNER = "harness-owner"
+
 	let recorder = $state<AudioRecorder | null>(null)
 	let microphone = $state<GeneratedMicrophone | null>(null)
 	let startElapsed = $state(0)
@@ -29,6 +45,19 @@
 	let sharedContext: AudioContext | null = null
 	let probeTone = $state("")
 	let probeFailure = $state("")
+	let streamed = $state(0)
+	let retained = $state(0)
+	let streamDigest = $state("")
+	let streamResult = $state("")
+	let streamDone = $state(false)
+	let uploadBase = $state("")
+	let uploadId = $state("")
+	let uploadReceipt = $state("")
+	let uploadFailure = $state("")
+	let resumed = $state(false)
+	let streaming = false
+	let streamBytes: Uint8Array<ArrayBuffer>[] = []
+	let uploader: ChunkUploader | null = null
 
 	/** Answers the next grant with a refusal, the way a browser reports one. */
 	function refuse(): void {
@@ -95,6 +124,119 @@
 		stopElapsed = 0
 	}
 
+	/** Join the streamed raw frames into one buffer, in arrival order. */
+	function joinedStream(): Uint8Array<ArrayBuffer> {
+		let size = 0
+		for (const part of streamBytes) size += part.byteLength
+		const all = new Uint8Array(size)
+		let offset = 0
+		for (const part of streamBytes) {
+			all.set(part, offset)
+			offset += part.byteLength
+		}
+		return all
+	}
+
+	/** Hand one streamed block to the upload and to the page digest. */
+	function onStreamBlock(chunk: CaptureChunk): void {
+		const bytes = new Uint8Array(chunk.samples.slice().buffer as ArrayBuffer)
+		streamBytes.push(bytes)
+		streamed += 1
+		retained = recorder?.chunks.length ?? 0
+		uploader?.append(bytes)
+	}
+
+	/** Record PCM without retaining, and drain every block into an upload. */
+	async function startStream(): Promise<void> {
+		if (streaming) return
+		streaming = true
+		streamDigest = ""
+		streamResult = ""
+		uploadId = ""
+		uploadReceipt = ""
+		uploadFailure = ""
+		resumed = false
+		streamed = 0
+		retained = 0
+		streamDone = false
+		streamBytes = []
+		startElapsed = 0
+		stopElapsed = 0
+		const base = uploadBase
+		if (base === "") {
+			uploadFailure = "the page holds no upload target"
+			streaming = false
+			return
+		}
+		try {
+			const next = new ChunkUploader({
+				url: base,
+				owner: STREAM_OWNER,
+				contentType: "audio/x-pcm-f32le",
+				chunkSize: STREAM_CHUNK_BYTES
+			})
+			uploader = next
+			const take = new AudioRecorder({
+				mode: "pcm",
+				autoStopSeconds: STREAM_TAKE_SECONDS,
+				retain: false,
+				onChunk: onStreamBlock
+			})
+			recorder = take
+			const opening = next.start()
+			await take.start()
+			await opening
+			if (next.state !== "streaming") {
+				throw new Error(next.error?.message ?? "the upload did not open")
+			}
+			uploadId = next.id ?? ""
+		} catch (error) {
+			uploadFailure = error instanceof Error ? error.message : String(error)
+			streaming = false
+		}
+	}
+
+	/** Stop the streaming take, digest the streamed frames, and finish. */
+	async function stopStream(): Promise<void> {
+		try {
+			await recorder?.stop()
+			streamDigest = await sha256Hex(joinedStream())
+			streamResult = recorder?.result === null ? "null" : "held"
+			retained = recorder?.chunks.length ?? 0
+			const next = uploader
+			if (next === null) {
+				uploadFailure = "the page holds no upload"
+				return
+			}
+			await next.finish()
+			if (next.state === "done") uploadReceipt = next.receipt?.sha256 ?? ""
+			else uploadFailure = next.error?.message ?? "the upload did not finish"
+		} catch (error) {
+			uploadFailure = error instanceof Error ? error.message : String(error)
+		} finally {
+			streamDone = true
+			streaming = false
+		}
+	}
+
+	/** Pick up the upload a reloaded page left behind, and complete it. */
+	async function resumeUpload(): Promise<void> {
+		const next = await ChunkUploader.resume()
+		if (next === undefined) return
+		uploader = next
+		resumed = true
+		uploadId = next.id ?? ""
+		await next.finish()
+		if (next.state === "done") uploadReceipt = next.receipt?.sha256 ?? ""
+		else uploadFailure = next.error?.message ?? "the upload did not finish"
+		streamDone = true
+	}
+
+	onMount(() => {
+		uploadBase = page.url.searchParams.get("upload") ?? ""
+		void resumeUpload()
+	})
+
 	/* Build the generated microphone once, so every start reads the same
 	 * signal at the same rate and no check touches a device. */
 	$effect(() => {
@@ -131,6 +273,15 @@
 	<p data-testid="mode">{recorder?.mode ?? "none"}</p>
 	<p data-testid="state">{recorder?.state ?? "idle"}</p>
 	<p data-testid="chunks">{recorder?.chunkCount ?? 0}</p>
+	<p data-testid="retained">{retained}</p>
+	<p data-testid="streamed">{streamed}</p>
+	<p data-testid="stream-digest">{streamDigest}</p>
+	<p data-testid="stream-result">{streamResult}</p>
+	<p data-testid="stream-done">{streamDone ? "yes" : "no"}</p>
+	<p data-testid="upload-id">{uploadId}</p>
+	<p data-testid="upload-receipt">{uploadReceipt}</p>
+	<p data-testid="upload-failure">{uploadFailure}</p>
+	<p data-testid="resumed">{resumed ? "yes" : "no"}</p>
 	<p data-testid="render-rate">{recorder?.renderRate ?? 0}</p>
 	<p data-testid="mime">{recorder?.result?.mimeType ?? ""}</p>
 	<p data-testid="rate">{recorder?.result?.sampleRate ?? 0}</p>
@@ -159,4 +310,6 @@
 	<button data-testid="stop" onclick={() => recorder?.stop()}>Stop</button>
 	<button data-testid="stop-track" onclick={stopTrack}>Stop the track</button>
 	<button data-testid="reset" onclick={clear}>Reset</button>
+	<button data-testid="start-stream" onclick={() => void startStream()}>Record a stream</button>
+	<button data-testid="stop-stream" onclick={() => void stopStream()}>Stop the stream</button>
 </main>

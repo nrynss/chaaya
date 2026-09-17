@@ -11,6 +11,13 @@ import type { CaptureChunk, CaptureMode, CaptureOptions, CaptureResult, CaptureS
  * A caller may supply the context the PCM mode records on. The recorder
  * disconnects its nodes on stop and reset either way, and it closes only a
  * context it made.
+ *
+ * A PCM take can stream instead of accumulating. Pass a listener and it
+ * receives every block as it arrives, at renderRate. Pass retain false and
+ * the recorder drops each block after the listener returns, so chunks stays
+ * empty and result is null. Drain the blocks into an upload during capture,
+ * and build a file from the same blocks with resampling and WAV encoding
+ * when a file is needed.
  */
 export declare class AudioRecorder {
     #private;
@@ -32,7 +39,12 @@ export declare class AudioRecorder {
     /** The error behind a denied or failed state, or null. */
     error: unknown;
     constructor(options?: CaptureOptions);
-    /** The PCM blocks captured so far, in order. A compressed take holds none. */
+    /**
+     * The PCM blocks captured so far, in order. A compressed take holds none.
+     * Empty too under retain false, because the recorder drops every block
+     * after its listener returns. Read the block count from chunkCount, which
+     * counts arrivals either way.
+     */
     get chunks(): readonly CaptureChunk[];
     /** The span of one block in seconds, the tolerance a duration check allows. */
     get chunkSeconds(): number;

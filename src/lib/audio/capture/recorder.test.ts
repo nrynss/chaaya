@@ -1,5 +1,8 @@
 import { afterEach, expect, test, vi } from "vitest"
+import { resampleChunks } from "./resample.js"
 import { AudioRecorder } from "./recorder.svelte.js"
+import type { CaptureChunk } from "./types.js"
+import { encodeWav } from "./wav.js"
 
 /** Counts how often a fake context closed. */
 interface CloseCount {
@@ -194,5 +197,150 @@ test("renderRate names the rate blocks arrive at and offers no setter", async ()
 	const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(recorder), "renderRate")
 	expect(descriptor?.get).toBeTypeOf("function")
 	expect(descriptor?.set).toBeUndefined()
+	recorder.reset()
+})
+
+/** The frames one synthetic block carries. */
+const BLOCK_FRAMES = 128
+
+/** How many blocks one synthetic take carries. */
+const BLOCK_TOTAL = 24
+
+/** A worklet node that answers stop after posting a scripted take. */
+class ScriptedWorkletNode {
+	port: {
+		onmessage: ((event: { data: unknown }) => void) | null
+		postMessage: (message: unknown) => void
+	}
+
+	connect = () => undefined
+	disconnect = () => undefined
+
+	constructor(
+		readonly frames: number,
+		readonly total: number
+	) {
+		const port: ScriptedWorkletNode["port"] = {
+			onmessage: null,
+			postMessage: (message: unknown) => {
+				if (message !== "stop") return
+				let offset = 0
+				for (let block = 0; block < this.total; block += 1) {
+					const samples = new Float32Array(this.frames).fill(0.25)
+					port.onmessage?.({
+						data: { samples, offset, contextTime: offset / 48000, final: false }
+					})
+					offset += this.frames
+				}
+				port.onmessage?.({
+					data: { samples: new Float32Array(0), offset, contextTime: offset / 48000, final: true }
+				})
+			}
+		}
+		this.port = port
+	}
+}
+
+/** Installs the scripted worklet node beside the grant stub. */
+function installScriptedWorklet(frames: number, total: number): void {
+	class Scripted extends ScriptedWorkletNode {
+		constructor() {
+			super(frames, total)
+		}
+	}
+	scope.AudioWorkletNode = Scripted as unknown as typeof AudioWorkletNode
+}
+
+test("a streaming take retains no blocks and reports every block once in order", async () => {
+	installGrant({ stream: fakeStream(48000) })
+	installScriptedWorklet(BLOCK_FRAMES, BLOCK_TOTAL)
+	const context = fakeContext(48000, { calls: 0 })
+	const seen: CaptureChunk[] = []
+	const recorder = new AudioRecorder({
+		mode: "pcm",
+		context,
+		autoStopSeconds: 0,
+		retain: false,
+		onChunk: (chunk) => {
+			seen.push(chunk)
+		}
+	})
+	await recorder.start()
+	expect(recorder.state).toBe("recording")
+	await recorder.stop()
+	expect(recorder.state).toBe("stopped")
+	expect(seen).toHaveLength(BLOCK_TOTAL)
+	expect(recorder.chunks).toHaveLength(0)
+	expect(recorder.chunkCount).toBe(BLOCK_TOTAL)
+	expect(recorder.result).toBeNull()
+	for (let index = 0; index < seen.length; index += 1) {
+		expect(seen[index].offset).toBe(index * BLOCK_FRAMES)
+		if (index > 0) {
+			expect(seen[index].offset).toBe(seen[index - 1].offset + seen[index - 1].samples.length)
+			expect(seen[index].contextTime).toBeGreaterThanOrEqual(seen[index - 1].contextTime)
+		}
+	}
+	recorder.reset()
+})
+
+test("a retained take stays byte identical to the take without a listener", async () => {
+	const heard: CaptureChunk[] = []
+	installGrant({ stream: fakeStream(48000) })
+	installScriptedWorklet(BLOCK_FRAMES, BLOCK_TOTAL)
+	const firstContext = fakeContext(48000, { calls: 0 })
+	const first = new AudioRecorder({
+		mode: "pcm",
+		context: firstContext,
+		autoStopSeconds: 0,
+		onChunk: (chunk) => {
+			heard.push(chunk)
+		}
+	})
+	await first.start()
+	await first.stop()
+	const firstBytes = new Uint8Array(await first.result!.blob.arrayBuffer())
+	const firstSamples = first.chunks.map((chunk) => chunk.samples.length)
+
+	installGrant({ stream: fakeStream(48000) })
+	installScriptedWorklet(BLOCK_FRAMES, BLOCK_TOTAL)
+	const secondContext = fakeContext(48000, { calls: 0 })
+	const second = new AudioRecorder({ mode: "pcm", context: secondContext, autoStopSeconds: 0 })
+	await second.start()
+	await second.stop()
+	const secondBytes = new Uint8Array(await second.result!.blob.arrayBuffer())
+
+	expect(first.result).not.toBeNull()
+	expect(heard).toHaveLength(BLOCK_TOTAL)
+	expect(firstSamples).toEqual(second.chunks.map((chunk) => chunk.samples.length))
+	expect(firstBytes).toEqual(secondBytes)
+	const rebuilt = await encodeWav(
+		resampleChunks(heard, first.renderRate, first.result!.sampleRate),
+		first.result!.sampleRate
+	).arrayBuffer()
+	expect(new Uint8Array(rebuilt)).toEqual(firstBytes)
+	first.reset()
+	second.reset()
+})
+
+test("keeping a block under retain false fails the memory pin by design", async () => {
+	installGrant({ stream: fakeStream(48000) })
+	installScriptedWorklet(BLOCK_FRAMES, BLOCK_TOTAL)
+	const context = fakeContext(48000, { calls: 0 })
+	const held: CaptureChunk[] = []
+	const recorder = new AudioRecorder({
+		mode: "pcm",
+		context,
+		autoStopSeconds: 0,
+		retain: false,
+		onChunk: (chunk) => {
+			held.push(chunk)
+		}
+	})
+	await recorder.start()
+	await recorder.stop()
+	// The recorder dropped every block, so only the listener's own copies
+	// remain. A listener that holds no copy holds nothing at all.
+	expect(recorder.chunks).toHaveLength(0)
+	expect(held).toHaveLength(BLOCK_TOTAL)
 	recorder.reset()
 })

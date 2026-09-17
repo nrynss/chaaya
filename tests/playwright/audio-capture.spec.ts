@@ -1,7 +1,11 @@
 import { expect, test, type Page } from "@playwright/test"
+import { spawn, type ChildProcess } from "node:child_process"
+import { createHash } from "node:crypto"
+import { once } from "node:events"
 import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 import {
 	MARKER_THRESHOLD_SHARE,
 	markerOnsetsSeconds,
@@ -372,3 +376,202 @@ test.describe("a microphone that is not there", () => {
 		expect(await number(page, "size")).toBeGreaterThan(0)
 	})
 })
+
+/** The fixture server, resolved from this file so the spec runs from any
+ * directory. */
+const serverPath = fileURLToPath(new URL("../fixtures/upload-server.mjs", import.meta.url))
+
+/** What the fixture assembled for one upload. */
+interface FixtureBytes {
+	size: number
+	sha256: string
+	received: number[]
+	base64: string
+}
+
+/** One running fixture server. */
+interface FixtureServer {
+	/** The collection path the harness uploads to. */
+	url: string
+	/** Read the bytes the fixture assembled, and their digest. */
+	bytes(id: string): Promise<FixtureBytes>
+	/** Read what the fixture holds for one upload. */
+	state(id: string): Promise<{ stored_bytes: number; received: number[] }>
+	/** Stop the fixture. */
+	stop(): Promise<void>
+}
+
+/** Start a fixture server on a free port and wait for the port it prints. */
+async function startServer(): Promise<FixtureServer> {
+	const child: ChildProcess = spawn("node", [serverPath, "--port", "0"], {
+		stdio: ["ignore", "pipe", "ignore"]
+	})
+	const port = await new Promise<number>((resolve, reject) => {
+		let printed = ""
+		child.stdout?.setEncoding("utf8")
+		child.stdout?.on("data", (chunk: string) => {
+			printed += chunk
+			const match = /\{"port":(\d+)\}/.exec(printed)
+			if (match) resolve(Number(match[1]))
+		})
+		child.on("error", reject)
+		child.on("exit", (code) => reject(new Error(`the fixture server exited with ${String(code)}`)))
+	})
+	const root = `http://127.0.0.1:${port}`
+	return {
+		url: `${root}/uploads`,
+		async bytes(id) {
+			return (await (await fetch(`${root}/uploads/${id}/bytes`)).json()) as FixtureBytes
+		},
+		async state(id) {
+			return (await (await fetch(`${root}/uploads/${id}`)).json()) as {
+				stored_bytes: number
+				received: number[]
+			}
+		},
+		async stop() {
+			if (child.exitCode !== null || child.signalCode !== null) return
+			child.kill()
+			await once(child, "exit")
+		}
+	}
+}
+
+/** Open the streaming harness on one fixture. */
+async function openStream(page: Page, server: FixtureServer): Promise<void> {
+	await page.goto(`/tests/audio-capture?upload=${encodeURIComponent(server.url)}`)
+	await expect(page.getByTestId("start-stream")).toBeEnabled()
+}
+
+/** Read one text the page reports. */
+async function streamText(page: Page, testId: string): Promise<string> {
+	return ((await page.getByTestId(testId).textContent()) ?? "").trim()
+}
+
+/** The lowercase hex SHA-256 of one buffer. */
+function streamDigestOf(bytes: Buffer): string {
+	return createHash("sha256").update(bytes).digest("hex")
+}
+
+test.describe("a take that streams", () => {
+	test("a drained take matches the stored blob with every marker present", async ({
+		page
+	}, testInfo) => {
+		test.setTimeout(90_000)
+		const server = await startServer()
+		try {
+			await openStream(page, server)
+			await page.getByTestId("start-stream").click()
+			await expect(page.getByTestId("state")).toHaveText("recording")
+			// Wait until the stream covers the whole generated signal, read
+			// from the page's own block count and render rate.
+			await page.waitForFunction(() => {
+				const streamed = Number(document.querySelector("[data-testid='streamed']")?.textContent ?? "0")
+				const rate = Number(document.querySelector("[data-testid='render-rate']")?.textContent ?? "0")
+				return rate > 0 && (streamed * 4096) / rate >= 1.7
+			}, undefined, { timeout: 30_000 })
+			await page.getByTestId("stop-stream").click()
+			await expect(page.getByTestId("stream-done")).toHaveText("yes", { timeout: 60_000 })
+			expect(await streamText(page, "upload-failure")).toBe("")
+			// The streaming take drops every block, so nothing stays back.
+			expect(await streamText(page, "retained")).toBe("0")
+			expect(await streamText(page, "stream-result")).toBe("null")
+			const digest = await streamText(page, "stream-digest")
+			expect(digest).toMatch(/^[0-9a-f]{64}$/)
+			const id = await streamText(page, "upload-id")
+			expect(id).not.toBe("")
+			const receipt = await streamText(page, "upload-receipt")
+			expect(receipt).toBe(digest)
+			const assembled = await server.bytes(id)
+			const stored = Buffer.from(assembled.base64, "base64")
+			writeFileSync(testInfo.outputPath("streamed.raw"), stored)
+			expect(assembled.sha256).toBe(digest)
+			expect(streamDigestOf(stored)).toBe(digest)
+			expect(assembled.received).toEqual(assembled.received.map((_, index) => index))
+
+			// The streamed bytes are raw frames at the reported render rate,
+			// so decode them at that rate and judge the markers by placement,
+			// the same bar every take owes the generated signal.
+			const renderRate = await number(page, "render-rate")
+			expect(renderRate).toBeGreaterThan(0)
+			const wav = join(mkdtempSync(join(tmpdir(), "chaaya-stream-")), "stream.wav")
+			writeStreamWav(wav, stored, renderRate)
+			const reading = readMarkers(wav)
+			console.log(JSON.stringify({ reading }))
+			await page.waitForFunction(
+				(stop) => Number(stop) > 0,
+				await page.getByTestId("stop-elapsed").textContent(),
+				{ timeout: 30_000 }
+			)
+			checkMarkers({
+				reading,
+				reportedRate: renderRate,
+				startElapsed: await number(page, "start-elapsed"),
+				stopElapsed: await number(page, "stop-elapsed"),
+				blockSeconds: await number(page, "block-seconds"),
+				mimeType: "audio/x-pcm-f32le"
+			})
+		} finally {
+			await server.stop()
+		}
+	})
+
+	test("a reloaded page completes over exactly the persisted prefix", async ({ page, context }) => {
+		test.setTimeout(90_000)
+		const server = await startServer()
+		try {
+			await openStream(page, server)
+			await page.getByTestId("start-stream").click()
+			await expect(page.getByTestId("state")).toHaveText("recording")
+			await expect(page.getByTestId("streamed")).not.toHaveText("0", { timeout: 20_000 })
+			const id = await streamText(page, "upload-id")
+			expect(id).not.toBe("")
+
+			// Drop the network, then reload. The resumed page lost its stream,
+			// so it completes what the fixture already holds.
+			await context.setOffline(true)
+			await page.waitForTimeout(1500)
+			await context.setOffline(false)
+			await page.reload()
+			await expect(page.getByTestId("stream-done")).toHaveText("yes", { timeout: 60_000 })
+			expect(await streamText(page, "upload-failure")).toBe("")
+			expect(await streamText(page, "resumed")).toBe("yes")
+			expect(await streamText(page, "upload-id")).toBe(id)
+			const receipt = await streamText(page, "upload-receipt")
+			expect(receipt).toMatch(/^[0-9a-f]{64}$/)
+			const assembled = await server.bytes(id)
+			const held = await server.state(id)
+			expect(assembled.sha256).toBe(receipt)
+			expect(streamDigestOf(Buffer.from(assembled.base64, "base64"))).toBe(receipt)
+			expect(assembled.received).toEqual(assembled.received.map((_, index) => index))
+			expect(held.received.length).toBeGreaterThan(0)
+		} finally {
+			await server.stop()
+		}
+	})
+})
+
+/** Write raw float frames into a WAV file, so the marker reader decodes them. */
+function writeStreamWav(file: string, frames: Buffer, sampleRate: number): void {
+	const samples = new Float32Array(frames.buffer.slice(frames.byteOffset, frames.byteOffset + frames.byteLength))
+	const header = Buffer.alloc(44)
+	header.write("RIFF", 0)
+	header.writeUInt32LE(36 + samples.length * 2, 4)
+	header.write("WAVE", 8)
+	header.write("fmt ", 12)
+	header.writeUInt32LE(16, 16)
+	header.writeUInt16LE(1, 20)
+	header.writeUInt16LE(1, 22)
+	header.writeUInt32LE(sampleRate, 24)
+	header.writeUInt32LE(sampleRate * 2, 28)
+	header.writeUInt16LE(2, 32)
+	header.writeUInt16LE(16, 34)
+	header.write("data", 36)
+	header.writeUInt32LE(samples.length * 2, 40)
+	const body = Buffer.alloc(samples.length * 2)
+	for (let index = 0; index < samples.length; index += 1) {
+		const sample = Math.max(-1, Math.min(1, samples[index]))
+		body.writeInt16LE(Math.round(sample * (sample < 0 ? 0x8000 : 0x7fff)), index * 2)
+	}
+	writeFileSync(file, Buffer.concat([header, body]))
+}

@@ -3,7 +3,10 @@
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
 	import { a11yGate, contrastGate } from "$lib/testing/index.js";
-	import { AudioRecorder, type CaptureMode } from "$lib/audio/capture/index.js";
+	import { AudioRecorder, type CaptureChunk, type CaptureMode } from "$lib/audio/capture/index.js";
+	import { ChunkUploader } from "$lib/audio/upload/index.js";
+	import { resampleChunks } from "$lib/audio/capture/resample.js";
+	import { encodeWav } from "$lib/audio/capture/wav.js";
 
 	/** The generated signal this page records in place of a device. */
 	const SIGNAL = {
@@ -31,6 +34,9 @@
 	let sharedContext: AudioContext | null = null;
 	let checks = $state("");
 	let checkFailure = $state("");
+	let streamed = $state(0);
+	let drained = $state(0);
+	let streamNote = $state("");
 
 	onMount(() => {
 		hydrated = true;
@@ -113,6 +119,56 @@
 		wrapped = null;
 	}
 
+	/** Record without retaining, and drain every block into an upload. The
+	 * listener hands each block on and returns, and the take stays empty.
+	 * Blocks arrive at the render rate, so the drained bytes are raw frames
+	 * at that rate. Resample them and encode a WAV when a file is needed. */
+	async function recordStream(): Promise<void> {
+		failure = "";
+		streamNote = "";
+		streamed = 0;
+		drained = 0;
+		mode = "stream";
+		const held: CaptureChunk[] = [];
+		try {
+			const generated = await buildStream();
+			wrapped?.stop();
+			wrapped = generated;
+			const media = navigator.mediaDevices;
+			const inner = media.getUserMedia.bind(media);
+			media.getUserMedia = async () => generated.stream;
+			const context = await shared();
+			const uploader = new ChunkUploader({
+				url: "/docs/audio-capture/chunks",
+				owner: "docs",
+				contentType: "audio/x-pcm-f32le"
+			});
+			const take = new AudioRecorder({
+				mode: "pcm",
+				context,
+				autoStopSeconds: 2,
+				retain: false,
+				onChunk: (chunk: CaptureChunk) => {
+					held.push(chunk);
+					streamed += 1;
+					uploader.append(new Uint8Array(chunk.samples.slice().buffer as ArrayBuffer));
+					drained += 1;
+				}
+			});
+			recorder = take;
+			try {
+				await take.start();
+			} finally {
+				media.getUserMedia = inner;
+			}
+			await take.stop();
+			const file = encodeWav(resampleChunks(held, take.renderRate, 48000), 48000);
+			streamNote = `streamed ${held.length} blocks into ${file.size} file bytes`;
+		} catch (error) {
+			failure = String(error);
+		}
+	}
+
 	/** Run the gate pair on this page. The pairs name every colour pair the
 	 * markup draws, so the gate measures each one. */
 	async function runChecks(): Promise<void> {
@@ -144,6 +200,14 @@
 	<p>The device trio stays one decision. Echo cancellation stays on, and
 		noise suppression and gain control stay off, for a session that also
 		runs a voice model.</p>
+	<p>A long session streams instead of accumulating. Pass a block listener
+		and it receives every block as it arrives, at the render rate the page
+		reports. Pass retain false and the take drops each block after the
+		listener returns, so the take stays empty and the result is null. Drain
+		the blocks into an upload during capture, and build a file from the
+		same blocks with resampling and WAV encoding when a file is needed.
+		The listener runs on the main thread beside rendering, so hand the
+		block on and return.</p>
 	<p data-testid="failure">{failure}</p>
 	<button type="button" data-testid="record-compressed" disabled={!hydrated} onclick={() => record("compressed")}>
 		Record compressed
@@ -152,7 +216,11 @@
 		Record PCM
 	</button>
 	<button type="button" data-testid="stop" disabled={!hydrated} onclick={stop}>Stop</button>
+	<button type="button" data-testid="record-stream" disabled={!hydrated} onclick={recordStream}>Record a stream</button>
 	<button type="button" data-testid="run-checks" disabled={!hydrated} onclick={runChecks}>Run checks</button>
+	<p data-testid="stream-note">{streamNote}</p>
+	<p data-testid="streamed">{streamed}</p>
+	<p data-testid="drained">{drained}</p>
 	<p data-testid="checks">{checks}</p>
 	<p data-testid="check-failure">{checkFailure}</p>
 	<dl>

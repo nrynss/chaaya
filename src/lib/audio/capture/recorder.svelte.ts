@@ -89,6 +89,13 @@ function readSampleRate(stream: MediaStream): number {
  * A caller may supply the context the PCM mode records on. The recorder
  * disconnects its nodes on stop and reset either way, and it closes only a
  * context it made.
+ *
+ * A PCM take can stream instead of accumulating. Pass a listener and it
+ * receives every block as it arrives, at renderRate. Pass retain false and
+ * the recorder drops each block after the listener returns, so chunks stays
+ * empty and result is null. Drain the blocks into an upload during capture,
+ * and build a file from the same blocks with resampling and WAV encoding
+ * when a file is needed.
  */
 export class AudioRecorder {
 	/** The capture mode this recorder writes with. */
@@ -126,6 +133,8 @@ export class AudioRecorder {
 	#chunkFrames: number
 	#constraints: MediaTrackConstraints
 	#suppliedContext: AudioContext | null = null
+	#onChunk: ((chunk: CaptureChunk) => void) | null = null
+	#retain: boolean
 	#closing = false
 	#session = 0
 	#awaitStop: (() => void) | null = null
@@ -137,6 +146,8 @@ export class AudioRecorder {
 		this.#suppliedContext = options.context ?? null
 		this.#autoStop = options.autoStopSeconds ?? DEFAULT_AUTO_STOP_SECONDS
 		this.#chunkFrames = options.chunkFrames ?? DEFAULT_CHUNK_FRAMES
+		this.#onChunk = options.onChunk ?? null
+		this.#retain = options.retain ?? true
 		this.#constraints = {
 			echoCancellation: options.echoCancellation ?? true,
 			noiseSuppression: options.noiseSuppression ?? true,
@@ -144,7 +155,12 @@ export class AudioRecorder {
 		}
 	}
 
-	/** The PCM blocks captured so far, in order. A compressed take holds none. */
+	/**
+	 * The PCM blocks captured so far, in order. A compressed take holds none.
+	 * Empty too under retain false, because the recorder drops every block
+	 * after its listener returns. Read the block count from chunkCount, which
+	 * counts arrivals either way.
+	 */
 	get chunks(): readonly CaptureChunk[] {
 		void this.chunkCount
 		return this.#blocks
@@ -295,12 +311,21 @@ export class AudioRecorder {
 	#onWorkletMessage(data: unknown): void {
 		if (!isWorkletChunk(data)) return
 		if (data.samples.length > 0) {
-			this.#blocks.push({
+			const chunk: CaptureChunk = {
 				samples: data.samples,
 				offset: data.offset,
 				contextTime: data.contextTime,
-			})
-			this.chunkCount = this.#blocks.length
+			}
+			// The listener runs on this thread, without an await, so a slow
+			// listener stalls the take the way slow rendering would. Hand the
+			// block on and return. A throwing listener still surfaces, but the
+			// take keeps the block and the count stays honest either way.
+			try {
+				this.#onChunk?.(chunk)
+			} finally {
+				if (this.#retain) this.#blocks.push(chunk)
+				this.chunkCount += 1
+			}
 		}
 		if (data.final) {
 			const resolve = this.#flushed
@@ -327,11 +352,19 @@ export class AudioRecorder {
 			}
 			worklet.port.postMessage("stop")
 		})
+		this.#release()
+		// A streaming take dropped every block after its listener returned,
+		// so there is nothing left to encode and the result stays null. The
+		// caller holds the audio.
+		if (!this.#retain) {
+			this.state = nextState(this.state, "finished")
+			this.#resolveStop()
+			return
+		}
 		const blob = encodeWav(
 			resampleChunks(this.#blocks, this.#renderRate, this.#sampleRate),
 			this.#sampleRate
 		)
-		this.#release()
 		this.#finish(blob, "audio/wav")
 	}
 
@@ -367,7 +400,8 @@ export class AudioRecorder {
 		this.#stopCountdown()
 		if (this.#mediaRecorder?.state === "recording") this.#mediaRecorder.stop()
 		// A failed take keeps what it captured, so encode the blocks it holds.
-		if (this.mode === "pcm" && this.#blocks.length > 0) {
+		// A streaming take holds none, so it ends with no result.
+		if (this.mode === "pcm" && this.#retain && this.#blocks.length > 0) {
 			this.#buildResult(
 				encodeWav(
 					resampleChunks(this.#blocks, this.#renderRate, this.#sampleRate),

@@ -63,4 +63,20 @@ export interface CaptureOptions {
 	readonly chunkFrames?: number
 	/** How long a take runs before it stops itself, 12 seconds by default. */
 	readonly autoStopSeconds?: number
+	/**
+	 * A listener for every PCM block as it arrives, in order. The recorder
+	 * calls it on the main thread and never waits for it, so hand the block
+	 * on and return. A slow listener stalls the interface, because the call
+	 * runs beside rendering. Compressed takes hold no blocks, so the listener
+	 * never fires there.
+	 */
+	readonly onChunk?: (chunk: CaptureChunk) => void
+	/**
+	 * Whether the recorder keeps every PCM block until the take stops, true
+	 * by default. With false the recorder drops each block after the listener
+	 * returns, chunks stays empty and result is null, because the caller holds
+	 * the audio. A long session streams this way instead of accumulating.
+	 * Compressed takes hold no blocks, so this changes nothing there.
+	 */
+	readonly retain?: boolean
 }
