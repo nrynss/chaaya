@@ -23,6 +23,7 @@ Published as `@nrynss/chaaya`.
 
 ## Exports
 
+- `@nrynss/chaaya`: the package name.
 - `@nrynss/chaaya/tokens`: the fixed role names and a checker that reports a
   role a theme block leaves out.
 - `@nrynss/chaaya/tokens/reference.css`: the reference stylesheet a new app
@@ -41,6 +42,34 @@ Published as `@nrynss/chaaya`.
   peaks.
 - `@nrynss/chaaya/testing`: a contrast gate and an accessibility gate a
   consumer points at its own stylesheet and container.
+
+## Docs
+
+The routes under `/docs` show each export with a working example. Every page
+is styled only by the reference stylesheet, so the behaviour shows without
+suggesting a look.
+
+- [tokens](/docs/tokens): the fixed role names and a checker that reports a
+  role a theme block leaves out.
+- [theme](/docs/theme): the three-state theme mechanism and the head script
+  that paints the stored mode before first paint.
+- [wire](/docs/wire): the error envelope and job event types, with a parser
+  for each that returns a typed failure instead of throwing.
+- [api](/docs/api): the fetch client that turns a failed response into a
+  typed error branched on a stable code.
+- [job](/docs/job): the job stream client that follows a job's events to its
+  end and stops at the first terminal event.
+- [audio capture](/docs/audio-capture): microphone capture in compressed and
+  PCM modes, recorded from a generated signal.
+- [audio upload](/docs/audio-upload): chunked upload that survives a network
+  drop and a reload, streamed to the route beside the page.
+- [audio playback](/docs/audio-playback): playback through one element
+  unlocked by the first gesture, with seeking.
+- [audio levels](/docs/audio-levels): live levels read from a generated tone.
+- [audio peaks](/docs/audio-peaks): waveform peaks computed directly and in
+  a worker, with agreement between the two.
+- [testing](/docs/testing): the contrast gate and the accessibility gate run
+  against the page itself.
 
 ## Status
 
