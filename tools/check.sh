@@ -134,6 +134,55 @@ npm run package
 step "publint"
 npm run publint
 
+step "published api"
+# The frozen declarations under api/0.1.0/ name the promise a consumer
+# installs. The build must match them byte for byte, so a changed signature
+# prints its full diff and fails here. The snapshot holds the entry barrels
+# alone, because those are the files the exports map points at.
+api_changed=0
+for declaration in $(cd api/0.1.0 && find . -name '*.d.ts' | sort); do
+  diff -u "api/0.1.0/$declaration" "dist/$declaration" || api_changed=1
+done
+if [ "$api_changed" -ne 0 ]; then
+  printf 'Blocked. The build differs from the frozen declarations under api/0.1.0/.\n' >&2
+  exit 1
+fi
+
+step "published types"
+# The published entry points must resolve through the packed tarball, the
+# way a consumer installs them. The probe unpacks the tarball, imports every
+# export key, and typechecks the barrels, so a missing declaration or a
+# broken specifier fails before publish.
+probe_dir=$(mktemp -d)
+npm pack --pack-destination "$probe_dir" >/dev/null
+tarball=$(ls "$probe_dir"/*.tgz)
+mkdir -p "$probe_dir/consumer/node_modules/@nrynss"
+tar -xzf "$tarball" -C "$probe_dir/consumer/node_modules/@nrynss"
+mv "$probe_dir/consumer/node_modules/@nrynss/package" "$probe_dir/consumer/node_modules/@nrynss/chaaya"
+node --input-type=module -e "import { readFileSync } from 'node:fs'; import { join } from 'node:path'; import { pathToFileURL } from 'node:url'; const root = '$probe_dir/consumer/node_modules/@nrynss/chaaya'; const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')); for (const key of Object.keys(pkg.exports)) { const entry = pkg.exports[key]; const target = typeof entry === 'string' ? entry : entry.default; if (target.endsWith('.css')) { readFileSync(join(root, target), 'utf8'); continue; } await import(pathToFileURL(join(root, target)).href); }"
+cat > "$probe_dir/check.ts" <<'EOF'
+import * as root from "@nrynss/chaaya"
+import * as tokens from "@nrynss/chaaya/tokens"
+import * as theme from "@nrynss/chaaya/theme"
+import * as wire from "@nrynss/chaaya/wire"
+import * as api from "@nrynss/chaaya/api"
+import * as job from "@nrynss/chaaya/job"
+import * as audio from "@nrynss/chaaya/audio"
+import * as testing from "@nrynss/chaaya/testing"
+void root
+void tokens
+void theme
+void wire
+void api
+void job
+void audio
+void testing
+EOF
+printf '{"compilerOptions":{"strict":true,"skipLibCheck":true,"target":"es2022","module":"esnext","moduleResolution":"bundler","baseUrl":".","paths":{"@nrynss/chaaya":["./node_modules/@nrynss/chaaya/dist/index.d.ts"],"@nrynss/chaaya/*":["./node_modules/@nrynss/chaaya/dist/*/index.d.ts"]}},"files":["check.ts"]}' > "$probe_dir/consumer/tsconfig.json"
+cp "$probe_dir/check.ts" "$probe_dir/consumer/check.ts"
+npx tsc --project "$probe_dir/consumer/tsconfig.json"
+rm -rf "$probe_dir"
+
 step "server safety"
 # Consumers render on the server and prerender. This step imports every entry
 # in the exports map with plain node and no DOM. An import-time touch of
