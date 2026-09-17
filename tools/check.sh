@@ -136,12 +136,19 @@ npm run publint
 
 step "published api"
 # The frozen declarations under api/0.1.0/ name the promise a consumer
-# installs. The build must match them byte for byte, so a changed signature
-# prints its full diff and fails here. The snapshot holds the entry barrels
-# alone, because those are the files the exports map points at.
+# installs. Every frozen file must match its built counterpart byte for byte,
+# entry barrel or nested declaration, so a changed signature prints its full
+# diff and fails here. The loop walks the frozen tree, so no nested file can
+# escape the diff.
 api_changed=0
-for declaration in $(cd api/0.1.0 && find . -name '*.d.ts' | sort); do
+for declaration in $(cd api/0.1.0 && find . -name '*.d.ts' -not -name '*.test.d.ts' -not -name '*.spec.d.ts' | sort); do
   diff -u "api/0.1.0/$declaration" "dist/$declaration" || api_changed=1
+done
+for built in $(cd dist && find . -name '*.d.ts' -not -name '*.test.d.ts' -not -name '*.spec.d.ts' | sort); do
+  if [ ! -f "api/0.1.0/$built" ]; then
+    printf 'Blocked. %s has no frozen declaration under api/0.1.0/.\n' "$built" >&2
+    api_changed=1
+  fi
 done
 if [ "$api_changed" -ne 0 ]; then
   printf 'Blocked. The build differs from the frozen declarations under api/0.1.0/.\n' >&2
@@ -152,8 +159,10 @@ step "published types"
 # The published entry points must resolve through the packed tarball, the
 # way a consumer installs them. The probe unpacks the tarball, imports every
 # export key, and typechecks the barrels, so a missing declaration or a
-# broken specifier fails before publish.
+# broken specifier fails before publish. The trap clears the probe dir even
+# when a step above fails.
 probe_dir=$(mktemp -d)
+trap 'rm -rf "${probe_dir:-}"' EXIT
 npm pack --pack-destination "$probe_dir" >/dev/null
 tarball=$(ls "$probe_dir"/*.tgz)
 mkdir -p "$probe_dir/consumer/node_modules/@nrynss"

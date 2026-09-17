@@ -34,6 +34,7 @@ export default defineConfig(
   },
   globalIgnores([
     ".svelte-kit/",
+    "api/0.1.0/",
     "dist/",
     "build/",
     "node_modules/",
