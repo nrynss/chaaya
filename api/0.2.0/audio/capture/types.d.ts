@@ -31,11 +31,29 @@ export interface CaptureResult {
 export interface CaptureOptions {
     /** The capture mode, compressed by default. */
     readonly mode?: CaptureMode;
-    /** Ask the device to cancel echo, on by default. */
+    /**
+     * The context the PCM mode records on. The recorder never closes a
+     * supplied context. Compressed mode ignores it, because MediaRecorder
+     * runs without a context.
+     */
+    readonly context?: AudioContext;
+    /**
+     * Ask the device to cancel echo, on by default. Keep echo on and turn
+     * noise suppression and gain control off for a session that also runs
+     * a voice model.
+     */
     readonly echoCancellation?: boolean;
-    /** Ask the device to suppress background noise, on by default. */
+    /**
+     * Ask the device to suppress background noise, on by default. Keep echo
+     * on and turn noise suppression and gain control off for a session that
+     * also runs a voice model.
+     */
     readonly noiseSuppression?: boolean;
-    /** Ask the device to level the input gain, on by default. */
+    /**
+     * Ask the device to level the input gain, on by default. Keep echo on
+     * and turn noise suppression and gain control off for a session that
+     * also runs a voice model.
+     */
     readonly autoGainControl?: boolean;
     /** The PCM block size in frames, 4096 by default. */
     readonly chunkFrames?: number;

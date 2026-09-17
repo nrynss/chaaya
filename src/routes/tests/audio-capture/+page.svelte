@@ -26,6 +26,9 @@
 	let startElapsed = $state(0)
 	let stopElapsed = $state(0)
 	let stream: MediaStream | null = null
+	let sharedContext: AudioContext | null = null
+	let probeTone = $state("")
+	let probeFailure = $state("")
 
 	/** Answers the next grant with a refusal, the way a browser reports one. */
 	function refuse(): void {
@@ -39,6 +42,45 @@
 		const next = new AudioRecorder({ mode, autoStopSeconds: TAKE_SECONDS })
 		recorder = next
 		void next.start()
+	}
+
+	/** Records the generated input on a context the page owns, in PCM mode.
+	 * The recorder never closes that context, so the check below keeps it. */
+	function startShared(): void {
+		startElapsed = 0
+		stopElapsed = 0
+		probeTone = ""
+		probeFailure = ""
+		sharedContext = new AudioContext()
+		const next = new AudioRecorder({ mode: "pcm", context: sharedContext, autoStopSeconds: TAKE_SECONDS })
+		recorder = next
+		void next.start()
+	}
+
+	/** Schedules one short tone on the shared context after a stop. A closed
+	 * context rejects this, so a sounding tone proves the recorder left it
+	 * open. */
+	async function probeShared(): Promise<void> {
+		const context = sharedContext
+		if (!context) {
+			probeFailure = "the page holds no shared context"
+			return
+		}
+		try {
+			await context.resume()
+			const tone = context.createOscillator()
+			const gain = context.createGain()
+			gain.gain.value = 0.2
+			tone.frequency.value = 440
+			tone.connect(gain)
+			gain.connect(context.destination)
+			tone.start()
+			tone.stop(context.currentTime + 0.1)
+			await new Promise((resolve) => setTimeout(resolve, 150))
+			probeTone = "sounded"
+		} catch (error) {
+			probeFailure = error instanceof Error ? error.message : String(error)
+		}
 	}
 
 	function stopTrack(): void {
@@ -89,6 +131,7 @@
 	<p data-testid="mode">{recorder?.mode ?? "none"}</p>
 	<p data-testid="state">{recorder?.state ?? "idle"}</p>
 	<p data-testid="chunks">{recorder?.chunkCount ?? 0}</p>
+	<p data-testid="render-rate">{recorder?.renderRate ?? 0}</p>
 	<p data-testid="mime">{recorder?.result?.mimeType ?? ""}</p>
 	<p data-testid="rate">{recorder?.result?.sampleRate ?? 0}</p>
 	<p data-testid="size">{recorder?.result?.blob.size ?? 0}</p>
@@ -96,10 +139,14 @@
 	<p data-testid="block-seconds">{recorder?.chunkSeconds ?? 0}</p>
 	<p data-testid="start-elapsed">{startElapsed}</p>
 	<p data-testid="stop-elapsed">{stopElapsed}</p>
+	<p data-testid="probe-tone">{probeTone}</p>
+	<p data-testid="probe-failure">{probeFailure}</p>
 	<button data-testid="start-compressed" onclick={() => start("compressed")}>
 		Record compressed
 	</button>
 	<button data-testid="start-pcm" onclick={() => start("pcm")}>Record pcm</button>
+	<button data-testid="start-shared" onclick={startShared}>Record on a shared context</button>
+	<button data-testid="probe-shared" onclick={probeShared}>Probe the shared context</button>
 	<button
 		data-testid="start-refused"
 		onclick={() => {

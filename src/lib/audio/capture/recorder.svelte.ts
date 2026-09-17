@@ -85,6 +85,10 @@ function readSampleRate(stream: MediaStream): number {
  * The microphone opens only inside a gesture, because the browser grants
  * capture from a user action. Nothing here touches a browser global at import
  * time, so the module stays safe to evaluate on a server.
+ *
+ * A caller may supply the context the PCM mode records on. The recorder
+ * disconnects its nodes on stop and reset either way, and it closes only a
+ * context it made.
  */
 export class AudioRecorder {
 	/** The capture mode this recorder writes with. */
@@ -97,6 +101,13 @@ export class AudioRecorder {
 	chunkCount = $state(0)
 	/** The finished take, or null before a stop. */
 	result = $state<CaptureResult | null>(null)
+	/**
+	 * The rate blocks arrive at, in hertz. A browser may render at the
+	 * device rate rather than the rate the take declares.
+	 */
+	get renderRate(): number {
+		return this.#renderRate
+	}
 	/** The error behind a denied or failed state, or null. */
 	error = $state<unknown>(null)
 
@@ -110,10 +121,11 @@ export class AudioRecorder {
 	#ticker: ReturnType<typeof setInterval> | null = null
 	#timer: ReturnType<typeof setTimeout> | null = null
 	#sampleRate = FALLBACK_SAMPLE_RATE
-	#renderRate = FALLBACK_SAMPLE_RATE
+	#renderRate = $state(FALLBACK_SAMPLE_RATE)
 	#autoStop: number
 	#chunkFrames: number
 	#constraints: MediaTrackConstraints
+	#suppliedContext: AudioContext | null = null
 	#closing = false
 	#session = 0
 	#awaitStop: (() => void) | null = null
@@ -122,6 +134,7 @@ export class AudioRecorder {
 
 	constructor(options: CaptureOptions = {}) {
 		this.mode = options.mode ?? "compressed"
+		this.#suppliedContext = options.context ?? null
 		this.#autoStop = options.autoStopSeconds ?? DEFAULT_AUTO_STOP_SECONDS
 		this.#chunkFrames = options.chunkFrames ?? DEFAULT_CHUNK_FRAMES
 		this.#constraints = {
@@ -243,11 +256,8 @@ export class AudioRecorder {
 	}
 
 	async #startPcm(stream: MediaStream, session: number): Promise<void> {
-		const scope = globalThis as unknown as AudioContextScope
-		const Context = scope.AudioContext ?? scope.webkitAudioContext
-		if (!Context) throw new Error("This browser cannot open an audio context.")
-		const context = new Context({ sampleRate: this.#sampleRate })
-		this.#context = context
+		const supplied = this.#suppliedContext
+		const context = supplied ?? this.#openContext()
 		this.#renderRate = context.sampleRate
 		const module = URL.createObjectURL(
 			new Blob([CAPTURE_PROCESSOR_SOURCE], { type: "text/javascript" })
@@ -274,6 +284,14 @@ export class AudioRecorder {
 		await context.resume()
 	}
 
+	#openContext(): AudioContext {
+		const scope = globalThis as unknown as AudioContextScope
+		const Context = scope.AudioContext ?? scope.webkitAudioContext
+		if (!Context) throw new Error("This browser cannot open an audio context.")
+		const context = new Context({ sampleRate: this.#sampleRate })
+		this.#context = context
+		return context
+	}
 	#onWorkletMessage(data: unknown): void {
 		if (!isWorkletChunk(data)) return
 		if (data.samples.length > 0) {
@@ -414,6 +432,8 @@ export class AudioRecorder {
 		this.#worklet = null
 		for (const link of this.#links) link.disconnect()
 		this.#links = []
+		// A supplied context stays open, so a caller keeps the clock it
+		// plays on. Only a context the recorder made closes here.
 		if (this.#context) void this.#context.close().catch(() => undefined)
 		this.#context = null
 		if (this.#stream) {

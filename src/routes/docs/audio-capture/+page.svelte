@@ -2,6 +2,7 @@
 	import { resolve } from "$app/paths";
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
+	import { a11yGate, contrastGate } from "$lib/testing/index.js";
 	import { AudioRecorder, type CaptureMode } from "$lib/audio/capture/index.js";
 
 	/** The generated signal this page records in place of a device. */
@@ -27,17 +28,29 @@
 	let failure = $state("");
 	let mode = $state("");
 	let wrapped: { stop: () => void } | null = null;
+	let sharedContext: AudioContext | null = null;
+	let checks = $state("");
+	let checkFailure = $state("");
 
 	onMount(() => {
 		hydrated = true;
 	});
 
-	/** Build the generated source inside the page and hand its stream to
-	 * the recorder. The page builds the signal itself, so no check opens
+	/** The page wide context the signal and the recorder share. The recorder
+	 * never closes it, so the page keeps its clock between takes. */
+	async function shared(): Promise<AudioContext> {
+		if (!sharedContext) {
+			sharedContext = new AudioContext({ sampleRate: SIGNAL.sampleRate });
+			await sharedContext.resume();
+		}
+		return sharedContext;
+	}
+
+	/** Build the generated source on the shared context and hand its stream
+	 * to the recorder. The page builds the signal itself, so no check opens
 	 * a device. */
 	async function buildStream(): Promise<GeneratedStream> {
-		const context = new AudioContext({ sampleRate: SIGNAL.sampleRate });
-		await context.resume();
+		const context = await shared();
 		const frames = Math.round(SIGNAL.totalSeconds * SIGNAL.sampleRate);
 		const samples = new Float32Array(frames);
 		for (let index = 0; index < frames; index += 1) {
@@ -60,10 +73,13 @@
 		return {
 			stream: destination.stream,
 			stop: () => {
-				source.stop();
+				try {
+					source.stop();
+				} catch {
+					// A stopped source throws, and the take already ended.
+				}
 				source.disconnect();
 				destination.disconnect();
-				void context.close();
 			}
 		};
 	}
@@ -78,7 +94,8 @@
 			const media = navigator.mediaDevices;
 			const inner = media.getUserMedia.bind(media);
 			media.getUserMedia = async () => generated.stream;
-			const take = new AudioRecorder({ mode: next, autoStopSeconds: 2 });
+			const context = await shared();
+			const take = new AudioRecorder({ mode: next, context, autoStopSeconds: 2 });
 			recorder = take;
 			try {
 				await take.start();
@@ -95,6 +112,25 @@
 		wrapped?.stop();
 		wrapped = null;
 	}
+
+	/** Run the gate pair on this page. The pairs name every colour pair the
+	 * markup draws, so the gate measures each one. */
+	async function runChecks(): Promise<void> {
+		checks = "";
+		checkFailure = "";
+		try {
+			const container = document.querySelector<HTMLElement>("[data-testid='docs-audio-capture']");
+			if (!container) throw new Error("the markup is missing");
+			await a11yGate(container);
+			contrastGate(referenceCss, [
+				["text", "surface"],
+				["dim", "surface"]
+			]);
+			checks = "pass";
+		} catch (error) {
+			checkFailure = error instanceof Error ? error.message.split("\n")[0] : String(error);
+		}
+	}
 </script>
 
 <svelte:head>
@@ -105,6 +141,9 @@
 
 <main data-testid="docs-audio-capture">
 	<h1>audio capture</h1>
+	<p>The device trio stays one decision. Echo cancellation stays on, and
+		noise suppression and gain control stay off, for a session that also
+		runs a voice model.</p>
 	<p data-testid="failure">{failure}</p>
 	<button type="button" data-testid="record-compressed" disabled={!hydrated} onclick={() => record("compressed")}>
 		Record compressed
@@ -113,6 +152,9 @@
 		Record PCM
 	</button>
 	<button type="button" data-testid="stop" disabled={!hydrated} onclick={stop}>Stop</button>
+	<button type="button" data-testid="run-checks" disabled={!hydrated} onclick={runChecks}>Run checks</button>
+	<p data-testid="checks">{checks}</p>
+	<p data-testid="check-failure">{checkFailure}</p>
 	<dl>
 		<dt>Mode</dt>
 		<dd data-testid="mode">{mode === "" ? "none" : mode}</dd>
@@ -120,6 +162,8 @@
 		<dd data-testid="state">{recorder?.state ?? "idle"}</dd>
 		<dt>Chunks</dt>
 		<dd data-testid="chunks">{recorder?.chunkCount ?? 0}</dd>
+		<dt>Render rate</dt>
+		<dd data-testid="render-rate">{recorder?.renderRate ?? 0}</dd>
 		<dt>Mime</dt>
 		<dd data-testid="mime">{recorder?.result?.mimeType ?? ""}</dd>
 		<dt>Rate</dt>

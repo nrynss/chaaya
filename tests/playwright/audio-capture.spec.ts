@@ -322,6 +322,32 @@ test.describe("a granted microphone", () => {
 			)
 		})
 	}
+
+	test("a shared context records the generated markers and stays usable", async ({ page }) => {
+		await page.goto("/tests/audio-capture")
+		await page.getByTestId("start-shared").click()
+		await expect(page.getByTestId("state")).toHaveText("recording")
+		await expect(page.getByTestId("render-rate")).not.toHaveText("0")
+		const renderRate = await number(page, "render-rate")
+		expect(renderRate).toBeGreaterThan(0)
+		await page.getByTestId("stop").click()
+		await expect(page.getByTestId("state")).toHaveText("stopped", { timeout: 20_000 })
+		expect(await number(page, "size")).toBeGreaterThan(0)
+		// A recorder that closed the supplied context would leave it
+		// unusable, so scheduling a buffer on the same context proves the
+		// recorder left it open.
+		await page.getByTestId("probe-shared").click()
+		await expect(page.getByTestId("probe-tone")).toHaveText("sounded", { timeout: 10_000 })
+		await expect(page.getByTestId("probe-failure")).toHaveText("")
+	})
+
+	test("the capture docs name the trio and pass the gates", async ({ page }) => {
+		await page.goto("/docs/audio-capture")
+		await expect(page.getByText("noise suppression and gain control")).toBeVisible()
+		await page.getByTestId("run-checks").click()
+		await expect(page.getByTestId("checks")).toHaveText("pass", { timeout: 30_000 })
+		await expect(page.getByTestId("check-failure")).toHaveText("")
+	})
 })
 
 test.describe("a microphone that is not there", () => {

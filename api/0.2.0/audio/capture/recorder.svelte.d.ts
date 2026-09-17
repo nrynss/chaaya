@@ -7,6 +7,10 @@ import type { CaptureChunk, CaptureMode, CaptureOptions, CaptureResult, CaptureS
  * The microphone opens only inside a gesture, because the browser grants
  * capture from a user action. Nothing here touches a browser global at import
  * time, so the module stays safe to evaluate on a server.
+ *
+ * A caller may supply the context the PCM mode records on. The recorder
+ * disconnects its nodes on stop and reset either way, and it closes only a
+ * context it made.
  */
 export declare class AudioRecorder {
     #private;
@@ -20,6 +24,11 @@ export declare class AudioRecorder {
     chunkCount: number;
     /** The finished take, or null before a stop. */
     result: CaptureResult | null;
+    /**
+     * The rate blocks arrive at, in hertz. A browser may render at the
+     * device rate rather than the rate the take declares.
+     */
+    get renderRate(): number;
     /** The error behind a denied or failed state, or null. */
     error: unknown;
     constructor(options?: CaptureOptions);
