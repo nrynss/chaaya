@@ -139,23 +139,93 @@ step "publint"
 npm run publint
 
 step "published api"
-# The frozen declarations under api/0.1.0/ name the promise a consumer
-# installs. Every frozen file must match its built counterpart byte for byte,
-# entry barrel or nested declaration, so a changed signature prints its full
-# diff and fails here. The loop walks the frozen tree, so no nested file can
-# escape the diff.
+# The frozen declarations under api/<version>/ name the promise a consumer
+# installs. The record path follows the version in package.json, so a bump
+# moves the record instead of rewriting history. Every frozen file must match
+# its built counterpart byte for byte, entry barrel or nested declaration, so
+# a changed signature prints its full diff and fails here. The loop walks the
+# frozen tree, so no nested file can escape the diff. A minor release adds and
+# never removes, so every declaration file and every name the first record
+# exports must still exist in the current record. A removal fails by name.
+pkg_version=$(node -p "require('./package.json').version")
+api_record="api/$pkg_version"
+if [ ! -d "$api_record" ]; then
+  printf 'Blocked. No frozen declarations under %s for version %s.\n' "$api_record" "$pkg_version" >&2
+  exit 1
+fi
 api_changed=0
-for declaration in $(cd api/0.1.0 && find . -name '*.d.ts' -not -name '*.test.d.ts' -not -name '*.spec.d.ts' | sort); do
-  diff -u "api/0.1.0/$declaration" "dist/$declaration" || api_changed=1
+for declaration in $(cd "$api_record" && find . -name '*.d.ts' -not -name '*.test.d.ts' -not -name '*.spec.d.ts' | sort); do
+  diff -u "$api_record/$declaration" "dist/$declaration" || api_changed=1
 done
 for built in $(cd dist && find . -name '*.d.ts' -not -name '*.test.d.ts' -not -name '*.spec.d.ts' | sort); do
-  if [ ! -f "api/0.1.0/$built" ]; then
-    printf 'Blocked. %s has no frozen declaration under api/0.1.0/.\n' "$built" >&2
+  if [ ! -f "$api_record/$built" ]; then
+    printf 'Blocked. %s has no frozen declaration under %s.\n' "$built" "$api_record" >&2
     api_changed=1
   fi
 done
+# The first record is the removal baseline. Its files and exported names must
+# survive in the current record. The baseline is the lowest versioned record
+# on disk, so the check names no version itself. The export scan collects
+# every name an export statement introduces, so a rename reads as a removal
+# and fails here.
+baseline_record=$(ls -d api/[0-9]*/ | sort -V | head -n 1)
+baseline_record=${baseline_record%/}
+# The frozen record never changes. A working tree edit inside the baseline
+# means the published history moved. Fail by name when git sees a change.
+if [ -n "$(git status --porcelain -- "$baseline_record/")" ]; then
+  printf 'Blocked. %s/ carries working tree changes and must stay frozen.\n' "$baseline_record" >&2
+  exit 1
+fi
+names_in() {
+  node --input-type=module -e '
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+const require = createRequire(process.cwd() + "/package.json");
+const ts = require("typescript");
+const text = readFileSync(process.argv[1], "utf8");
+const source = ts.createSourceFile(process.argv[1], text, ts.ScriptTarget.Latest, true);
+const names = new Set();
+const visit = (node) => {
+  if (ts.isExportSpecifier(node)) {
+    names.add(node.name.text);
+    if (node.propertyName !== undefined) names.add(node.propertyName.text);
+  } else if (
+    ts.isVariableStatement(node) || ts.isFunctionDeclaration(node) ||
+    ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node) ||
+    ts.isTypeAliasDeclaration(node) || ts.isEnumDeclaration(node)
+  ) {
+    const exported = (ts.getModifiers(node) ?? []).some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+    if (exported) {
+      if (ts.isVariableStatement(node)) {
+        for (const declaration of node.declarationList.declarations) {
+          if (ts.isIdentifier(declaration.name)) names.add(declaration.name.text);
+        }
+      } else if (node.name !== undefined) {
+        names.add(node.name.text);
+      }
+    }
+  }
+  ts.forEachChild(node, visit);
+};
+visit(source);
+console.log([...names].sort().join("\n"));' "$1"
+}
+for baseline in $(cd "$baseline_record" && find . -name '*.d.ts' -not -name '*.test.d.ts' -not -name '*.spec.d.ts' | sort); do
+  if [ ! -f "$api_record/$baseline" ]; then
+    printf 'Blocked. %s exists in %s but not in %s.\n' "$baseline" "$baseline_record" "$api_record" >&2
+    api_changed=1
+    continue
+  fi
+  current_names=$(names_in "$api_record/$baseline")
+  for name in $(names_in "$baseline_record/$baseline"); do
+    if ! grep -qxF "$name" <<< "$current_names"; then
+      printf 'Blocked. %s no longer exports %s.\n' "$baseline" "$name" >&2
+      api_changed=1
+    fi
+  done
+done
 if [ "$api_changed" -ne 0 ]; then
-  printf 'Blocked. The build differs from the frozen declarations under api/0.1.0/.\n' >&2
+  printf 'Blocked. The build differs from the frozen declarations under %s.\n' "$api_record" >&2
   exit 1
 fi
 
