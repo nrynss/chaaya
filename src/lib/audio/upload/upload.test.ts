@@ -473,3 +473,112 @@ describe("streaming one capture", () => {
 		expect(await ChunkUploader.resume(new MemoryStore())).toBeUndefined()
 	})
 })
+
+describe("durable completion", () => {
+	test("a completion records the capture total beside the session", async () => {
+		const server = new UploadServer()
+		vi.stubGlobal("fetch", server.handle)
+		const seen: (SessionRecord | undefined)[] = []
+		const store = new MemoryStore()
+		const originalPut = store.putSession.bind(store)
+		store.putSession = async (record: SessionRecord) => {
+			seen.push(record)
+			await originalPut(record)
+		}
+		const uploader = new ChunkUploader({ url: base, owner: "owner-1", contentType: "audio/webm", chunkSize, store })
+		await uploader.start()
+		for (const text of goldenChunks) uploader.append(bytesOf(text))
+		await uploader.finish()
+		expect(uploader.state).toBe("done")
+		expect(uploader.receipt?.sha256).toBe(goldenDigest)
+		expect(seen.some((record) => record?.sizeBytes === goldenBytes().byteLength)).toBe(true)
+		expect(server.premature).toBe(0)
+	})
+
+	test("a reload that lost the tail fails instead of completing the prefix", async () => {
+		const server = new UploadServer()
+		vi.stubGlobal("fetch", server.handle)
+		const seen: (SessionRecord | undefined)[] = []
+		const store = new MemoryStore()
+		const originalPut = store.putSession.bind(store)
+		store.putSession = async (record: SessionRecord) => {
+			seen.push(record)
+			await originalPut(record)
+		}
+		const uploader = new ChunkUploader({ url: base, owner: "owner-1", contentType: "audio/webm", chunkSize, store })
+		await uploader.start()
+		for (const text of goldenChunks) uploader.append(bytesOf(text))
+		await uploader.finish()
+		expect(uploader.state).toBe("done")
+		expect(server.completions).toBe(1)
+
+		const opened = seen.find((record) => record?.sizeBytes === goldenBytes().byteLength)
+		expect(opened).toBeDefined()
+		const kept = new MemoryStore()
+		await kept.putSession(opened as SessionRecord)
+		for (const [index, text] of [goldenChunks[0], goldenChunks[1]].entries()) {
+			const bytes = bytesOf(text)
+			await kept.putChunk({ id: uploadId, index, sha256: await sha256Hex(bytes), bytes: bytes.buffer })
+		}
+		server.chunks.set(0, bytesOf(goldenChunks[0]))
+		server.chunks.set(1, bytesOf(goldenChunks[1]))
+		const completions = server.completions
+		const resumed = await ChunkUploader.resume(kept)
+		expect(resumed).toBeDefined()
+		await (resumed as ChunkUploader).finish()
+		expect((resumed as ChunkUploader).state).toBe("failed")
+		expect((resumed as ChunkUploader).error?.code).toBe("incomplete")
+		expect(server.completions).toBe(completions)
+	})
+
+	test("a resumed page leaves the recorded total alone", async () => {
+		const server = new UploadServer()
+		vi.stubGlobal("fetch", server.handle)
+		const store = await seededStore()
+		const before = await store.latestSession()
+		expect(before?.sizeBytes).toBeUndefined()
+		const resumed = await ChunkUploader.resume(store)
+		expect(resumed).toBeDefined()
+		await (resumed as ChunkUploader).finish()
+		expect((resumed as ChunkUploader).state).toBe("done")
+	})
+
+	test("a retry-time read of every persisted byte trails the capture, and completion holds back", async () => {
+		const chunkBytes = 4096
+		const captureBytes = 193068
+		const persistedBytes = 110592
+		const receivedBytes = 184320
+		expect(receivedBytes).toBeLessThan(captureBytes)
+		expect(persistedBytes).toBeLessThan(captureBytes)
+
+		const server = new UploadServer()
+		vi.stubGlobal("fetch", server.handle)
+		const kept = new MemoryStore()
+		await kept.putSession({
+			id: uploadId,
+			url: base,
+			owner: "owner-1",
+			contentType: "audio/webm",
+			visibility: "private",
+			chunkSize: chunkBytes,
+			startedAt: 1,
+			sizeBytes: captureBytes
+		})
+		const keptChunks = Math.floor(persistedBytes / chunkBytes)
+		for (let index = 0; index < keptChunks; index += 1) {
+			const bytes = new Uint8Array(chunkBytes)
+			bytes.fill(index % 251)
+			await kept.putChunk({ id: uploadId, index, sha256: await sha256Hex(bytes), bytes: bytes.buffer })
+		}
+		for (let index = 0; index < receivedBytes / chunkBytes; index += 1) {
+			server.chunks.set(index, new Uint8Array(chunkBytes))
+		}
+		const completions = server.completions
+		const resumed = await ChunkUploader.resume(kept)
+		expect(resumed).toBeDefined()
+		await (resumed as ChunkUploader).finish()
+		expect((resumed as ChunkUploader).state).toBe("failed")
+		expect((resumed as ChunkUploader).error?.code).toBe("incomplete")
+		expect(server.completions).toBe(completions)
+	})
+})

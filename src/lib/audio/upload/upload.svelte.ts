@@ -81,7 +81,10 @@ export class ChunkUploader {
 	/** The finish one capture runs, while it runs. A second finish() awaits
 	 * it instead of sending a second completion. */
 	#finishing: Promise<void> | undefined
-
+	/** Whether this instance opened the upload. Only the opener records the
+	 * capture total, because a resumed page recovered a prefix and must not
+	 * overwrite the total the capture recorded. */
+	#opened = false
 	constructor(options: UploadOptions) {
 		this.#options = options
 		this.#store = options.store ?? new IndexedDbStore()
@@ -111,6 +114,7 @@ export class ChunkUploader {
 			if (this.#failure !== undefined) return
 			this.id = parsed.value.id
 			this.stored = parsed.value.storedBytes
+			this.#opened = true
 			this.#drainHeld()
 			await this.#store.putSession({
 				id: parsed.value.id,
@@ -190,10 +194,32 @@ export class ChunkUploader {
 		this.state = "finishing"
 		const tail = this.#buffer.flush()
 		if (tail !== null) this.#accept(tail)
+		await this.#recordTotal()
+		if (this.#failure !== undefined) return
 		await this.#storing
 		await this.#settle()
 		if (this.#failure !== undefined) return
 		await this.#complete()
+	}
+
+	/**
+	 * Write the capture total beside the session before the drain settles.
+	 * The total is final here, the capture is frozen and the tail accepted,
+	 * while persistence of the last chunks may still be in flight. A reload
+	 * that lands inside that window then finds the total and holds the
+	 * completion back instead of reporting success over the surviving
+	 * prefix. A write after the drain would never run on that path.
+	 */
+	async #recordTotal(): Promise<void> {
+		if (this.id === undefined || this.#failure !== undefined || !this.#opened) return
+		try {
+			const record = await this.#store.latestSession()
+			if (record === undefined || record.id !== this.id) return
+			if (record.sizeBytes === this.capturedBytes) return
+			await this.#store.putSession({ ...record, sizeBytes: this.capturedBytes })
+		} catch (error) {
+			this.#fail(new UploadFailure("store", error instanceof Error ? error.message : String(error)))
+		}
 	}
 
 	/**
@@ -380,6 +406,8 @@ export class ChunkUploader {
 			await this.#resend(state.missing)
 			await this.#settle()
 			if (this.#failure !== undefined) return
+			await this.#requireDurable(state.received)
+			if (this.#failure !== undefined) return
 			const sha256 = await this.#wholeDigest()
 			const body = await this.#attempt(async () => {
 				const response = await fetch(completePath(this.#options.url, this.#openId()), {
@@ -392,6 +420,8 @@ export class ChunkUploader {
 			})
 			const parsed = parseUploadReceipt(body)
 			if (!parsed.ok) throw new UploadFailure("invalid_response", parsed.failure.message)
+			await this.#requireDurable(parsed.value.sizeBytes)
+			if (this.#failure !== undefined) return
 			this.receipt = parsed.value
 			this.state = "done"
 			try {
@@ -406,6 +436,55 @@ export class ChunkUploader {
 		} catch (error) {
 			this.#fail(toUploadFailure(error))
 		}
+	}
+
+	/**
+	 * Hold the completion back until persistence covers every captured byte.
+	 *
+	 * A reload can land between the acknowledgement of one chunk and the
+	 * persistence of the next. Resuming then adopts the surviving prefix, and
+	 * without this check the completion digests that prefix and reports
+	 * success. The check rereads the store after the drain settles, measures
+	 * what persistence actually holds, and fails the upload instead of
+	 * completing it short. A caller keeps the capture, fixes storage, and
+	 * runs the upload again.
+	 */
+	async #requireDurable(expected: readonly number[] | number): Promise<void> {
+		const chunks = await this.#store.listChunks(this.#openId())
+		const bytes = chunks.reduce((sum, chunk) => sum + chunk.bytes.byteLength, 0)
+		if (typeof expected === "number") {
+			if (bytes !== expected) {
+				this.#fail(
+					new UploadFailure("incomplete", `persistence holds ${bytes} of ${expected} bytes`)
+				)
+			}
+			return
+		}
+		const indices = chunks.map((chunk) => chunk.index)
+		const lacking = expected.some((index) => !indices.includes(index))
+		const declared = await this.#declaredTotal()
+		const short = declared !== undefined && bytes < declared
+		if (lacking || short) {
+			this.#fail(
+				new UploadFailure(
+					"incomplete",
+					declared === undefined
+						? "persistence holds fewer chunks than the server acknowledged"
+						: `persistence holds ${bytes} of ${declared} bytes`
+				)
+			)
+		}
+	}
+
+	/**
+	 * The capture total the session recorded, or undefined while no page has
+	 * stopped the capture yet. A live capture grows while it streams, so the
+	 * absence of a recorded total means the check has nothing to hold back.
+	 */
+	async #declaredTotal(): Promise<number | undefined> {
+		const record = await this.#store.latestSession()
+		if (record === undefined || record.id !== this.id) return undefined
+		return record.sizeBytes
 	}
 
 	/**

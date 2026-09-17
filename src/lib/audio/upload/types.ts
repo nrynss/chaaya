@@ -53,7 +53,7 @@ export interface UploadReceipt {
 	readonly contentType: string
 	/** Who may read the finished upload. */
 	readonly visibility: string
-	/** The size of the assembled upload in bytes. */
+	/** The size of the assembled upload in bytes. Completion checks it against persistence before it reports the receipt. */
 	readonly sizeBytes: number
 	/** The lowercase hex SHA-256 of the assembled upload. */
 	readonly sha256: string
@@ -99,6 +99,8 @@ export interface SessionRecord {
 	readonly chunkSize: number
 	/** When the upload opened, so the newest session wins. */
 	readonly startedAt: number
+	/** How many bytes the capture handed over. Written once the capture stops, so a reloaded page knows the total it must recover. */
+	readonly sizeBytes?: number
 }
 
 /** The persistence one upload needs. A page uses the IndexedDB store, and a
