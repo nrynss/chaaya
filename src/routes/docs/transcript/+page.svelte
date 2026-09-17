@@ -78,7 +78,7 @@
 
 <main data-testid="docs-transcript">
 	<h1>transcript</h1>
-	<p>A transcript carries timed words. A cut removes a word span with a reason, and every cut reverts.</p>
+<p>A transcript carries timed words. A cut removes a word span with a reason, and every cut reverts. A follower binds the words to a player. The word under the playhead is derived state, a word click seeks to its start, and a cut span stays silent while playback passes it.</p>
 	<section aria-label="Words">
 		<ol>
 			{#each demo as word, index (word.text)}

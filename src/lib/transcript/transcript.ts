@@ -202,3 +202,37 @@ export function editedLength(
 	for (const span of cutSpans(words, cuts)) removed += spanLength(span)
 	return words[words.length - 1].end - removed
 }
+
+/** The word sounding at a source position, or null in a gap, in a cut, or
+ * past the last word. A start belongs to its word and an end belongs to
+ * whatever holds it next, so neighbours never share a position. */
+export function activeWordAt(
+	words: readonly TranscriptWord[],
+	cuts: readonly TranscriptCut[],
+	position: number
+): number | null {
+	for (const span of cutSpans(words, cuts)) {
+		if (position < span.start) break
+		if (position < span.end) return null
+	}
+	for (let index = 0; index < words.length; index += 1) {
+		const word = words[index]
+		if (position >= word.start && position < word.end) return index
+	}
+	return null
+}
+
+/** Where playback resumes when a source position sits inside a cut, or null
+ * when it plays. The resume point is the span end, so the whole cut stays
+ * silent and the words around it meet. */
+export function skipCutAt(
+	words: readonly TranscriptWord[],
+	cuts: readonly TranscriptCut[],
+	position: number
+): number | null {
+	for (const span of cutSpans(words, cuts)) {
+		if (position < span.start) break
+		if (position < span.end) return span.end
+	}
+	return null
+}

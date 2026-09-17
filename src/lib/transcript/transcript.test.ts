@@ -1,11 +1,14 @@
 import { expect, test } from "vitest"
 import { TranscriptEditor } from "./editor.svelte"
+import { TranscriptFollower } from "./follow.svelte"
 import {
+	activeWordAt,
 	cutSpans,
 	editedEnd,
 	editedLength,
 	editedStart,
 	mergeRanges,
+	skipCutAt,
 	toEditedTime,
 	toSourceTime,
 	type TranscriptCut,
@@ -134,4 +137,65 @@ test("empty words read a zero length and ignore selection", () => {
 	editor.select(0)
 	expect(editor.selection).toBeNull()
 	expect(editor.cut()).toBeNull()
+})
+test("a word start belongs to its word and an end to the next one", () => {
+	const abutting = [
+		{ start: 0, end: 0.5, text: "amber" },
+		{ start: 0.5, end: 1, text: "wakes" },
+		{ start: 1, end: 1.5, text: "before" }
+	]
+	expect(activeWordAt(abutting, [], 0.5)).toBe(1)
+	expect(activeWordAt(abutting, [], 1)).toBe(2)
+	expect(activeWordAt(abutting, [], 0)).toBe(0)
+	expect(activeWordAt(abutting, [], 1.5)).toBeNull()
+})
+
+test("a position past the last word reads no active word", () => {
+	const list = words()
+	expect(activeWordAt(list, [], list[5].start + 0.1)).toBe(5)
+	expect(activeWordAt(list, [], list[5].end)).toBeNull()
+	expect(activeWordAt(list, [], list[5].end + 1)).toBeNull()
+	expect(activeWordAt(list, [], 2.95)).toBeNull()
+})
+test("a position inside a cut reads null and resumes at the span end", () => {
+	const list = words()
+	const cuts = [cut(1, 2)]
+	expect(activeWordAt(list, cuts, 1.4)).toBeNull()
+	expect(activeWordAt(list, cuts, 0.6)).toBeNull()
+	expect(activeWordAt(list, cuts, 0.3)).toBe(0)
+	expect(activeWordAt(list, cuts, 1.8)).toBe(3)
+	expect(skipCutAt(list, cuts, 1.4)).toBeCloseTo(1.7, 10)
+	expect(skipCutAt(list, cuts, 0.3)).toBeNull()
+	expect(skipCutAt(list, cuts, 1.8)).toBeNull()
+})
+
+test("a follower seeks to the word start and skips a cut once", () => {
+	const list = words()
+	const editor = new TranscriptEditor(list)
+	const seeks: number[] = []
+	let position = 0
+	const clock = {
+		get currentTime(): number {
+			return position
+		},
+		seek(seconds: number): void {
+			seeks.push(seconds)
+			position = seconds
+		}
+	}
+	editor.select(1)
+	editor.extend(2)
+	editor.cut("clarity")
+	const follower = new TranscriptFollower(editor, clock)
+	follower.seekToWord(4)
+	expect(seeks.at(-1)).toBeCloseTo(list[4].start, 10)
+	expect(follower.activeWord).toBe(4)
+	position = 1.4
+	expect(follower.update()).toBeCloseTo(1.7, 10)
+	expect(position).toBeCloseTo(1.7, 10)
+	expect(seeks).toHaveLength(2)
+	position = 1.8
+	expect(follower.update()).toBeNull()
+	expect(seeks).toHaveLength(2)
+	expect(() => follower.seekToWord(9)).toThrow(RangeError)
 })

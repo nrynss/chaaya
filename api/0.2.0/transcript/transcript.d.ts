@@ -62,3 +62,11 @@ export declare function editedEnd(words: readonly TranscriptWord[], cuts: readon
 /** The edited timeline length in seconds. Cuts only remove, so this never
  * runs past the last word end. */
 export declare function editedLength(words: readonly TranscriptWord[], cuts: readonly TranscriptCut[]): number;
+/** The word sounding at a source position, or null in a gap, in a cut, or
+ * past the last word. A start belongs to its word and an end belongs to
+ * whatever holds it next, so neighbours never share a position. */
+export declare function activeWordAt(words: readonly TranscriptWord[], cuts: readonly TranscriptCut[], position: number): number | null;
+/** Where playback resumes when a source position sits inside a cut, or null
+ * when it plays. The resume point is the span end, so the whole cut stays
+ * silent and the words around it meet. */
+export declare function skipCutAt(words: readonly TranscriptWord[], cuts: readonly TranscriptCut[], position: number): number | null;

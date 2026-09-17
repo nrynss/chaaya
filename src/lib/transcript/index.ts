@@ -4,13 +4,16 @@
  */
 
 export { TranscriptEditor, type Anchor, type RevertMiss } from "./editor.svelte.js"
+export { TranscriptFollower, type TranscriptClock } from "./follow.svelte.js"
 export {
+	activeWordAt,
 	cutSpans,
 	editedEnd,
 	editedLength,
 	editedStart,
 	mergeRanges,
 	normalizeRange,
+	skipCutAt,
 	toEditedTime,
 	toSourceTime
 } from "./transcript.js"
