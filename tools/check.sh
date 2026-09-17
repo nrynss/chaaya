@@ -79,13 +79,17 @@ step "keel fixtures"
 # This step reruns that copy against the recorded tag and fails when a byte
 # differs, so a hand edit cannot pass. CI never sees the Keel checkout, so the
 # step prints why it skips and carries on there.
+# One EXIT trap clears both temp dirs, so no later step replaces it and leaks one dir.
+# Both names start empty, so an early exit removes nothing.
+keel_staging=""
+probe_dir=""
+trap 'rm -rf "${keel_staging:-}" "${probe_dir:-}"' EXIT
 keel=${KEEL_DIR:-/home/nryn/work/keel}
 if [ ! -e "$keel/.git" ]; then
 	echo "No Keel checkout at $keel. The gate parses the committed fixtures only, so it skips the copy check."
 else
 	keel_tag=$(cat src/lib/wire/fixtures/KEEL_TAG)
 	keel_staging=$(mktemp -d)
-	trap 'rm -rf "$keel_staging"' EXIT
 	git -C "$keel" archive "$keel_tag" testdata/wire | tar -x -C "$keel_staging"
 	diff -ru --exclude=KEEL_TAG "$keel_staging/testdata/wire" src/lib/wire/fixtures
 fi
@@ -159,10 +163,8 @@ step "published types"
 # The published entry points must resolve through the packed tarball, the
 # way a consumer installs them. The probe unpacks the tarball, imports every
 # export key, and typechecks the barrels, so a missing declaration or a
-# broken specifier fails before publish. The trap clears the probe dir even
-# when a step above fails.
+# broken specifier fails before publish. The trap above clears this dir and the keel staging dir even when a step fails.
 probe_dir=$(mktemp -d)
-trap 'rm -rf "${probe_dir:-}"' EXIT
 npm pack --pack-destination "$probe_dir" >/dev/null
 tarball=$(ls "$probe_dir"/*.tgz)
 mkdir -p "$probe_dir/consumer/node_modules/@nrynss"
