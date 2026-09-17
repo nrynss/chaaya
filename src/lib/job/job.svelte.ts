@@ -34,6 +34,12 @@ function toJobError(body: ErrorBody): JobError {
  * because a first failure usually repeats. The first terminal event ends the
  * job, closes the stream, and becomes the last change this stream makes.
  */
+
+/** Run one cleanup task in the calling component's effect context. */
+function runInEffect(task: () => () => void): void {
+	$effect(() => task())
+}
+
 export class JobStream {
 	/** The status of the job. It starts queued and stops at the first terminal. */
 	status = $state<JobStatus>("queued")
@@ -67,10 +73,11 @@ export class JobStream {
 
 	/** Follow the job. Call it once during component initialisation. The
 	 * stream opens before the first render, and it closes when that component
-	 * is destroyed. */
-	attach(): void {
+	 * is destroyed. A test passes its own cleanup runner, because only a
+	 * component owns the effect context the default runner needs. */
+	attach(registerCleanup: (task: () => () => void) => void = runInEffect): void {
 		void this.#connect()
-		$effect(() => () => this.close())
+		registerCleanup(() => () => this.close())
 	}
 
 	/** Stop following the job. It cancels the stream and any pending
@@ -148,7 +155,9 @@ export class JobStream {
 	}
 
 	/** Read the job's state once the stream is open. A failed read leaves the
-	 * stream alone, because only the stream reports the end of the job. */
+	 * stream alone, because only the stream reports the end of the job. A state
+	 * read answers late, so it never overwrites a reading the stream already
+	 * carried past it. */
 	async #catchUp(): Promise<void> {
 		let snapshot: JobSnapshot
 		try {
@@ -159,9 +168,25 @@ export class JobStream {
 		if (this.#stopped) return
 		const followed = this.#follower.jobId
 		if (followed !== undefined && followed !== snapshot.jobId) return
+		if (this.#follower.ended) return
+		const latest = this.#latestProgress()
+		if (snapshot.current !== undefined && latest !== undefined && snapshot.current < latest) return
+		if (snapshot.current === undefined && latest !== undefined) return
 		this.#applySnapshot(snapshot)
 	}
 
+	/** The newest work the stream carried. Undefined before the first progress
+	 * frame, so a snapshot then is the only reading and still lands. */
+	#latestProgress(): number | undefined {
+		for (let at = this.events.length - 1; at >= 0; at -= 1) {
+			const event = this.events[at]
+			if (event.name === "progress" && event.current !== undefined) return event.current
+		}
+		return this.current
+	}
+
+	/** Apply one state read. Only the freshness guard above reaches here, so a
+	 * late answer never moves the stream backward. */
 	#applySnapshot(snapshot: JobSnapshot): void {
 		this.stage = snapshot.stage
 		this.current = snapshot.current
