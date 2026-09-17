@@ -250,8 +250,10 @@ describe("chunk digests", () => {
 })
 
 describe("retry policy", () => {
-	test("the delay doubles from the base and stops at the ceiling", () => {
-		expect([1, 2, 3, 4, 5, 9].map(retryDelayMs)).toEqual([250, 500, 1000, 2000, 2000, 2000])
+	test("the delay doubles from the base and the ceiling spends the attempts", () => {
+		expect([1, 2, 3, 4, 5].map(retryDelayMs)).toEqual([250, 500, 1000, 2000, 2000])
+		expect(retryDelayMs(6)).toBeNull()
+		expect(retryDelayMs(9)).toBeNull()
 	})
 
 	test("a busy or broken server is worth another attempt", () => {

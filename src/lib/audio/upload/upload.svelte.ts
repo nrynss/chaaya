@@ -11,7 +11,7 @@ import {
 	UploadFailure,
 	uploadPath
 } from "./protocol.js"
-import { retryDelayMs, retryMaxAttempts } from "./retry.js"
+import { retryDelayMs } from "./retry.js"
 import { IndexedDbStore } from "./store.js"
 import type {
 	SessionRecord,
@@ -346,9 +346,10 @@ export class ChunkUploader {
 			} catch (error) {
 				const failure = toUploadFailure(error)
 				attempt += 1
-				if (!failure.retryable || attempt >= retryMaxAttempts) throw failure
+				const delay = retryDelayMs(attempt)
+				if (!failure.retryable || delay === null) throw failure
 				this.retries += 1
-				await wait(retryDelayMs(attempt))
+				await wait(delay)
 			}
 		}
 	}
