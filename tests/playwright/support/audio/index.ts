@@ -48,5 +48,5 @@ export type {
 	GeneratedStream,
 	GeneratedTake
 } from "./input"
-export { readMarkers } from "./markers"
+export { MARKER_THRESHOLD_SHARE, readMarkers } from "./markers"
 export type { MarkerReaderOptions, MarkerReading } from "./markers"

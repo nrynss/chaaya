@@ -6,7 +6,7 @@ const ENVELOPE_WINDOW_SECONDS = 0.005
 /** A window counts as a marker when its level climbs above this share of the
  * take's loudest window. The continuous tone sits well under the marker burst,
  * so half separates the two without knowing the signal's levels. */
-const MARKER_THRESHOLD_SHARE = 0.5
+export const MARKER_THRESHOLD_SHARE = 0.5
 
 /** The knobs a caller may set on the marker reader. */
 export interface MarkerReaderOptions {
@@ -31,7 +31,13 @@ export interface MarkerReading {
 	/** The take's frame count, read from the decoded samples. */
 	readonly frames: number
 	/** The take's length in seconds, from its own sample count. */
-	readonly durationSeconds: number
+	readonly durationSeconds: number,
+	/** The level of each envelope window, normalized so the take's loudest
+	 * window reads 1. A check reads this to tell a marker whose burst merged
+	 * into its neighbour's from a marker the take lost. */
+	readonly envelopeLevels: readonly number[]
+	/** The span one envelope window covers, in seconds. */
+	readonly envelopeWindowSeconds: number
 }
 
 /** Reads the take's rate with ffprobe. A rate of zero or a missing stream fails
@@ -135,6 +141,8 @@ export function readMarkers(file: string, options: MarkerReaderOptions = {}): Ma
 		order: orderOf(onsetsSeconds),
 		sampleRate,
 		frames: samples.length,
-		durationSeconds: Number((samples.length / sampleRate).toFixed(4))
+		durationSeconds: Number((samples.length / sampleRate).toFixed(4)),
+		envelopeLevels: levels.map((level) => (peak > 0 ? level / peak : 0)),
+		envelopeWindowSeconds: windowSeconds
 	}
 }
