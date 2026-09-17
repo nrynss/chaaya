@@ -45,13 +45,28 @@ interface Slice {
 	end: number;
 }
 
-/** The byte slice one range header asks for, capped so a response stays small. */
-function sliceFor(rangeHeader: string | null, size: number): Slice | null {
+/** A range ask that starts past the end of the tone. */
+interface PastEnd {
+	pastEnd: true;
+}
+
+/** The byte slice one range header asks for, capped so a response stays small.
+ * A suffix ask takes the tail of the tone, or the whole tone when the tail
+ * runs past its start. An ask past the end has no slice. */
+function sliceFor(rangeHeader: string | null, size: number): Slice | PastEnd | null {
 	if (!rangeHeader) return null;
 	const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader);
 	if (!match) return null;
-	const start = match[1] === "" ? Math.max(0, size - Number(match[2])) : Number(match[1]);
-	const wanted = match[2] === "" ? size - 1 : Number(match[2]);
+	if (match[1] === "") {
+		const suffix = Number(match[2]);
+		if (suffix <= 0) return null;
+		return { start: Math.max(0, size - suffix), end: size - 1 };
+	}
+	const start = Number(match[1]);
+	if (start >= size) return { pastEnd: true };
+	if (match[2] === "") return { start, end: Math.min(size - 1, start + SLICE_BYTES - 1) };
+	const wanted = Number(match[2]);
+	if (wanted < start) return null;
 	return { start, end: Math.min(wanted, start + SLICE_BYTES - 1, size - 1) };
 }
 
@@ -62,6 +77,15 @@ export const GET: RequestHandler = ({ params, request }) => {
 		return new Response("gone", { status: 404, headers: { "content-type": "text/plain" } });
 	}
 	const slice = sliceFor(request.headers.get("range"), tone.length);
+	if (slice && "pastEnd" in slice) {
+		return new Response("range not satisfiable", {
+			status: 416,
+			headers: {
+				"content-type": "text/plain",
+				"content-range": `bytes */${tone.length}`
+			}
+		});
+	}
 	if (slice) {
 		return new Response(tone.subarray(slice.start, slice.end + 1), {
 			status: 206,
@@ -73,12 +97,13 @@ export const GET: RequestHandler = ({ params, request }) => {
 			}
 		});
 	}
-	return new Response(tone.subarray(0, SLICE_BYTES), {
+	const head = tone.subarray(0, Math.min(SLICE_BYTES, tone.length));
+	return new Response(head, {
 		status: 200,
 		headers: {
 			"content-type": "audio/wav",
 			"accept-ranges": "bytes",
-			"content-length": String(tone.length)
+			"content-length": String(head.length)
 		}
 	});
 };
