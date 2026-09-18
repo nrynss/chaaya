@@ -35,11 +35,25 @@ Published as `@nrynss/chaaya`.
 - `@nrynss/chaaya/api`: the fetch client that turns a failed response into
   a typed error branched on a stable code.
 - `@nrynss/chaaya/job`: the job stream client that follows a job's events to
-  its end and stops at the first terminal event.
+  its end and stops at the first terminal event. It also carries the
+  JobFollower ordering rules, the isTerminalStatus check, and the JobReport
+  union one accepted event belongs to.
 - `@nrynss/chaaya/audio`: microphone capture in compressed and PCM modes,
   chunked upload that survives a network drop and a reload, playback through
-  one element unlocked by the first gesture, and live levels and waveform
-  peaks.
+  one element unlocked by the first gesture, the PcmStreamPlayer for arriving
+  blocks, and live levels and waveform peaks. Capture adds the resampleLinear
+  and resampleChunks rate conversion and the encodeWav file writer. Upload
+  adds the beginBody and completeBody builders, the uploadPath, chunkPath and
+  completePath route builders, and the parseUploadSnapshot and
+  parseUploadReceipt readers. It also carries the sha256Hex digest and
+  ChunkBuffer splitter, the retryDelayMs backoff and isRetryableStatus check,
+  and the refusal and toUploadFailure error mapping.
+- `@nrynss/chaaya/guard`: the SessionGuard that closes one live session
+  exactly once when its page goes away.
+- `@nrynss/chaaya/transcript`: timed words, the TranscriptEditor that cuts and
+  reverts ranges over them, the mapping between the source and edited
+  timelines, the waveform regions derived from the cuts, and the
+  TranscriptFollower that binds the words to playback.
 - `@nrynss/chaaya/testing`: a contrast gate and an accessibility gate a
   consumer points at its own stylesheet and container.
 
@@ -65,9 +79,17 @@ suggesting a look.
   drop and a reload, streamed to the route beside the page.
 - [audio playback](/docs/audio-playback): playback through one element
   unlocked by the first gesture, with seeking.
+- [audio stream](/docs/audio-stream): the PcmStreamPlayer that schedules
+  arriving blocks gaplessly on a supplied context, with a flush that cuts
+  cleanly.
 - [audio levels](/docs/audio-levels): live levels read from a generated tone.
 - [audio peaks](/docs/audio-peaks): waveform peaks computed directly and in
   a worker, with agreement between the two.
+- [session guard](/docs/session-guard): the guard that closes one live
+  session exactly once when its page goes away.
+- [transcript](/docs/transcript): timed words, the editor that cuts and
+  reverts ranges, the regions drawn from the cuts, and the follower that
+  binds the words to playback.
 - [testing](/docs/testing): the contrast gate and the accessibility gate run
   against the page itself.
 

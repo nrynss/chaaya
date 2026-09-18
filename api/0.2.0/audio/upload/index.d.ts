@@ -8,5 +8,7 @@
  */
 export { ChunkUploader } from "./upload.svelte.js";
 export { IndexedDbStore } from "./store.js";
-export { UploadFailure } from "./protocol.js";
+export { UploadFailure, beginBody, chunkPath, completeBody, completePath, parseUploadReceipt, parseUploadSnapshot, refusal, toUploadFailure, uploadPath } from "./protocol.js";
+export { ChunkBuffer, sha256Hex } from "./chunk.js";
+export { isRetryableStatus, retryDelayMs } from "./retry.js";
 export type { SessionRecord, StoredChunk, UploadChunk, UploadError, UploadOptions, UploadReceipt, UploadSnapshot, UploadState, UploadStore } from "./types.js";

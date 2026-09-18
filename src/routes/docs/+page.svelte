@@ -31,8 +31,11 @@
 			<li><a href={resolve("/docs/audio-capture")}>audio capture</a></li>
 			<li><a href={resolve("/docs/audio-upload")}>audio upload</a></li>
 			<li><a href={resolve("/docs/audio-playback")}>audio playback</a></li>
+			<li><a href={resolve("/docs/audio-stream")}>audio stream</a></li>
 			<li><a href={resolve("/docs/audio-levels")}>audio levels</a></li>
 			<li><a href={resolve("/docs/audio-peaks")}>audio peaks</a></li>
+			<li><a href={resolve("/docs/session-guard")}>session guard</a></li>
+			<li><a href={resolve("/docs/transcript")}>transcript</a></li>
 			<li><a href={resolve("/docs/testing")}>testing</a></li>
 		</ul>
 	</nav>

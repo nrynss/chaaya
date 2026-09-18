@@ -5,3 +5,5 @@
  */
 export { AudioRecorder } from "./recorder.svelte.js";
 export type { CaptureChunk, CaptureMode, CaptureOptions, CaptureResult, CaptureState } from "./types.js";
+export { resampleLinear, resampleChunks } from "./resample.js";
+export { encodeWav } from "./wav.js";

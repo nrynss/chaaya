@@ -63,6 +63,16 @@
       "types": "./dist/testing/index.d.ts",
       "svelte": "./dist/testing/index.js",
       "default": "./dist/testing/index.js"
+    },
+    "./guard": {
+      "types": "./dist/guard/index.d.ts",
+      "svelte": "./dist/guard/index.js",
+      "default": "./dist/guard/index.js"
+    },
+    "./transcript": {
+      "types": "./dist/transcript/index.d.ts",
+      "svelte": "./dist/transcript/index.js",
+      "default": "./dist/transcript/index.js"
     }
   },
   "files": [

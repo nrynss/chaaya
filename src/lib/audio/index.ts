@@ -10,7 +10,7 @@
  * literal path and never searches for an extension, so the built barrel needs
  * that name to load.
  */
-export { AudioRecorder } from "./capture/index.js"
+export { AudioRecorder, encodeWav, resampleChunks, resampleLinear } from "./capture/index.js"
 export type {
 	CaptureChunk,
 	CaptureMode,
@@ -18,9 +18,24 @@ export type {
 	CaptureResult,
 	CaptureState
 } from "./capture/index.js"
-export { ChunkUploader } from "./upload/index.js"
-export { IndexedDbStore } from "./upload/index.js"
-export { UploadFailure } from "./upload/index.js"
+export {
+	ChunkBuffer,
+	ChunkUploader,
+	IndexedDbStore,
+	UploadFailure,
+	beginBody,
+	chunkPath,
+	completeBody,
+	completePath,
+	isRetryableStatus,
+	parseUploadReceipt,
+	parseUploadSnapshot,
+	refusal,
+	retryDelayMs,
+	sha256Hex,
+	toUploadFailure,
+	uploadPath
+} from "./upload/index.js"
 export type {
 	SessionRecord,
 	StoredChunk,
@@ -34,6 +49,8 @@ export type {
 } from "./upload/index.js"
 export { AudioPlayer } from "./playback/player.svelte.js"
 export type { BufferedSpan, PlaybackError, PlaybackFailure } from "./playback/player.svelte.js"
+export { PcmStreamPlayer } from "./playback/stream.svelte.js"
+export type { ScheduledBlock, StreamPlayerOptions } from "./playback/stream.svelte.js"
 export { LiveLevel } from "./levels/live-level.svelte.js"
 export {
 	measureAnalyser,

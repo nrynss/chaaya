@@ -10,3 +10,4 @@
  */
 export { JobStream } from "./job.svelte.js"
 export type { JobConnection, JobError, JobSnapshot, JobStatus, JobStreamOptions } from "./types.js"
+export { JobFollower, isTerminalStatus, type JobReport } from "./follow.js"
