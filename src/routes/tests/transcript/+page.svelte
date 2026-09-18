@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from "svelte"
 	import { AudioPlayer } from "$lib/audio/playback/player.svelte"
-	import { TranscriptEditor, TranscriptFollower } from "$lib/transcript/index.js"
+	import { TranscriptEditor, TranscriptFollower, regionsFromCuts } from "$lib/transcript/index.js"
 
 	/* Words number six, one per second, so each start reads whole seconds.
 	 * The tone runs ten seconds, which leaves a word past the last cut. */
@@ -18,6 +18,12 @@
 	const player = new AudioPlayer()
 	const follower = new TranscriptFollower(editor, player)
 	follower.follow()
+
+	/* Ten buckets over ten seconds, so bucket N covers second N. The regions
+	 * below derive from the same cuts, so a cut appears where it happened. */
+	const buckets = 10
+	const duration = 10
+	const regions = $derived(regionsFromCuts(editor.words, editor.cuts, buckets, duration))
 
 	let hydrated = $state(false)
 	let followError = $state("")
@@ -127,6 +133,26 @@
 			</li>
 		{/each}
 	</ul>
+	<ol aria-label="Cut regions">
+		{#each regions as region (region.id)}
+			<li>
+				<button
+					type="button"
+					data-testid={`region-${region.id}`}
+					aria-label={`Region words ${region.range.start} to ${region.range.end}, ${region.start.toFixed(2)} to ${region.end.toFixed(2)} seconds, buckets ${region.firstBucket} to ${region.lastBucket}`}
+					data-first-bucket={region.firstBucket}
+					data-last-bucket={region.lastBucket}
+					disabled={!hydrated}
+					onclick={() => {
+						editor.select(region.range.start)
+						editor.extend(region.range.end)
+					}}
+				>
+					Words {region.range.start} to {region.range.end}
+				</button>
+			</li>
+		{/each}
+	</ol>
 	<p data-testid="selection">
 		{editor.selection
 			? `words ${editor.selection.start} to ${editor.selection.end}`

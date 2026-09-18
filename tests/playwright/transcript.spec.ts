@@ -104,3 +104,47 @@ test("a cut range is skipped rather than played", async ({ page }) => {
 	expect(resumed).toBeLessThan(4.5)
 	await page.getByTestId("pause").click()
 })
+
+test("a cut renders a region over exactly the spanned buckets", async ({ page }) => {
+	await open(page)
+	await page.getByTestId("select-cut-span").click()
+	await page.getByTestId("cut").click()
+	await expect(page.getByTestId("cuts")).toHaveText("cut-1: words 1 to 2")
+
+	// Words 1 to 2 run 1 to 3 over ten one second buckets, so the region
+	// covers buckets 1 and 2. The pin reads the rendered attributes.
+	const region = page.getByTestId("region-words-1-to-2")
+	await expect(region).toBeVisible()
+	expect(await region.getAttribute("data-first-bucket")).toBe("1")
+	expect(await region.getAttribute("data-last-bucket")).toBe("2")
+	await expect(region).toHaveAttribute(
+		"aria-label",
+		"Region words 1 to 2, 1.00 to 3.00 seconds, buckets 1 to 2"
+	)
+})
+
+test("the keyboard moves between regions in order", async ({ page }) => {
+	await open(page)
+	await page.getByTestId("select-cut-span").click()
+	await page.getByTestId("cut").click()
+	await page.getByTestId("word-4").focus()
+	await page.keyboard.press("Enter")
+	await page.getByTestId("cut").focus()
+	await page.keyboard.press("Enter")
+	await expect(page.getByTestId("cuts")).toHaveText("cut-1: words 1 to 2, cut-2: words 4 to 4")
+
+	// Tab order follows the region buttons in DOM order. Each press names the
+	// focused region, so the run proves movement follows region order.
+	const first = page.getByTestId("region-words-1-to-2")
+	const second = page.getByTestId("region-words-4-to-4")
+	await second.focus()
+	await expect(second).toBeFocused()
+	await page.keyboard.press("Shift+Tab")
+	await expect(first).toBeFocused()
+	await page.keyboard.press("Tab")
+	await expect(second).toBeFocused()
+
+	// A region press with the keyboard focuses the words it removed.
+	await page.keyboard.press("Enter")
+	await expect(page.getByTestId("selection")).toHaveText("words 4 to 4")
+})

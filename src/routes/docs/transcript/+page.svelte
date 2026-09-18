@@ -2,7 +2,7 @@
 	import { resolve } from "$app/paths";
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
-	import { TranscriptEditor } from "$lib/transcript/index.js";
+	import { TranscriptEditor, regionsFromCuts } from "$lib/transcript/index.js";
 	import { a11yGate, contrastGate } from "$lib/testing/index.js";
 
 	type DemoWord = { start: number; end: number; text: string; speaker: string };
@@ -17,6 +17,8 @@
 	];
 
 	const editor = new TranscriptEditor(demo);
+
+	const regions = $derived(regionsFromCuts(editor.words, editor.cuts, 8, 4));
 
 	let hydrated = $state(false);
 	let gates = $state("idle");
@@ -78,7 +80,7 @@
 
 <main data-testid="docs-transcript">
 	<h1>transcript</h1>
-<p>A transcript carries timed words. A cut removes a word span with a reason, and every cut reverts. A follower binds the words to a player. The word under the playhead is derived state, a word click seeks to its start, and a cut span stays silent while playback passes it.</p>
+<p>A transcript carries timed words. A cut removes a word span with a reason, and every cut reverts. A follower binds the words to a player. The word under the playhead is derived state, a word click seeks to its start, and a cut span stays silent while playback passes it. Each cut also renders a region over the waveform buckets its range spans, and a region press focuses the words it removed.</p>
 	<section aria-label="Words">
 		<ol>
 			{#each demo as word, index (word.text)}
@@ -136,6 +138,23 @@
 			</li>
 		{/each}
 	</ul>
+	<ol aria-label="Cut regions">
+		{#each regions as region (region.id)}
+			<li>
+				<button
+					type="button"
+					aria-label={`Region words ${region.range.start} to ${region.range.end}, ${region.start.toFixed(2)} to ${region.end.toFixed(2)} seconds, buckets ${region.firstBucket} to ${region.lastBucket}`}
+					disabled={!hydrated}
+					onclick={() => {
+						editor.select(region.range.start);
+						editor.extend(region.range.end);
+					}}
+				>
+					Words {region.range.start} to {region.range.end}
+				</button>
+			</li>
+		{/each}
+	</ol>
 	<dl>
 		<dt>Selection</dt>
 		<dd data-testid="selection">{selectionText}</dd>
