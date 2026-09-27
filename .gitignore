@@ -19,3 +19,6 @@ test-results/
 .idea/
 .vscode/
 .DS_Store
+
+# The WebKit fallback extracts ffmpeg and ffprobe here for the pinned image
+.playwright-image-tools/
