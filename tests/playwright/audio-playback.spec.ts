@@ -99,6 +99,7 @@ test("one gesture plays the source", async ({ page }) => {
 
 	await expect(page.getByTestId("playing")).toHaveText("true")
 	await expect(page.getByTestId("refused")).toHaveText("false")
+	await expect(page.getByTestId("refusal-name")).toHaveText("")
 	await expect.poll(() => readNumber(page, "current-time")).toBeGreaterThan(0)
 })
 
@@ -132,12 +133,15 @@ test("a refused first gesture does not stop a later gesture", async ({ page }) =
 
 	await page.getByTestId("play").click()
 	await expect(page.getByTestId("refused")).toHaveText("true")
+	await expect(page.getByTestId("refusal-name")).toHaveText("NotAllowedError")
+	await expect(page.getByTestId("refusal-message")).toHaveText("blocked")
 	const afterFirst = await page.evaluate(() =>
 		((window as unknown as Record<string, unknown>).__playCalls as () => number)()
 	)
 
 	await page.getByTestId("play").click()
 	await expect(page.getByTestId("refused")).toHaveText("false")
+	await expect(page.getByTestId("refusal-name")).toHaveText("")
 	const afterSecond = await page.evaluate(() =>
 		((window as unknown as Record<string, unknown>).__playCalls as () => number)()
 	)

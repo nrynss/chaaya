@@ -45,6 +45,10 @@
 		source for this failure, because the bytes are not in doubt.
 	</p>
 	<p>
+		A refused play keeps its reason on lastPlayError. The name carries the browser refusal,
+		such as NotAllowedError, and the message carries its words. A successful play clears it.
+	</p>
+	<p>
 		<label for="docs-source">Source</label>
 		<input id="docs-source" data-testid="source" bind:value={source} />
 	</p>
@@ -86,6 +90,10 @@
 		<dd data-testid="message">{player.error ? player.error.message : ""}</dd>
 		<dt>Refused</dt>
 		<dd data-testid="refused">{refused}</dd>
+		<dt>Refusal name</dt>
+		<dd data-testid="refusal-name">{player.lastPlayError ? player.lastPlayError.name : ""}</dd>
+		<dt>Refusal message</dt>
+		<dd data-testid="refusal-message">{player.lastPlayError ? player.lastPlayError.message : ""}</dd>
 	</dl>
 	<nav aria-label="Pieces"><a href={resolve("/docs")}>back</a></nav>
 </main>

@@ -16,6 +16,12 @@ export interface PlaybackError {
 	readonly message: string
 }
 
+/** A refused play, carrying the browser refusal name and message. */
+export interface PlayRefusal {
+	readonly name: string
+	readonly message: string
+}
+
 /** The words a browser reports when the audio sink dies under a playing
  * clip. The element raises that loss as a decode coded error, the same
  * code a fatal fault in the source carries mid play, so the error's own
@@ -40,6 +46,16 @@ function readSpans(element: HTMLAudioElement): BufferedSpan[] {
 	return spans
 }
 
+/** Read a refusal from a rejected play, so a consumer can log the cause.
+ * The rejection carries a name such as NotAllowedError and its message. */
+function toRefusal(error: unknown): PlayRefusal {
+	if (typeof error === "object" && error !== null && "name" in error && "message" in error) {
+		const { name, message } = error as { name: unknown; message: unknown }
+		if (typeof name === "string" && typeof message === "string") return { name, message }
+	}
+	return { name: "UnknownError", message: String(error) }
+}
+
 /** One audio element per app, unlocked by the first gesture and reused for
  * every clip. A browser blocks playback that no gesture started, so the first
  * user gesture primes the element with a silent clip. Every later clip reuses
@@ -55,6 +71,9 @@ export class AudioPlayer {
 	buffered = $state<BufferedSpan[]>([])
 	/** The failure of the last load, or null. */
 	error = $state<PlaybackError | null>(null)
+	/** The refusal of the last play or unlock, or null. A successful play
+	 * clears it, so it always names the latest refusal. */
+	lastPlayError = $state<PlayRefusal | null>(null)
 	/** The source the consumer asked for. */
 	source = $state<string | null>(null)
 
@@ -98,18 +117,28 @@ export class AudioPlayer {
 	}
 
 	/** Unlock the element for this session, then play a source. A refused
-	 * unlock or play returns false and never throws. */
+	 * unlock or play returns false and never throws. A refusal sets
+	 * lastPlayError with the browser name and message, and a success
+	 * clears it. */
 	async play(source?: string): Promise<boolean> {
 		const target = source ?? this.source
-		if (!target) return false
+		if (!target) {
+			this.lastPlayError = { name: "NoSourceError", message: "No source to play." }
+			return false
+		}
 		if (!(await this.unlock())) return false
 		if (target !== this.#loaded) this.load(target)
 		const element = this.#element
-		if (!element) return false
+		if (!element) {
+			this.lastPlayError = { name: "UnknownError", message: "No element to play." }
+			return false
+		}
 		try {
 			await element.play()
+			this.lastPlayError = null
 			return true
-		} catch {
+		} catch (error) {
+			this.lastPlayError = toRefusal(error)
 			return false
 		}
 	}
@@ -151,7 +180,8 @@ export class AudioPlayer {
 	}
 
 	/** Play a silent clip inside the gesture, then rewind and unmute. A muted
-	 * clip unlocks a mobile browser, and the rewind hides it from the user. */
+	 * clip unlocks a mobile browser, and the rewind hides it from the user.
+	 * A refusal sets lastPlayError, and a success clears it. */
 	async #prime(element: HTMLAudioElement): Promise<boolean> {
 		this.#loaded = silentClip
 		element.muted = true
@@ -162,9 +192,11 @@ export class AudioPlayer {
 			element.currentTime = 0
 			element.muted = false
 			this.#unlocked = true
+			this.lastPlayError = null
 			return true
-		} catch {
+		} catch (error) {
 			element.muted = false
+			this.lastPlayError = toRefusal(error)
 			return false
 		}
 	}

@@ -73,5 +73,9 @@
 		<dd data-testid="message">{player.error ? player.error.message : ""}</dd>
 		<dt>Refused</dt>
 		<dd data-testid="refused">{refused}</dd>
+		<dt>Refusal name</dt>
+		<dd data-testid="refusal-name">{player.lastPlayError ? player.lastPlayError.name : ""}</dd>
+		<dt>Refusal message</dt>
+		<dd data-testid="refusal-message">{player.lastPlayError ? player.lastPlayError.message : ""}</dd>
 	</dl>
 </main>

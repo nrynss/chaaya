@@ -48,7 +48,7 @@ export type {
 	UploadStore
 } from "./upload/index.js"
 export { AudioPlayer } from "./playback/player.svelte.js"
-export type { BufferedSpan, PlaybackError, PlaybackFailure } from "./playback/player.svelte.js"
+export type { BufferedSpan, PlaybackError, PlaybackFailure, PlayRefusal } from "./playback/player.svelte.js"
 export { PcmStreamPlayer } from "./playback/stream.svelte.js"
 export type { ScheduledBlock, StreamPlayerOptions } from "./playback/stream.svelte.js"
 export { LiveLevel } from "./levels/live-level.svelte.js"
