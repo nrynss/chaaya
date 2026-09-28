@@ -1,3 +1,7 @@
+import { execSync } from "node:child_process"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import type { RequestHandler } from "./$types"
 
 const SAMPLE_RATE = 48000
@@ -8,10 +12,11 @@ const TONE_HZ = 440
  * bytes. */
 const SLICE_BYTES = 1024 * 1024
 
-/** A mono 16 bit tone, long enough that a seek near its end lands far outside
- * whatever the browser buffered. */
-function buildTone() {
-	const frames = SAMPLE_RATE * TONE_SECONDS
+/** A mono 16 bit wav of a sine at `hz`, `seconds` long. Hertz zero is
+ * silence. The tone length keeps a seek near its end far outside whatever
+ * the browser buffered. */
+function buildWav(seconds: number, hz: number) {
+	const frames = SAMPLE_RATE * seconds
 	const dataBytes = frames * 2
 	const bytes = new Uint8Array(new ArrayBuffer(44 + dataBytes))
 	const view = new DataView(bytes.buffer)
@@ -33,14 +38,41 @@ function buildTone() {
 	view.setUint16(34, 16, true)
 	write(36, "data")
 	view.setUint32(40, dataBytes, true)
-	const step = (TONE_HZ * 2 * Math.PI) / SAMPLE_RATE
+	const step = (hz * 2 * Math.PI) / SAMPLE_RATE
 	for (let frame = 0; frame < frames; frame += 1) {
 		view.setInt16(44 + frame * 2, Math.round(Math.sin(frame * step) * 12000), true)
 	}
 	return bytes
 }
 
-const tone = buildTone()
+const tone = buildWav(TONE_SECONDS, TONE_HZ)
+
+/** A ten second silent wav, the length a dead connection lies about. */
+const truncWav = buildWav(10, 0)
+
+/** A ten second AAC in MP4 with two kilobytes of its middle flipped, bytes
+ * that decode fine until the flip and then fail inside playback. The
+ * encoder is one of the pair the gate requires, so a missing tool fails by
+ * name instead of turning into a skip. The bytes build once. */
+let corruptMp4: Uint8Array<ArrayBuffer> | null = null
+function corruptMp4Bytes(): Uint8Array<ArrayBuffer> {
+	if (corruptMp4) return corruptMp4
+	const work = mkdtempSync(join(tmpdir(), "playback-media-"))
+	try {
+		const raw = join(work, "raw.mp4")
+		execSync(
+			`ffmpeg -v error -f lavfi -i "sine=frequency=440:duration=10:sample_rate=48000" ` +
+				`-c:a aac -b:a 96k -movflags +faststart ${raw}`
+		)
+		const bytes = new Uint8Array(readFileSync(raw))
+		const at = Math.floor(bytes.length / 3)
+		for (let index = at; index < at + 2048; index += 1) bytes[index] ^= 0xff
+		corruptMp4 = bytes
+	} finally {
+		rmSync(work, { recursive: true, force: true })
+	}
+	return corruptMp4
+}
 
 /** Bytes that carry no audio header, so no decoder reads them. */
 const noise = new Uint8Array(400_000)
@@ -63,12 +95,45 @@ function sliceFor(rangeHeader: string | null, size: number): Slice | null {
 }
 
 /** Serve the media a browser playback test needs. The broken name answers 200
- * with bytes no decoder reads, and every other name answers 404. */
+ * with bytes no decoder reads. The corrupt name answers with an MP4 that
+ * decodes until mid play, and the truncated name kills its transfer under
+ * its own declared length. Every other name answers 404. */
 export const GET: RequestHandler = ({ params, request }) => {
 	if (params.name === "broken.wav") {
 		return new Response(noise, {
 			status: 200,
 			headers: { "content-type": "audio/wav", "content-length": String(noise.length) }
+		})
+	}
+	if (params.name === "bad.mp4") {
+		const bytes = corruptMp4Bytes()
+		return new Response(bytes, {
+			status: 200,
+			headers: {
+				"content-type": "audio/mp4",
+				"content-length": String(bytes.length),
+				"accept-ranges": "none"
+			}
+		})
+	}
+	if (params.name === "trunc.wav") {
+		/* The response declares the full length, sends one second, then dies
+		 * under its own declaration, the shape a dropped connection leaves
+		 * behind. The hole sits past the second the element already holds, so
+		 * the failure lands mid play and names the transfer. */
+		const stream = new ReadableStream({
+			start(controller) {
+				controller.enqueue(truncWav.subarray(0, 44 + SAMPLE_RATE * 2))
+				setTimeout(() => controller.error(new Error("connection lost")), 200)
+			}
+		})
+		return new Response(stream, {
+			status: 200,
+			headers: {
+				"content-type": "audio/wav",
+				"content-length": String(truncWav.length),
+				"accept-ranges": "none"
+			}
 		})
 	}
 	if (params.name !== "tone.wav") {

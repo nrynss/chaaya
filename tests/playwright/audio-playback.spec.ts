@@ -8,6 +8,9 @@ const SEEK_BYTE = SEEK_SECONDS * 48000 * 2
  * is about thirty frames at sixty hertz, well past the 100 ms frame budget the
  * assertion allows. */
 const SETTLE_MS = 500
+/** The wait that gives a sink error time to land. The defect fires about ten
+ * milliseconds in, and two seconds leaves it no room to hide. */
+const SINK_SETTLE_MS = 2_000
 
 /** The start byte of a logged range request, or -1 when it has none. */
 function rangeStart(entry: string): number {
@@ -155,4 +158,109 @@ test("a blob no decoder reads reports a decode failure", async ({ page }) => {
 	await page.getByTestId("source").fill(blob)
 	await page.getByTestId("play").click()
 	await expect(page.getByTestId("failure")).toHaveText("decode")
+})
+
+/** Only the firefox sink project drives a browser whose sink dies, so the
+ * error class differs there and stays null on the other engines. */
+test("a sink error mid play is an output failure and the element plays on", async ({
+	page
+}, testInfo) => {
+	const sinkLeg = testInfo.project.name === "firefox-sink"
+	await open(page)
+	await page.getByTestId("play").click()
+	await expect(page.getByTestId("refused")).toHaveText("false")
+
+	const worstGap = await settle(page, SINK_SETTLE_MS)
+	console.log(JSON.stringify({ project: testInfo.project.name, worstGap }))
+
+	await expect(page.getByTestId("playing")).toHaveText("true")
+	await expect.poll(() => readNumber(page, "current-time")).toBeGreaterThan(0)
+	if (sinkLeg) {
+		await expect(page.getByTestId("failure")).toHaveText("output")
+		await expect(page.getByTestId("message")).toContainText("OnMediaSinkAudioError")
+	} else {
+		await expect(page.getByTestId("failure")).toHaveText("none")
+	}
+})
+
+/** Only the firefox sink project raises an element error when a transfer
+ * dies under its own declared length. Chromium measures the same shape by
+ * re-requesting the body instead of failing it, so there is no error to
+ * classify there. */
+test("a connection that dies mid play is a network failure and stops the player", async ({
+	page
+}, testInfo) => {
+	test.skip(
+		testInfo.project.name !== "firefox-sink",
+		"chromium re-requests a truncated transfer instead of raising an element error, so the failure class only exists on firefox"
+	)
+	await open(page)
+	await page.getByTestId("source").fill("/tests/audio-playback/media/trunc.wav")
+	await page.getByTestId("play").click()
+	await expect(page.getByTestId("failure")).toHaveText("network", { timeout: 15_000 })
+	await expect(page.getByTestId("playing")).toHaveText("false")
+})
+
+/** The corrupt MP4 decodes until the flipped bytes reach the decoder, so the
+ * error lands mid play with the element unpaused. Its words name the
+ * decoder, never the sink, so the source classify path runs and playing
+ * clears. Only chromium raises that error: under the dead sink the sink
+ * error latches first and the element never reports the later decode
+ * failure, and webkit never reports a decode failure for these bytes at
+ * all. */
+test("bytes that fail mid play are a decode failure and stop the player", async ({
+	page
+}, testInfo) => {
+	test.skip(
+		testInfo.project.name !== "chromium",
+		"only chromium raises the mid play decode failure: the dead sink latches its own error first and webkit never reports one"
+	)
+	await open(page)
+	await page.getByTestId("source").fill("/tests/audio-playback/media/bad.mp4")
+	await page.getByTestId("play").click()
+	await expect(page.getByTestId("failure")).toHaveText("decode", { timeout: 20_000 })
+	await expect(page.getByTestId("playing")).toHaveText("false")
+})
+
+/** An element that has stopped never takes the output branch, whatever its
+ * error says. The stub latches a sink named error onto a paused element,
+ * the shape a browser reports when it gave up on playback before the error
+ * surfaced. */
+test("an error on a stopped element never takes the output branch", async ({
+	page
+}, testInfo) => {
+	test.skip(
+		testInfo.project.name === "firefox-sink",
+		"the live sink error latches before the stub can fire, so the stub only reads cleanly where the sink lives"
+	)
+	await page.addInitScript(() => {
+		const native = window.Audio
+		const wrapped = function (...args: ConstructorParameters<typeof Audio>) {
+			const element = new native(...args)
+			;(window as unknown as Record<string, unknown>).__stoppedElement = element
+			return element
+		}
+		wrapped.prototype = native.prototype
+		window.Audio = wrapped as unknown as typeof Audio
+	})
+	await open(page)
+	await page.getByTestId("play").click()
+	await expect(page.getByTestId("playing")).toHaveText("true")
+	await expect.poll(() => readNumber(page, "current-time")).toBeGreaterThan(0)
+
+	await page.evaluate(() => {
+		const element = (window as unknown as Record<string, unknown>).__stoppedElement as
+			| HTMLMediaElement
+			| undefined
+		if (!element) throw new Error("no element")
+		Object.defineProperty(element, "paused", { configurable: true, get: () => true })
+		Object.defineProperty(element, "error", {
+			configurable: true,
+			get: () => ({ code: 3, message: "OnMediaSinkAudioError" })
+		})
+		element.dispatchEvent(new Event("error"))
+	})
+
+	await expect(page.getByTestId("failure")).toHaveText("decode")
+	await expect(page.getByTestId("playing")).toHaveText("false")
 })

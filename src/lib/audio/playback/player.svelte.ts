@@ -1,7 +1,8 @@
-/** The two ways playback fails. A network failure means the bytes never
- * arrived. A decode failure means they arrived and the browser could not read
- * them. */
-export type PlaybackFailure = "network" | "decode"
+/** The three ways playback fails. A network failure means the bytes never
+ * arrived. A decode failure means they arrived and the browser could not
+ * read them. An output failure means they read fine but the audio sink could
+ * not carry them, so the element keeps playing without sound. */
+export type PlaybackFailure = "network" | "decode" | "output"
 
 /** One buffered span of the source, in seconds from its start. */
 export interface BufferedSpan {
@@ -14,6 +15,13 @@ export interface PlaybackError {
 	readonly failure: PlaybackFailure
 	readonly message: string
 }
+
+/** The words a browser reports when the audio sink dies under a playing
+ * clip. The element raises that loss as a decode coded error, the same
+ * code a fatal fault in the source carries mid play, so the error's own
+ * message is the only prompt evidence that names the sink instead of the
+ * decoder. */
+const SINK_FAULT = "OnMediaSinkAudioError"
 
 /** A one frame silent clip. A browser only unlocks playback that a gesture
  * started, and an element with no source never unlocks. Priming the element
@@ -203,8 +211,29 @@ export class AudioPlayer {
 		const element = this.#element
 		const media = element?.error
 		const source = this.#loaded
-		/* Code 1 is an abort, which a source swap causes and no user sees. */
+		/* An error that lands on an element which still plays needs one
+		 * question first: did the source die, or only the sink? The element
+		 * state cannot answer it, because a fatal fault in bytes the browser
+		 * is still reading also lands mid play with the element unpaused and
+		 * its clock moving. Code 1 is an abort, which a source swap causes and
+		 * no user sees, and code 2 names the transfer, never the sink, so both
+		 * keep the classify path. For the rest the error's own words are the
+		 * evidence: a sink loss carries the browser's audio sink fault name,
+		 * while a source fault names the decoder or the pipeline. Only the
+		 * sink name takes the output branch, where the element keeps playing
+		 * and the bytes stay out of question. Every other still playing error
+		 * keeps today's classify path and clears playing. */
 		if (!media || !source || media.code === 1) return
+
+		if (
+			!element.paused &&
+			element.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE &&
+			media.code !== 2 &&
+			media.message.includes(SINK_FAULT)
+		) {
+			this.error = { failure: "output", message: media.message }
+			return
+		}
 		this.playing = false
 		void this.#publish(media, source)
 	}

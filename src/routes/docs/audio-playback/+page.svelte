@@ -33,6 +33,18 @@
 <main data-testid="docs-audio-playback">
 	<h1>audio playback</h1>
 	<p>
+		The player reports what went wrong with a load. A network failure means the bytes never
+		arrived, and a decode failure means they arrived and the browser could not read them. Both
+		stop the element, and both clear playing.
+	</p>
+	<p>
+		An output failure is different. A browser that loses its audio sink, for example when the
+		last output device goes away, raises an error straight after playback starts and keeps
+		playing. The player leaves playing true, so the pause control keeps working, and error
+		carries the class output with the browser's own message. The player never re-reads the
+		source for this failure, because the bytes are not in doubt.
+	</p>
+	<p>
 		<label for="docs-source">Source</label>
 		<input id="docs-source" data-testid="source" bind:value={source} />
 	</p>
@@ -70,6 +82,8 @@
 		<dd data-testid="loaded">{player.source ? player.source : ""}</dd>
 		<dt>Failure</dt>
 		<dd data-testid="failure">{player.error ? player.error.failure : "none"}</dd>
+		<dt>Message</dt>
+		<dd data-testid="message">{player.error ? player.error.message : ""}</dd>
 		<dt>Refused</dt>
 		<dd data-testid="refused">{refused}</dd>
 	</dl>
