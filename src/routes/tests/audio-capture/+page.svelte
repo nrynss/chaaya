@@ -126,7 +126,7 @@
 
 	/** Records the generated input on a context the page owns, in PCM mode.
 	 * The recorder never closes that context, so the check below keeps it. */
-	function startShared(): void {
+	async function startShared(): Promise<void> {
 		startElapsed = 0
 		stopElapsed = 0
 		probeTone = ""
@@ -134,7 +134,9 @@
 		sharedContext = new AudioContext()
 		const next = new AudioRecorder({ mode: "pcm", context: sharedContext, autoStopSeconds: TAKE_SECONDS })
 		recorder = next
-		void next.start()
+		await next.start()
+		microphone?.start()
+		startElapsed = microphone?.elapsedSeconds() ?? 0
 	}
 
 	/** Schedules one short tone on the shared context after a stop. A closed
@@ -236,6 +238,9 @@
 			recorder = take
 			const opening = next.start()
 			await take.start()
+			// Do not let the generated signal run while the PCM worklet is loading.
+			microphone?.start()
+			startElapsed = microphone?.elapsedSeconds() ?? 0
 			await opening
 			if (next.state !== "streaming") {
 				throw new Error(next.error?.message ?? "the upload did not open")
@@ -292,12 +297,12 @@
 		}
 	})
 
-	/* Install the default input for shared-context and streaming checks.
-	 * Ordinary capture replaces it with a source that waits for readiness. */
+	/* Install a deferred input for shared-context and streaming checks.
+	 * Each capture starts it after the recorder has connected its nodes. */
 	$effect(() => {
 		// The signal leaves its first marker out, so a take can open there
 		// without cutting a burst in half.
-		microphone = installGeneratedMicrophone({ omitMarkerIndex: 0 })
+		microphone = installGeneratedMicrophone({ omitMarkerIndex: 0, deferStart: true })
 		const media = navigator.mediaDevices
 		const inner = media.getUserMedia.bind(media)
 		media.getUserMedia = async (constraints?: StreamOptions) => {

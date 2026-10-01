@@ -53,6 +53,12 @@ test("a generated take carries its markers in order and at the fixed spacing", a
 	// not a support defect. The stream-shape case runs on WebKit.
 	test.skip(browserName === "webkit", "WebKitGTK headless defines no MediaRecorder, so a generated take records nothing there.")
 	test.setTimeout(90_000)
+	await page.addInitScript(() => {
+		const nativeStart = MediaRecorder.prototype.start
+		MediaRecorder.prototype.start = function (timeslice?: number) {
+			setTimeout(() => nativeStart.call(this, timeslice), 300)
+		}
+	})
 	await open(page)
 	const { take, reading } = await recordTake(page, "record", testInfo.outputPath("take.webm"))
 
@@ -96,6 +102,8 @@ test("a take that drops one marker reads as a gap where the marker stood", async
 
 	expect(full.reading.order).toBe("ascending")
 	expect(gap.reading.order).toBe("ascending")
+	expect(full.reading.count).toBe(full.take.expectedMarkers)
+	expect(gap.reading.count).toBe(gap.take.expectedMarkers)
 	expect(gap.reading.count).toBe(full.reading.count - 1)
 
 	const wideIndex = gap.reading.spacingsSeconds.findIndex(
@@ -106,12 +114,12 @@ test("a take that drops one marker reads as a gap where the marker stood", async
 		(spacing) => Math.abs(spacing - MARKER_INTERVAL_SECONDS) <= MARKER_TOLERANCE_SECONDS
 	)
 	expect(narrow).toHaveLength(gap.reading.spacingsSeconds.length - 1)
-	/* The gap opens at the slot the missing marker used to fill. The reader
-	 * reports a slot boundary one window late, so the tolerance holds. */
+	/* Compare the marker after the gap with that marker in the full take. The
+	 * container adds a fixed pre-roll before the first decoded marker. */
 	expect(
 		Math.abs(
-			gap.reading.onsetsSeconds[wideIndex] -
-				(OMITTED_MARKER_INDEX - 1) * MARKER_INTERVAL_SECONDS
+			gap.reading.onsetsSeconds[wideIndex + 1] -
+				full.reading.onsetsSeconds[OMITTED_MARKER_INDEX + 1]
 		)
 	).toBeLessThanOrEqual(MARKER_TOLERANCE_SECONDS)
 })

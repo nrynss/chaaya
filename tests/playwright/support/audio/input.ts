@@ -197,29 +197,38 @@ export async function buildGeneratedStream(
 function createGeneratedStream(options: GeneratedInputOptions, context: AudioContext): GeneratedStream {
 	const settings = resolveInput(options)
 	const samples = generateSamples(settings)
-	// Loop a quiet prefix through the same source node until PCM observes it.
+	// Keep the readiness pilot separate from the signal so ending the pilot
+	// never changes the signal buffer's playback position.
 	const pilotFrames = options.primeTransport ? Math.round(settings.sampleRate / 10) : 0
-	const buffer = context.createBuffer(1, pilotFrames + samples.length, settings.sampleRate)
-	const frames = buffer.getChannelData(0)
+	const pilotBuffer = context.createBuffer(1, Math.max(1, pilotFrames), settings.sampleRate)
+	const pilot = pilotBuffer.getChannelData(0)
 	for (let index = 0; index < pilotFrames; index += 1) {
-		frames[index] = 0.01 * Math.sin(2 * Math.PI * settings.toneHz * index / settings.sampleRate)
+		pilot[index] = 0.01 * Math.sin(2 * Math.PI * settings.toneHz * index / settings.sampleRate)
 	}
-	frames.set(samples, pilotFrames)
+	const pilotSource = context.createBufferSource()
+	pilotSource.buffer = pilotBuffer
 	const source = context.createBufferSource()
-	source.buffer = buffer
+	const signalBuffer = context.createBuffer(1, samples.length, settings.sampleRate)
+	signalBuffer.getChannelData(0).set(samples)
+	source.buffer = signalBuffer
 	const destination = context.createMediaStreamDestination()
-	source.connect(destination)
 	if (pilotFrames > 0) {
-		source.loop = true
-		source.loopEnd = pilotFrames / settings.sampleRate
-		source.start()
+		pilotSource.loop = true
+		pilotSource.loopEnd = pilotFrames / settings.sampleRate
+		pilotSource.connect(destination)
+		pilotSource.start()
 	}
+	source.connect(destination)
 	let startedAt: number | null = null
+	let pilotPlaying = pilotFrames > 0
 	const start = (): void => {
 		if (startedAt !== null) return
 		startedAt = context.currentTime
-		if (pilotFrames > 0) source.loop = false
-		else source.start()
+		if (pilotPlaying) {
+			pilotSource.stop()
+			pilotPlaying = false
+		}
+		source.start()
 	}
 	if (!options.deferStart) start()
 	return {
@@ -228,8 +237,13 @@ function createGeneratedStream(options: GeneratedInputOptions, context: AudioCon
 		elapsedSeconds: () => startedAt === null ? 0 : context.currentTime - startedAt,
 		contextSeconds: () => context.currentTime,
 		stop: () => {
-			if (startedAt !== null || pilotFrames > 0) source.stop()
+			if (pilotPlaying) {
+				pilotSource.stop()
+				pilotPlaying = false
+			}
+			if (startedAt !== null) source.stop()
 			source.disconnect()
+			pilotSource.disconnect()
 			destination.disconnect()
 			if (!options.context) void context.close()
 		}
@@ -328,10 +342,13 @@ export async function recordGeneratedTake(
 		if (event.data.size > 0) parts.push(event.data)
 	}
 	const { promise: stopped, resolve: resolveStopped } = Promise.withResolvers<void>()
+	const { promise: started, resolve: resolveStarted } = Promise.withResolvers<void>()
+	recorder.onstart = () => resolveStarted()
 	recorder.onstop = () => resolveStopped()
+	recorder.start(RECORD_BLOCK_MS)
+	await started
 	const startedAt = context.currentTime
 	source.start()
-	recorder.start(RECORD_BLOCK_MS)
 	await wait(settings.recordSeconds * 1000)
 	recorder.stop()
 	await stopped

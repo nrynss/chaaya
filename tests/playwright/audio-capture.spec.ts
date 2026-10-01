@@ -363,7 +363,7 @@ test.describe("a granted microphone", () => {
 				return original.apply(this, args)
 			}
 		})
-		// Model transport startup silence on the capture clock, independently of setup.
+		// Hold the capture transport silent until readiness, independently of setup.
 		await page.addInitScript(() => {
 			const original = AudioContext.prototype.createMediaStreamSource
 			AudioContext.prototype.createMediaStreamSource = function (stream) {
@@ -553,6 +553,7 @@ test.describe("a take that streams", () => {
 			writeStreamWav(wav, stored, renderRate)
 			const reading = readMarkers(wav)
 			console.log(JSON.stringify({ reading }))
+			expect(mergedOnsets(reading.onsetsSeconds)).toHaveLength(14)
 			await page.waitForFunction(
 				(stop) => Number(stop) > 0,
 				await page.getByTestId("stop-elapsed").textContent(),
