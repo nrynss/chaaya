@@ -7,9 +7,7 @@ import type { CaptureState } from "./types.js"
  */
 
 /** A move the recorder may make on a take. */
-export type CaptureEvent =
-	/** The caller opens the microphone. */
-	| "start"
+export type CaptureEvent = "start"
 	/** The browser granted the microphone and the take is running. */
 	| "granted"
 	/** The browser refused the grant. */

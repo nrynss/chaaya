@@ -96,7 +96,7 @@ suggesting a look.
 ## Status
 
 Published on [npm](https://www.npmjs.com/package/@nrynss/chaaya) as
-`@nrynss/chaaya`. The current release is `0.2.3`.
+`@nrynss/chaaya`. The current release is `0.2.4`.
 
 ```sh
 npm install @nrynss/chaaya
