@@ -115,9 +115,9 @@ function expectedOnsets(startElapsed: number, stopElapsed: number): number[] {
  * hook, so the take can complete without the page having anything to hand
  * back. The run attempt tag goes on the window before the click, so a retried
  * attempt never reuses the state a failed attempt left behind. */
-async function record(page: Page, mode: "compressed" | "pcm", attempt: number): Promise<Take> {
+async function record(page: Page, mode: "compressed" | "pcm", attempt: number, owned = false): Promise<Take> {
 	const file = join(mkdtempSync(join(tmpdir(), "chaaya-take-")), "take.bin")
-	await page.goto("/tests/audio-capture")
+	await page.goto(owned ? "/tests/audio-capture?context=owned" : "/tests/audio-capture")
 	await page.evaluate((value) => {
 		;(window as Window & { __captureRun?: number }).__captureRun = value
 	}, attempt)
@@ -140,6 +140,7 @@ async function record(page: Page, mode: "compressed" | "pcm", attempt: number): 
 	)
 	try {
 		await saveTake(page, file)
+		await test.info().attach("captured-take", { path: file, contentType: take.mimeType })
 	} catch {
 		// The page held no blob, so this attempt produced nothing to read.
 		return { ...take, reading: EMPTY_READING }
@@ -326,6 +327,60 @@ test.describe("a granted microphone", () => {
 			)
 		})
 	}
+
+	test("compressed startup preserves the full signal after native readiness", async ({ page, browserName }) => {
+		test.skip(browserName === "webkit", "WebKitGTK headless defines no MediaRecorder.")
+		// Model asynchronous encoder setup. The source must wait for the native start event.
+		await page.addInitScript(() => {
+			const original = MediaRecorder.prototype.start
+			MediaRecorder.prototype.start = function (...args) {
+				const parts: Blob[] = []
+				;(window as Window & { __compressedParts?: Blob[] }).__compressedParts = parts
+				this.addEventListener("dataavailable", (event) => parts.push(event.data))
+				setTimeout(() => original.apply(this, args), 1100)
+			}
+		})
+		const take = await record(page, "compressed", 0)
+		const collectedEveryNativeByte = await page.evaluate(async () => {
+			const scope = window as Window & { __compressedParts?: Blob[], __capture?: { blob: Blob } }
+			const native = new Uint8Array(await new Blob(scope.__compressedParts).arrayBuffer())
+			const saved = new Uint8Array(await scope.__capture!.blob.arrayBuffer())
+			return native.length === saved.length && native.every((byte, index) => byte === saved[index])
+		})
+		expect(collectedEveryNativeByte).toBe(true)
+		expect(mergedOnsets(take.reading.onsetsSeconds)).toHaveLength(14)
+		checkMarkers(take)
+		expect(Math.abs(take.reading.durationSeconds - (take.stopElapsed - take.startElapsed)))
+			.toBeLessThanOrEqual(take.blockSeconds)
+	})
+
+	test("PCM startup preserves the full signal on an owned context", async ({ page }) => {
+		// Delay node setup before capture connects. The source must wait for readiness.
+		await page.addInitScript(() => {
+			const original = AudioWorklet.prototype.addModule
+			AudioWorklet.prototype.addModule = async function (...args) {
+				await new Promise((resolve) => setTimeout(resolve, 300))
+				return original.apply(this, args)
+			}
+		})
+		// Model transport startup silence on the capture clock, independently of setup.
+		await page.addInitScript(() => {
+			const original = AudioContext.prototype.createMediaStreamSource
+			AudioContext.prototype.createMediaStreamSource = function (stream) {
+				const source = original.call(this, stream)
+				const gate = this.createGain()
+				gate.gain.setValueAtTime(0, this.currentTime)
+				gate.gain.setValueAtTime(1, this.currentTime + 0.25)
+				source.connect(gate)
+				return gate as unknown as MediaStreamAudioSourceNode
+			}
+		})
+		const take = await record(page, "pcm", 0, true)
+		expect(mergedOnsets(take.reading.onsetsSeconds)).toHaveLength(14)
+		expect(take.reading.sampleRate).toBe(take.reportedRate)
+		expect(take.mimeType).toBe("audio/wav")
+		await expect(page.getByTestId("owned-context-state")).toHaveText("closed")
+	})
 
 	test("a shared context records the generated markers and stays usable", async ({ page }) => {
 		await page.goto("/tests/audio-capture")

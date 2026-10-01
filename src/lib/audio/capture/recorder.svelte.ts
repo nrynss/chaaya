@@ -138,6 +138,7 @@ export class AudioRecorder {
 	#closing = false
 	#session = 0
 	#awaitStop: (() => void) | null = null
+	#awaitStart: (() => void) | null = null
 	#flushed: (() => void) | null = null
 	#trackWatch: ReturnType<typeof setInterval> | null = null
 
@@ -194,7 +195,7 @@ export class AudioRecorder {
 			this.#beginTrackWatch(session)
 			if (this.state !== "requesting") return
 			if (this.mode === "pcm") await this.#startPcm(stream, session)
-			else this.#startCompressed(stream, session)
+			else await this.#startCompressed(stream, session)
 			if (session !== this.#session || this.state !== "requesting") return
 			// A track can reach ended without firing an event, so recheck after startup.
 			if (this.#tracksEnded()) {
@@ -244,11 +245,18 @@ export class AudioRecorder {
 		return media.getUserMedia({ audio: this.#constraints })
 	}
 
-	#startCompressed(stream: MediaStream, session: number): void {
+	async #startCompressed(stream: MediaStream, session: number): Promise<void> {
 		const type = pickCompressedType()
 		if (!type) throw new Error("This browser cannot encode a recording.")
 		const recorder = new MediaRecorder(stream, { mimeType: type })
 		this.#mediaRecorder = recorder
+		const started = new Promise<void>((resolve) => {
+			this.#awaitStart = resolve
+		})
+		recorder.onstart = () => {
+			if (session !== this.#session) return
+			this.#resolveStart()
+		}
 		recorder.ondataavailable = (event) => {
 			if (event.data.size > 0) {
 				this.#parts.push(event.data)
@@ -261,6 +269,10 @@ export class AudioRecorder {
 		}
 		recorder.onstop = () => {
 			if (session !== this.#session) return
+			if (this.state === "requesting") {
+				this.error = new Error("The microphone stopped before the take started.")
+				this.state = nextState(this.state, "failed")
+			}
 			this.#release()
 			const mimeType = recorder.mimeType || type
 			// A failed take keeps its parts, so build the blob before the state moves.
@@ -269,6 +281,8 @@ export class AudioRecorder {
 			this.#resolveStop()
 		}
 		recorder.start(COMPRESSED_TIMESLICE_MS)
+		// Native startup runs asynchronously. Keep the source and countdown behind its acknowledgement.
+		await started
 	}
 
 	async #startPcm(stream: MediaStream, session: number): Promise<void> {
@@ -445,6 +459,12 @@ export class AudioRecorder {
 		this.countdown = 0
 	}
 
+	#resolveStart(): void {
+		const resolve = this.#awaitStart
+		this.#awaitStart = null
+		resolve?.()
+	}
+
 	#resolveStop(): void {
 		const resolve = this.#awaitStop
 		this.#awaitStop = null
@@ -459,6 +479,7 @@ export class AudioRecorder {
 	}
 
 	#release(): void {
+		this.#resolveStart()
 		this.#stopCountdown()
 		if (this.#trackWatch !== null) clearInterval(this.#trackWatch)
 		this.#trackWatch = null

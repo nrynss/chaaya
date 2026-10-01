@@ -53,16 +53,32 @@ test("the docs page passes the accessibility and contrast gates", async ({ page 
 
 test("the active word advances with real playback", async ({ page }) => {
 	await open(page)
+	// Observe rendered transitions in the browser before playback. Host polling
+	// can miss a whole word while the browser continues to render it.
+	await page.evaluate(() => {
+		const word = document.querySelector('[data-testid="active-word"]')!
+		const time = document.querySelector('[data-testid="current-time"]')!
+		const readings: { word: number; time: number }[] = []
+		;(window as Window & { __wordReadings?: typeof readings }).__wordReadings = readings
+		new MutationObserver(() => {
+			if (word.textContent?.trim() === "2") {
+				readings.push({ word: 2, time: Number(time.textContent) })
+			}
+		}).observe(word, { childList: true, characterData: true, subtree: true })
+	})
 	await page.getByTestId("play").click()
 	await expect(page.getByTestId("playing")).toHaveText("true")
 
 	// Word 2 runs 2 to 3. Waiting for it to name itself proves the derived
 	// word tracked the element clock through real frames.
-	await expect.poll(() => readWord(page), { timeout: 15_000 }).toBe(2)
-	const elapsed = await readNumber(page, "current-time")
+	const reading = () => page.evaluate(() =>
+		(window as Window & { __wordReadings?: { word: number; time: number }[] }).__wordReadings?.[0]
+	)
+	await expect.poll(async () => (await reading())?.word, { timeout: 15_000 }).toBe(2)
+	const elapsed = (await reading())!.time
 	console.log(JSON.stringify({ activeWord: 2, elapsed }))
 	expect(elapsed).toBeGreaterThanOrEqual(2)
-	expect(elapsed).toBeLessThan(3.5)
+	expect(elapsed).toBeLessThan(3)
 	await page.getByTestId("pause").click()
 })
 

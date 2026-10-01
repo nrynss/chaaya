@@ -43,6 +43,7 @@
 	let stopElapsed = $state(0)
 	let stream: MediaStream | null = null
 	let sharedContext: AudioContext | null = null
+	let ownedContextState = $state("none")
 	let probeTone = $state("")
 	let probeFailure = $state("")
 	let streamed = $state(0)
@@ -65,12 +66,62 @@
 			Promise.reject(new DOMException("The microphone grant was refused.", REFUSAL_NAME))
 	}
 
-	function start(mode: CaptureMode): void {
+	async function start(mode: CaptureMode, refused = false): Promise<void> {
 		startElapsed = 0
 		stopElapsed = 0
-		const next = new AudioRecorder({ mode, autoStopSeconds: TAKE_SECONDS })
+		const owned = mode === "pcm" && page.url.searchParams.get("context") === "owned"
+		const inputReady = Promise.withResolvers<void>()
+		// Share the source clock in PCM mode. Worklet setup finishes before the signal starts.
+		if (mode === "pcm") sharedContext = new AudioContext({ sampleRate: 48000 })
+		microphone?.restore()
+		microphone = installGeneratedMicrophone({
+			omitMarkerIndex: 0,
+			deferStart: true,
+			primeTransport: owned,
+			context: mode === "pcm" ? sharedContext ?? undefined : undefined
+		})
+		const media = navigator.mediaDevices
+		const generated = media.getUserMedia.bind(media)
+		media.getUserMedia = async (constraints?: StreamOptions) => {
+			stream = await generated(constraints)
+			return stream
+		}
+		if (refused) refuse()
+		const next = new AudioRecorder({
+			mode,
+			onChunk: owned ? (chunk) => {
+				if (chunk.samples.some((sample) => Math.abs(sample) > 0.001)) inputReady.resolve()
+			} : undefined,
+			context: mode === "pcm" && !owned
+				? sharedContext ?? undefined : undefined,
+			autoStopSeconds: TAKE_SECONDS
+		})
 		recorder = next
-		void next.start()
+		const Context = globalThis.AudioContext
+		if (owned) {
+			// Keep native construction and ownership, while the generated stream uses its rendering clock.
+			globalThis.AudioContext = new Proxy(Context, {
+				construct(target, args) {
+					const context = Reflect.construct(target, args) as AudioContext
+					ownedContextState = context.state
+					context.addEventListener("statechange", () => { ownedContextState = context.state })
+					microphone?.bindContext(context)
+					void sharedContext?.close()
+					return context
+				}
+			})
+		}
+		try {
+			await next.start()
+		} finally {
+			globalThis.AudioContext = Context
+		}
+		if (next.state === "recording") {
+			// The generated transport can initially deliver silence while its graph connects.
+			// Start markers only after the saved PCM path receives the pilot tone.
+			if (owned) await inputReady.promise
+			microphone?.start()
+		}
 	}
 
 	/** Records the generated input on a context the page owns, in PCM mode.
@@ -235,10 +286,14 @@
 	onMount(() => {
 		uploadBase = page.url.searchParams.get("upload") ?? ""
 		void resumeUpload()
+		return () => {
+			microphone?.restore()
+			void sharedContext?.close().catch(() => undefined)
+		}
 	})
 
-	/* Build the generated microphone once, so every start reads the same
-	 * signal at the same rate and no check touches a device. */
+	/* Install the default input for shared-context and streaming checks.
+	 * Ordinary capture replaces it with a source that waits for readiness. */
 	$effect(() => {
 		// The signal leaves its first marker out, so a take can open there
 		// without cutting a burst in half.
@@ -270,6 +325,7 @@
 
 <main>
 	<h1>Audio capture harness</h1>
+	<p data-testid="owned-context-state">{recorder?.state === "stopped" ? ownedContextState : "pending"}</p>
 	<p data-testid="mode">{recorder?.mode ?? "none"}</p>
 	<p data-testid="state">{recorder?.state ?? "idle"}</p>
 	<p data-testid="chunks">{recorder?.chunkCount ?? 0}</p>
@@ -301,8 +357,7 @@
 	<button
 		data-testid="start-refused"
 		onclick={() => {
-			refuse()
-			start("compressed")
+			void start("compressed", true)
 		}}
 	>
 		Record with a refused grant

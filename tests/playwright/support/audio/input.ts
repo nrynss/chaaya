@@ -16,6 +16,12 @@
 export interface GeneratedInputOptions {
 	/** The audio rate of the source and of the take. 48000 by default. */
 	readonly sampleRate?: number
+	/** A context shared with the recorder, so source and capture use one clock. */
+	readonly context?: AudioContext
+	/** Hold the signal until the consumer has finished connecting its nodes. */
+	readonly deferStart?: boolean
+	/** Send a quiet pilot tone until start, so a separate capture clock can observe input. */
+	readonly primeTransport?: boolean
 	/** The length of the generated signal in seconds. 1.5 by default. */
 	readonly totalSeconds?: number
 	/** The frequency of the continuous tone in hertz. 220 by default. */
@@ -165,6 +171,8 @@ export function generateSamples(options: GeneratedInputOptions = {}): Float32Arr
 export interface GeneratedStream {
 	/** The stream a recorder or a meter consumes in place of a microphone. */
 	readonly stream: MediaStream
+	/** Starts the source once, after the consumer connects. */
+	start(): void
 	/** Seconds since the source started, read from this context's clock. */
 	elapsedSeconds(): number
 	/** This context's clock reading in seconds. */
@@ -180,26 +188,50 @@ export async function buildGeneratedStream(
 	options: GeneratedInputOptions = {}
 ): Promise<GeneratedStream> {
 	const settings = resolveInput(options)
-	const context = new AudioContext({ sampleRate: settings.sampleRate })
+	const context = options.context ?? new AudioContext({ sampleRate: settings.sampleRate })
 	await context.resume()
+	return createGeneratedStream(options, context)
+}
+
+/** Connects the generated nodes synchronously when a recorder creates its context. */
+function createGeneratedStream(options: GeneratedInputOptions, context: AudioContext): GeneratedStream {
+	const settings = resolveInput(options)
 	const samples = generateSamples(settings)
-	const buffer = context.createBuffer(1, samples.length, settings.sampleRate)
-	buffer.getChannelData(0).set(samples)
+	// Loop a quiet prefix through the same source node until PCM observes it.
+	const pilotFrames = options.primeTransport ? Math.round(settings.sampleRate / 10) : 0
+	const buffer = context.createBuffer(1, pilotFrames + samples.length, settings.sampleRate)
+	const frames = buffer.getChannelData(0)
+	for (let index = 0; index < pilotFrames; index += 1) {
+		frames[index] = 0.01 * Math.sin(2 * Math.PI * settings.toneHz * index / settings.sampleRate)
+	}
+	frames.set(samples, pilotFrames)
 	const source = context.createBufferSource()
 	source.buffer = buffer
 	const destination = context.createMediaStreamDestination()
 	source.connect(destination)
-	const startedAt = context.currentTime
-	source.start()
+	if (pilotFrames > 0) {
+		source.loop = true
+		source.loopEnd = pilotFrames / settings.sampleRate
+		source.start()
+	}
+	let startedAt: number | null = null
+	const start = (): void => {
+		if (startedAt !== null) return
+		startedAt = context.currentTime
+		if (pilotFrames > 0) source.loop = false
+		else source.start()
+	}
+	if (!options.deferStart) start()
 	return {
 		stream: destination.stream,
-		elapsedSeconds: () => context.currentTime - startedAt,
+		start,
+		elapsedSeconds: () => startedAt === null ? 0 : context.currentTime - startedAt,
 		contextSeconds: () => context.currentTime,
 		stop: () => {
-			source.stop()
+			if (startedAt !== null || pilotFrames > 0) source.stop()
 			source.disconnect()
 			destination.disconnect()
-			void context.close()
+			if (!options.context) void context.close()
 		}
 	}
 }
@@ -208,6 +240,10 @@ export async function buildGeneratedStream(
  * harness calls this before it starts a recorder, so the recorder reads the
  * generated signal instead of a device. */
 export interface GeneratedMicrophone {
+	/** Move the deferred source onto a newly constructed capture context, keeping the granted stream. */
+	bindContext(context: AudioContext): void
+	/** Start the generated signal after the recorder connects. */
+	start(): void
 	/** Seconds since the last built source started. */
 	elapsedSeconds(): number
 	/** Restores getUserMedia and stops the source. */
@@ -228,6 +264,19 @@ export function installGeneratedMicrophone(
 		return current.stream
 	}
 	return {
+		bindContext: (context) => {
+			if (!current) throw new Error("The generated microphone has no granted stream.")
+			const stream = current.stream
+			current.stop()
+			for (const track of stream.getTracks()) {
+				stream.removeTrack(track)
+				track.stop()
+			}
+			const replacement = createGeneratedStream({ ...options, context }, context)
+			for (const track of replacement.stream.getTracks()) stream.addTrack(track)
+			current = { ...replacement, stream }
+		},
+		start: () => current?.start(),
 		elapsedSeconds: () => current?.elapsedSeconds() ?? 0,
 		restore: () => {
 			media.getUserMedia = original

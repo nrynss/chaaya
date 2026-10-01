@@ -20,6 +20,7 @@ afterEach(() => {
 	scope.AudioContext = originalAudioContext
 	scope.AudioWorkletNode = originalWorkletNode
 	vi.unstubAllGlobals()
+	vi.useRealTimers()
 })
 
 /** A track that stays live, so a take keeps running while a check drives it. */
@@ -344,3 +345,60 @@ test("keeping a block under retain false fails the memory pin by design", async 
 	expect(held).toHaveLength(BLOCK_TOTAL)
 	recorder.reset()
 })
+
+/** Holds native startup acknowledgement until a test drives its lifecycle. */
+class PendingMediaRecorder {
+	static constructed: (native: PendingMediaRecorder) => void
+	static isTypeSupported = () => true
+	state = "inactive"
+	mimeType = "audio/webm"
+	onstart: (() => void) | null = null
+	onerror: (() => void) | null = null
+	onstop: (() => void) | null = null
+	ondataavailable: ((event: { data: Blob }) => void) | null = null
+	constructor() { PendingMediaRecorder.constructed(this) }
+	start(): void { this.state = "recording" }
+	stop(): void {
+		this.state = "inactive"
+		queueMicrotask(() => this.onstop?.())
+	}
+}
+
+for (const outcome of ["ready", "error", "reset", "track-ended", "track-lost-before-start", "stopped"] as const) {
+	test(`pending compressed startup settles after ${outcome}`, async () => {
+		if (outcome === "track-lost-before-start") vi.useFakeTimers()
+		const stream = fakeStream(48000)
+		installGrant({ stream })
+		vi.stubGlobal("MediaRecorder", PendingMediaRecorder)
+		const constructed = Promise.withResolvers<PendingMediaRecorder>()
+		PendingMediaRecorder.constructed = constructed.resolve
+		const recorder = new AudioRecorder({ mode: "compressed", autoStopSeconds: 0 })
+		let settled = false
+		const started = recorder.start().then(() => { settled = true })
+		const native = await constructed.promise
+		expect(recorder.state).toBe("requesting")
+		expect(settled).toBe(false)
+		if (outcome === "ready") native.onstart?.()
+		if (outcome === "error") native.onerror?.()
+		if (outcome === "reset") recorder.reset()
+		if (outcome === "stopped") native.stop()
+		if (outcome === "track-ended") {
+			Object.assign(stream.getAudioTracks()[0], { readyState: "ended" })
+			native.onstart?.()
+		}
+		if (outcome === "track-lost-before-start") {
+			Object.assign(stream.getAudioTracks()[0], { readyState: "ended" })
+			await vi.advanceTimersByTimeAsync(250)
+		}
+		await started
+		expect(settled).toBe(true)
+		expect(recorder.state).toBe(outcome === "ready" ? "recording" : outcome === "reset" ? "idle" : "failed")
+		// A late acknowledgement cannot revive a cancelled or failed take.
+		if (outcome !== "ready") {
+			native.onstart?.()
+			await Promise.resolve()
+			expect(recorder.state).toBe(outcome === "reset" ? "idle" : "failed")
+		}
+		recorder.reset()
+	})
+}
