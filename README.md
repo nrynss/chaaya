@@ -95,7 +95,12 @@ suggesting a look.
 
 ## Status
 
-Pre-release.
+Published on [npm](https://www.npmjs.com/package/@nrynss/chaaya) as
+`@nrynss/chaaya`. The current release is `0.2.3`.
+
+```sh
+npm install @nrynss/chaaya
+```
 
 ## License
 
