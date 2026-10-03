@@ -1,6 +1,6 @@
 import { runInEffect } from "./effect.svelte.js"
 import { parseNamedFrame } from "./frame.js"
-import type { CommentFrame, NamedEvent, SseFrame } from "./frame.js"
+import type { CommentFrame, EventFrame, NamedEvent } from "./frame.js"
 import { takeFrames } from "./frame.js"
 import { reconnectDelay, reconnectSettings } from "./reconnect.js"
 import type { ReconnectOptions } from "./reconnect.js"
@@ -32,9 +32,11 @@ export interface FrameLoopOptions {
 	requestInit?: RequestInit
 	/** The reconnect schedule. Omit for the shared default. */
 	reconnect?: ReconnectOptions
-	/** One parsed frame. Comment frames are included. A thrown error is a dropped frame, not a dropped stream. */
-	onFrame: (frame: SseFrame) => FrameDecision
-	/** A comment frame arrived. `lastComment` is already the timestamp. */
+	/** One event frame (`kind: "event"`). Comment frames never arrive here.
+	 * They set `lastComment` and call `onComment`, and there is nothing to
+	 * return for them. A thrown error is a dropped frame, not a dropped stream. */
+	onFrame: (frame: EventFrame) => FrameDecision
+	/** A comment frame arrived. `lastComment` is already the timestamp. The loop does not call `onFrame` for it. */
 	onComment?: (frame: CommentFrame) => void
 	/** Once the connection is live. A throw leaves the stream alone. Call `close()` to end the watch. */
 	catchUp?: () => Promise<void>
@@ -226,7 +228,8 @@ export class FrameLoop {
 		this.#reconnect()
 	}
 
-	/** Apply one frame. A frame the reader cannot parse costs one reading and never the stream. */
+	/** Apply one frame. A frame the reader cannot parse costs one reading and never the stream.
+	 * A comment is liveness only. It never reaches `onFrame`, so it cannot move the cursor or stop the watch. */
 	#dispatch(text: string): void {
 		const parsed = parseNamedFrame(text)
 		if (!parsed.ok) return
@@ -234,6 +237,7 @@ export class FrameLoop {
 		if (frame.kind === "comment") {
 			this.lastComment = Date.now()
 			this.#options.onComment?.(frame)
+			return
 		}
 		let decision: FrameDecision
 		try {

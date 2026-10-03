@@ -58,9 +58,11 @@ Published as `@nrynss/chaaya`.
   not interpreted. The writer emits a frame string. It does not build a
   response. `createEventStream` follows arbitrary named events on that loop.
   It is not a job client. Ids are assumed to strictly climb. A replay at or
-  below the cursor is dropped. An empty `id:` line resets the cursor.
-  `Last-Event-ID` is sent only on reconnect, and only when that cursor is
-  not 0. Comment frames set `lastComment`. The first connect does not send
+  below the cursor is dropped. An empty `id:` line, or `id: 0`, on a kept
+  event resets the cursor. A backend whose ids restart without that reset
+  loses the new frames: they are dropped in silence. `Last-Event-ID` is sent
+  only on reconnect, and only when that cursor is not 0. Comment frames set
+  `lastComment` and do not call `onFrame`. The first connect does not send
   `Last-Event-ID`.
 - `@nrynss/chaaya/audio`: microphone capture in compressed and PCM modes,
   playback through one element unlocked by the first gesture, the

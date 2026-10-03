@@ -30,7 +30,7 @@ describe("named event stream", () => {
 				async () =>
 					new Response(
 						streamOf([
-							": ping\n\n",
+							"id: 9\n: ping\n\n",
 							eventFrame("alpha", 1, '{"n":1}'),
 							"id: bad\n\n",
 							eventFrame("beta", 2, '{"n":2}'),
@@ -59,6 +59,7 @@ describe("named event stream", () => {
 		expect(seen).toEqual(["alpha", "ended"])
 		expect(comments).toEqual(["ping"])
 		expect(stream.lastComment).toEqual(expect.any(Number))
+		expect(stream.events.some((event) => event.name === "ping")).toBe(false)
 		expect(stream.lastEventId).toBe(3)
 		const headers = new Headers(vi.mocked(fetch).mock.calls[0]?.[1]?.headers)
 		expect(headers.get("last-event-id")).toBeNull()

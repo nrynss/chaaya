@@ -87,7 +87,7 @@ When the upload has finished its progress, the last reading can carry the stored
 
 ## Following a stream
 
-The follow loop is `FrameLoop` in core. It fetches the stream, splits frames with `takeFrames`, parses them with `parseNamedFrame`, reconnects, aborts, and records comment frames on `lastComment`. `JobStream` only applies `frameMap`. An adapter does not write that loop again.
+The follow loop is `FrameLoop` in core. It fetches the stream, splits frames with `takeFrames`, parses them with `parseNamedFrame`, reconnects, and aborts. `onFrame` receives only event frames (`kind: "event"`). A comment never arrives there, so a projection returns nothing for it. Comments set `lastComment` and call `onComment`. `JobStream` only applies `frameMap`. An adapter does not write that loop again.
 
 `JobStream` and `createJobStream` are the same stream. `createJobStream(options)` returns `new JobStream(options)`. Adapters and apps may use either. Both take the same options. `frameMap` is required.
 
@@ -114,7 +114,9 @@ A name that is not in the map is ignored. `frameMap` is a plain object's own key
 
 `Accept` is always `text/event-stream`. A different `accept` on `requestInit` does not stick. `signal` on `requestInit` is ignored. The stream owns the abort.
 
-The first request sends no `Last-Event-ID`. A reconnect sends it when the last accepted id is not 0. An accepted frame with no id line leaves that id alone. An empty id line (`id:`) on an accepted frame resets it, and the next reconnect omits the header. An explicit `id: 0` does the same. An ignored frame does not move that id. Comment frames, including Keel heartbeats, never reach `frameMap`.
+The first request sends no `Last-Event-ID`. A reconnect sends it when the last accepted id is not 0. An accepted frame with no id line leaves that id alone. An empty id line (`id:`) on an accepted frame resets it, and the next reconnect omits the header. An explicit `id: 0` does the same. An ignored frame does not move that id. Comment frames, including Keel heartbeats, never reach `onFrame` or `frameMap`, and an id line on a comment does not move the cursor.
+
+Ids are assumed to strictly climb. A backend whose ids restart or repeat must send an empty `id:` line, or an explicit `id: 0`, on a frame the client keeps. That is the reset. If the ids restart without it, the client treats the new frames as replays and drops them with no error. The failure mode is a silent drop. The fix is that empty `id:` line (or `id: 0`) before the ids climb again.
 
 The error on a terminal action uses the shape in [errors.md](errors.md).
 
@@ -170,7 +172,7 @@ stream.attach()
 
 `createEventStream` follows that stream. It sits on the same `FrameLoop` as `JobStream`. It does not copy the read loop. The transport is named SSE over `fetch`. It is not `EventSource`, which hides a refused status and picks its own retry. There is no WebSocket path.
 
-Ids are assumed to strictly climb. A positive id less than or equal to the cursor is a replay and is dropped. An empty `id:` line resets the cursor to 0, so the next positive id is new. An explicit `id: 0` does the same. A frame with no id line is kept and does not move the cursor. The first connect sends no `Last-Event-ID`, even after `prime()`. A reconnect sends it when the cursor is not 0. A comment frame, such as a heartbeat, sets `lastComment` and calls `onComment`. It does not move the cursor and it is not an event.
+Ids are assumed to strictly climb. A positive id less than or equal to the cursor is a replay and is dropped. An empty `id:` line resets the cursor to 0, so the next positive id is new. An explicit `id: 0` does the same. A frame with no id line is kept and does not move the cursor. The first connect sends no `Last-Event-ID`, even after `prime()`. A reconnect sends it when the cursor is not 0. A comment frame, such as a heartbeat, sets `lastComment` and calls `onComment`. It does not call `onFrame`, it is not an event, and it does not move the cursor. A backend whose ids restart or repeat must send an empty `id:` line, or `id: 0`, on a kept event. Otherwise the restarted frames are dropped in silence. That silent drop is the failure mode. The empty `id:` line is the fix.
 
 This example is an inbox, not a job and not a product adapter. The server can be anything that writes `text/event-stream`.
 

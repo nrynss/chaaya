@@ -2,7 +2,7 @@ import type { ChaayaError } from "../error.js"
 import type { JobProgress } from "../progress.js"
 import { FrameLoop } from "../sse/loop.svelte.js"
 import type { FrameDecision } from "../sse/loop.svelte.js"
-import type { NamedEvent, SseFrame } from "../sse/frame.js"
+import type { EventFrame, NamedEvent } from "../sse/frame.js"
 import type { JobCatchUp, JobConnection, JobFrameAction, JobStreamOptions } from "./types.js"
 
 /** Copy defined fields onto the published reading. An omitted field stays. */
@@ -44,8 +44,9 @@ function mergeProgress(base: JobProgress, reading: JobProgress): JobProgress {
  * `ignore`, `progress`, or `terminal` are all ignored. They do not end the
  * watch. `shouldAccept` can refuse a frame before the map runs.
  *
- * Comment frames never reach `frameMap` and do not move Last-Event-ID. The
- * loop still records them on `lastComment` for a view that wants a heartbeat.
+ * Comment frames never reach `onFrame` or `frameMap`, and do not move
+ * Last-Event-ID, even when a comment carries an id line. The loop records
+ * them on `lastComment` for a view that wants a heartbeat.
  */
 export class JobStream {
 	/** The published reading. Fields stay absent until a frame or a catch-up sets them. */
@@ -126,10 +127,9 @@ export class JobStream {
 		if (this.#options.isTerminal?.(reading)) this.close()
 	}
 
-	/** Apply one frame. A comment, a refusal, a missing name, and an ignore do not move Last-Event-ID. */
-	#accept(frame: SseFrame): FrameDecision {
+	/** Apply one event frame. A refusal, a missing name, and an ignore do not move Last-Event-ID. Comments never arrive here. */
+	#accept(frame: EventFrame): FrameDecision {
 		if (this.#loop.stopped) return { keep: false }
-		if (frame.kind !== "event") return { keep: false }
 		const named: NamedEvent = { id: frame.id, name: frame.name, data: frame.data }
 		if (frame.idSet) named.idSet = true
 		if (frame.resetId) named.resetId = true

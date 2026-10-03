@@ -147,8 +147,10 @@
 	</p>
 	<p>
 		Ids strictly climb. A positive id at or below the cursor is a replay and is dropped. An empty
-		<code>id:</code> line resets the cursor. The first connect sends no <code>Last-Event-ID</code>. A
-		reconnect sends it when the cursor is not 0. A comment frame sets <code>lastComment</code>. The worked
+		<code>id:</code> line, or <code>id: 0</code>, on a kept event resets the cursor. A backend whose ids
+		restart without that reset drops the new frames in silence. The first connect sends no
+		<code>Last-Event-ID</code>. A reconnect sends it when the cursor is not 0. A comment frame sets
+		<code>lastComment</code> and does not call <code>onFrame</code>. The worked
 		example is an inbox on any <code>text/event-stream</code> server, in <code>docs/job-progress.md</code>.
 		It is not a job and it names no product adapter.
 	</p>

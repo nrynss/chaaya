@@ -14,14 +14,15 @@ export interface NamedEvent {
 	resetId?: boolean
 }
 
-/** A comment frame, such as a heartbeat. It carries no event name. */
+/** A comment frame, such as a heartbeat. It carries no event name.
+ * The follow loop does not hand it to `onFrame` and does not move Last-Event-ID for it. */
 export interface CommentFrame {
 	kind: "comment"
 	id: number
 	comment: string
-	/** True when the frame included an id line. */
+	/** True when the frame included an id line. The loop does not apply it. */
 	idSet?: boolean
-	/** True when that id line was empty. `id` is 0. That resets Last-Event-ID. */
+	/** True when that id line was empty. `id` is 0. A comment still does not reset Last-Event-ID. */
 	resetId?: boolean
 }
 

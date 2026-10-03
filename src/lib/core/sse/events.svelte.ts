@@ -1,4 +1,4 @@
-import type { NamedEvent, SseFrame } from "./frame.js"
+import type { EventFrame, NamedEvent } from "./frame.js"
 import { FrameLoop, isReplayId } from "./loop.svelte.js"
 import type { FrameDecision, StreamConnection } from "./loop.svelte.js"
 import type { ReconnectOptions } from "./reconnect.js"
@@ -18,7 +18,7 @@ export interface EventStreamOptions {
 	terminal?: readonly string[]
 	/** Read events the stream may have missed. It runs once per open connection. */
 	catchUp?: () => Promise<readonly NamedEvent[] | void>
-	/** Run for each accepted event. Comment frames do not call it. */
+	/** Run for each accepted event. A comment frame never arrives here. It calls `onComment`. */
 	onFrame?: (event: NamedEvent) => void
 	/** Run when a comment frame arrives, including a heartbeat. The payload is the comment text. */
 	onComment?: (comment: string) => void
@@ -78,7 +78,7 @@ export class FrameBuffer {
  * the cursor is a replay and is dropped. An empty `id:` line (`resetId`)
  * clears the cursor, so the next positive id is new. An explicit `id: 0`
  * does the same. A frame with no id line is kept and does not move the
- * cursor. Comment frames update `lastComment` and do not move the cursor.
+ * cursor. Comment frames update `lastComment` and call `onComment`. They do not call `onFrame`, they are not events, and they do not move the cursor, even when the comment carries an id line.
  */
 export function createEventStream(url: string, options: EventStreamOptions = {}): EventStream {
 	return new NamedEventStream(url, options)
@@ -144,8 +144,7 @@ class NamedEventStream implements EventStream {
 		this.#loop.close()
 	}
 
-	#onWire(frame: SseFrame): FrameDecision {
-		if (frame.kind === "comment") return { keep: false }
+	#onWire(frame: EventFrame): FrameDecision {
 		const named: NamedEvent = { id: frame.id, name: frame.name, data: frame.data }
 		if (frame.idSet) named.idSet = true
 		if (frame.resetId) named.resetId = true
