@@ -126,3 +126,7 @@ import { actionStatus, toActionData } from "@nrynss/chaaya/sveltekit"
 const data = toActionData(cause)
 return fail(actionStatus(cause), { ...data, name: String(formData.get("name") ?? "") })
 ```
+
+## Related
+
+A `+server.ts` that emits job frames uses [`createJobStreamResponse`](job-stream-response.md) on the same export.
