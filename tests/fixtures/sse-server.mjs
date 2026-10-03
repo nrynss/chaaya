@@ -221,8 +221,23 @@ function push(url, response) {
 	json(response, { pushed: true })
 }
 
+/** Answer a cross-origin preflight. The job client sends Last-Event-ID on
+ * reconnect. That header is not CORS-safelisted, so the browser asks before
+ * the second GET. Counting that OPTIONS as a stream would consume the drop
+ * plan and the reconnect would never open. */
+function preflight(response) {
+	response.writeHead(204, {
+		"access-control-allow-origin": "*",
+		"access-control-allow-methods": "GET, OPTIONS",
+		"access-control-allow-headers": "last-event-id, authorization",
+		"access-control-max-age": "600"
+	})
+	response.end()
+}
+
 const server = createServer(async (request, response) => {
 	try {
+		if (request.method === "OPTIONS") return preflight(response)
 		const url = new URL(request.url ?? "/", "http://127.0.0.1")
 		if (url.pathname === "/events") return events(request, response)
 		if (url.pathname === "/state") return await state(response)
