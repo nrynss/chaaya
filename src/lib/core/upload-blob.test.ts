@@ -87,6 +87,31 @@ describe("one-shot upload", () => {
 		expect(fetchMock).not.toHaveBeenCalled()
 	})
 
+	test("a size that is not a byte length is refused before maxBytes", async () => {
+		const fetchMock = vi.fn()
+		vi.stubGlobal("fetch", fetchMock)
+		let opened = 0
+		class FakeXHR {
+			open() {
+				opened += 1
+			}
+			send() {}
+			abort() {}
+			setRequestHeader() {}
+		}
+		vi.stubGlobal("XMLHttpRequest", FakeXHR)
+		const form = new FormData()
+		form.append("note", "yes")
+		for (const size of [Number.NaN, -1, Number.POSITIVE_INFINITY]) {
+			await expect(uploadBlob("/blob", form, { maxBytes: 10, size })).rejects.toThrow(RangeError)
+			await expect(uploadBlobWithProgress("/blob", form, { maxBytes: 10, size })).rejects.toThrow(
+				"size must be a finite, non-negative byte length",
+			)
+		}
+		expect(fetchMock).not.toHaveBeenCalled()
+		expect(opened).toBe(0)
+	})
+
 	test("an explicit size lets maxBytes apply to FormData on both entry points", async () => {
 		const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }))
 		vi.stubGlobal("fetch", fetchMock)

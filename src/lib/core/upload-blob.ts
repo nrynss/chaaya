@@ -54,7 +54,7 @@ export interface BlobUploadOptions {
 	 * Otherwise this throws `UploadSizeUnknown` instead of skipping the check. */
 	maxBytes?: number
 	/** Byte length the caller already knows. Required when `maxBytes` is set on FormData.
-	 * A Blob uses its own `size` and ignores this. */
+	 * Must be a finite, non-negative length. A Blob uses its own `size` and ignores this. */
 	size?: number
 	/** Bytes handed to the socket, and the total when one is known.
 	 * `uploadBlob` calls this once, after the response, with the known size (0 when FormData has no `size`).
@@ -142,6 +142,9 @@ export function prepareUpload(body: Blob | FormData, options: BlobUploadOptions)
 	const limit = options.maxBytes
 	const known = body instanceof Blob ? body.size : options.size
 	if (limit !== undefined && known === undefined) throw new UploadSizeUnknown()
+	if (limit !== undefined && known !== undefined && (!Number.isFinite(known) || known < 0)) {
+		throw new RangeError("size must be a finite, non-negative byte length")
+	}
 	if (limit !== undefined && known !== undefined && known > limit) throw new UploadTooLarge(known, limit)
 	const headers = new Headers(options.headers)
 	let payload: FormData | Blob
