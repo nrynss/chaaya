@@ -128,6 +128,8 @@ suggesting a look.
   is the adapter for one backend. The route matches the `@nrynss/chaaya/auth` export.
 - [adapters](/docs/adapters): how to write `frameMap` and `parseError` without
   importing Keel. The copy-pasteable example is `docs/examples/plain-adapter.ts`.
+- [form-actions](/docs/form-actions): map `ApiError` into SvelteKit `fail` /
+  `error` data via the shared `readApiError` path.
 - [upload](/docs/upload): one-shot `uploadBlob` beside the chunked `Uploader`.
 - [job progress](/docs/job-progress): how any pipeline maps stages and counters
   onto `JobProgress`, and how `JobStream` applies a frame map. The follow
