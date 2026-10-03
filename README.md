@@ -63,7 +63,7 @@ Published as `@nrynss/chaaya`.
   module does not touch `document`. `apply({})` leaves `credentials` unset.
   Pass `credentials: "include"` to opt in. Keel's adapter is `keelGate` on
   `@nrynss/chaaya/keel`, and `src/lib/adapters/keel/gate.ts` is the reference
-  shape. The adapter guide (#29) should point there when it is written.
+  shape. The adapter guide is [Writing an adapter](#writing-an-adapter).
 - `@nrynss/chaaya/sse`: the shared frame splitter, named-event field parser,
   `formatNamedFrame` writer, reconnect schedule, and `FrameLoop`. Payloads are
   not interpreted. The writer emits a frame string. It does not build a
@@ -99,7 +99,19 @@ Published as `@nrynss/chaaya`.
   It holds the error envelope, job event parser, `keelFrameMap`, a
   pre-wired `JobStream` wrapping core with `keelFrameMap`, and the chunked
   upload protocol. The follow loop stays in core. Its `api` is the generic
-  client with Keel's envelope parser already set.
+  client with Keel's envelope parser already set. It is one adapter, not the
+  contract. See [Writing an adapter](#writing-an-adapter).
+
+## Writing an adapter
+
+Core stays backend-agnostic. An adapter supplies `JobStreamOptions.frameMap`
+and an `ApiErrorParser` (`parseError` on `createApi`). Optional hooks are
+`shouldAccept`, `fetchState`, `prepareState`, `isTerminal`, and `requestInit`.
+`ok`, `fail`, `isRecord`, and `decodeJson` are the decoder primitives. The
+worked example that does not import Keel is
+[docs/adapters.md](docs/adapters.md). `keelFrameMap` and `keelErrorParser` are
+the same hooks aimed at Keel. `keelGate` in `src/lib/adapters/keel/gate.ts` is
+the passcode shape. Copy that, do not import it, when the backend is not Keel.
 
 ## Docs
 
@@ -114,6 +126,8 @@ suggesting a look.
 - [api](/docs/api): the fetch client. The example passes the Keel error parser.
 - [auth](/docs/auth): a passcode on a caller-named header, and how `keelGate`
   is the adapter for one backend. The route matches the `@nrynss/chaaya/auth` export.
+- [adapters](/docs/adapters): how to write `frameMap` and `parseError` without
+  importing Keel. The copy-pasteable example is `docs/examples/plain-adapter.ts`.
 - [upload](/docs/upload): one-shot `uploadBlob` beside the chunked `Uploader`.
 - [job progress](/docs/job-progress): how any pipeline maps stages and counters
   onto `JobProgress`, and how `JobStream` applies a frame map. The follow
