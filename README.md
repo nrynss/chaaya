@@ -75,6 +75,13 @@ Published as `@nrynss/chaaya`.
   only on reconnect, and only when that cursor is not 0. Comment frames set
   `lastComment` and do not call `onFrame`. The first connect does not send
   `Last-Event-ID`.
+- `@nrynss/chaaya/upload`: `uploadBlob` (fetch, one progress call after
+  settle) and `uploadBlobWithProgress` (XMLHttpRequest, socket progress).
+  Neither is on `@nrynss/chaaya/core`. `credentials` is one option.
+  XMLHttpRequest maps `"include"` to `withCredentials`, which only affects
+  cross-origin requests. `credentials: "omit"` and `formData: false` are the
+  presigned PUT. `maxBytes` applies to a blob. On `FormData` it throws unless
+  you pass `size`. This is not `Uploader` and it is not audio-specific.
 - `@nrynss/chaaya/audio`: microphone capture in compressed and PCM modes,
   playback through one element unlocked by the first gesture, the
   PcmStreamPlayer for arriving blocks, and live levels and waveform peaks.
@@ -107,6 +114,7 @@ suggesting a look.
 - [api](/docs/api): the fetch client. The example passes the Keel error parser.
 - [auth](/docs/auth): a passcode on a caller-named header, and how `keelGate`
   is the adapter for one backend. The route matches the `@nrynss/chaaya/auth` export.
+- [upload](/docs/upload): one-shot `uploadBlob` beside the chunked `Uploader`.
 - [job progress](/docs/job-progress): how any pipeline maps stages and counters
   onto `JobProgress`, and how `JobStream` applies a frame map. The follow
   loop stays in core.
