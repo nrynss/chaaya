@@ -1,6 +1,6 @@
 {
   "name": "@nrynss/chaaya",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "A Svelte 5 kit of behaviour, not looks. Each app keeps its own visual identity.",
   "license": "Apache-2.0",
   "private": false,

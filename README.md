@@ -112,11 +112,11 @@ suggesting a look.
 - [testing](/docs/testing): the contrast gate and the accessibility gate run
   against the page itself.
 
-## Migration from 0.2.4
+## Migration from 0.2.4 to 0.3.0
 
-This split is breaking. Generic paths no longer speak Keel.
+This split is breaking. The package version in this tree is `0.3.0`. Generic paths no longer speak Keel.
 
-| 0.2.4 | Now |
+| 0.2.4 | 0.3.0 |
 | --- | --- |
 | `@nrynss/chaaya/wire` | `@nrynss/chaaya/keel` |
 | `@nrynss/chaaya/job` | `@nrynss/chaaya/keel` |
@@ -129,12 +129,41 @@ is still `http_error`.
 ## Status
 
 Published on [npm](https://www.npmjs.com/package/@nrynss/chaaya) as
-`@nrynss/chaaya`. The current release is `0.2.4`. The adapter split is not
-in that release yet.
+`@nrynss/chaaya`. The current npm release is `0.2.4`. This tree is `0.3.0`
+and is not published yet.
 
 ```sh
 npm install @nrynss/chaaya
 ```
+
+## Releases
+
+`api/<version>/` is the frozen public declarations for a version that has
+been tagged. It is history, not a copy that every pull request refreshes.
+`api/0.1.0` through `api/0.2.4` stay as published. Nothing in those
+directories is rewritten.
+
+Until `api/0.3.0/` exists, the gate does not diff `dist` against a freeze.
+It does fail if a published record changes, and it fails if `package.json`
+is not strictly newer than every frozen record. The packed tarball is still
+typechecked. Once `api/<version>/` exists, it must match the build, and a
+non-breaking bump must keep the previous record's public files and exports.
+Before `1.0.0` a minor bump may remove declarations (`0.2.4` to `0.3.0`).
+A patch may not. From `1.0.0` only a major bump may remove them.
+
+Freeze at the tag, from a clean tree, after the gate has passed:
+
+```sh
+./tools/check.sh
+./tools/freeze-api.sh
+git add api/0.3.0
+git commit -m "Freeze the 0.3.0 declarations"
+git tag -a v0.3.0 -m "0.3.0"
+```
+
+`tools/freeze-api.sh` copies the public `.d.ts` files out of `dist`. It
+does not commit and it does not tag. Tagging before that commit would point
+the tag at a tree with no snapshot.
 
 ## License
 
