@@ -1,5 +1,7 @@
 # Errors
 
+Where errors sit in the kit's coverage is [scope.md](scope.md).
+
 Core does not parse an error envelope. Each adapter brings its own parser. The shape below is a target, not a wire format. Nothing in core rejects a payload that looks different.
 
 ```ts

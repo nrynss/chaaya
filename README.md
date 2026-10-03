@@ -30,6 +30,25 @@ is not Keel does not import it. Nothing in this package names a consumer app.
 Accessible primitives such as dialogs and tooltips come from
 [Bits UI](https://bits-ui.com), not from this package.
 
+## Protocol scope
+
+What the kit covers, and what it does not:
+
+- **Streaming:** named SSE over `fetch`. Reader/writer in core. No WebSocket.
+  No native `EventSource`.
+- **Job loop:** `JobStream` for a job-shaped stream; `createEventStream` for
+  arbitrary named events. Both sit on `FrameLoop`.
+- **Last-Event-ID:** sent on reconnect when the cursor is not 0. A server may
+  ignore it and start from now.
+- **Upload:** chunked `Uploader` (adapter) and one-shot `uploadBlob`. No
+  resumable direct-to-storage multipart yet.
+- **Errors:** one typed `ApiError`. Envelope parsing is the adapter's
+  (`ApiErrorParser`).
+- **Framework:** Svelte 5 only, for now.
+
+The written page is [docs/scope.md](docs/scope.md).
+
+
 Published as `@nrynss/chaaya`.
 
 ## Exports
@@ -119,6 +138,7 @@ The routes under `/docs` show each export with a working example. Every page
 is styled only by the reference stylesheet, so the behaviour shows without
 suggesting a look.
 
+- [scope](/docs/scope): what Chaaya covers (SSE over fetch, upload shapes) and what it does not.
 - [tokens](/docs/tokens): the fixed role names and a checker that reports a
   role a theme block leaves out.
 - [theme](/docs/theme): the three-state theme mechanism and the head script

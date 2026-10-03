@@ -1,5 +1,7 @@
 # Job progress
 
+The transport contract (SSE over fetch, no WebSocket, Last-Event-ID rules) is [scope.md](scope.md).
+
 `JobProgress` is the reading a view renders for long-running work. The type lives in `@nrynss/chaaya/core`. It lists no event names and no terminal set.
 
 Core does not map a wire format. An adapter maps its backend snapshot onto this shape. An app maps its own domain onto the same shape. Both mappings stay outside core.
