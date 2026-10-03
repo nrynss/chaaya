@@ -45,7 +45,16 @@ function shareable(value: string): boolean {
 	return value.length > 0 && !/[\r\n\0]/.test(value)
 }
 
-/** Read one cookie from a cookie header. An absent cookie reads as empty. */
+/** Drop the surrounding quotes of an RFC 6265 quoted-string. The octets inside
+ * stay as they are. An unquoted value is unchanged, including one that merely
+ * contains a quote. */
+function unquoteCookie(value: string): string {
+	if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) return value.slice(1, -1)
+	return value
+}
+
+/** Read one cookie from a cookie header. An absent cookie reads as empty.
+ * A value written as a quoted-string comes back without the quotes. */
 export function readCookie(header: string, name: string): string {
 	for (const part of header.split(";")) {
 		const trimmed = part.trim()
@@ -54,9 +63,9 @@ export function readCookie(header: string, name: string): string {
 		if (trimmed.slice(0, at) !== name) continue
 		const raw = trimmed.slice(at + 1)
 		try {
-			return decodeURIComponent(raw)
+			return unquoteCookie(decodeURIComponent(raw))
 		} catch {
-			return raw
+			return unquoteCookie(raw)
 		}
 	}
 	return ""
@@ -66,11 +75,13 @@ export function readCookie(header: string, name: string): string {
  * The passcode a Set-Cookie line names, when this runtime still exposes that
  * header.
  *
- * Browser fetch forbids `Set-Cookie`. There `getSetCookie` is missing and
- * `get("set-cookie")` is null, so this returns undefined. The branch below is
- * for Node and undici, which still surface the header. It does not run in a
- * browser. A browser stores the cookie in its own jar, which a `document`
- * jar then reads, or the JSON body carries `passcode`.
+ * Browsers implement `getSetCookie`, but a fetch response returns `[]` from
+ * it. `Set-Cookie` is a forbidden response-header name, so the browser strips
+ * it before script sees it, and `get("set-cookie")` is null for the same
+ * reason. This then returns undefined. Node and undici still surface the
+ * header, and that is the branch that returns a value. A browser stores the
+ * cookie in its own jar, which a `document` jar then reads, or the JSON body
+ * carries `passcode`.
  */
 export function readSetCookie(headers: Headers, name: string): string | undefined {
 	const listed = typeof headers.getSetCookie === "function" ? headers.getSetCookie() : []
@@ -169,11 +180,13 @@ export class GatePasscode {
 	/**
 	 * Store a passcode a response exposed.
 	 *
-	 * A Set-Cookie line wins only when this runtime still exposes that header
-	 * (Node, undici). Browser fetch hides it, so this does not read it there.
-	 * The JSON member `passcode` is the path that works in a browser. If the
-	 * browser stored the cookie itself, the next `value` read sees it through
-	 * a `document` jar without this method.
+	 * A Set-Cookie line wins when this runtime still exposes that header
+	 * (Node, undici), and it wins over a `passcode` member in the body when
+	 * both are present. Browser fetch hides the header: `getSetCookie()` is
+	 * `[]` and `get("set-cookie")` is null, because `Set-Cookie` is a
+	 * forbidden response-header name. The JSON member `passcode` is the path
+	 * that works in a browser. If the browser stored the cookie itself, the
+	 * next `value` read sees it through a `document` jar without this method.
 	 */
 	remember(response: Response, body?: unknown): boolean {
 		const fromCookie = readSetCookie(response.headers, this.cookieName)

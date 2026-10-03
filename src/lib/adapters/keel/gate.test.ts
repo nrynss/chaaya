@@ -15,6 +15,9 @@ describe("keel gate", () => {
 		expect(new Headers(gate.apply().headers).get("X-Passcode")).toBe("open-sesame")
 		const custom = keelGate({ headerName: "X-Other", cookieName: "other" })
 		expect(custom.headerName).toBe("X-Other")
+		const blank = keelGate({ headerName: "", cookieName: "" })
+		expect(blank.headerName).toBe(keelPasscodeHeader)
+		expect(blank.cookieName).toBe(keelPasscodeCookie)
 	})
 
 	test("passcode_required from the Keel envelope is a GateError", async () => {

@@ -24,7 +24,8 @@
 		passcode gate. <code>GatePasscode</code> sends a caller-named header and cookie. It
 		names no backend. An adapter is a function that fills those names. <code>keelGate</code> on
 		<code>@nrynss/chaaya/keel</code> fills <code>X-Passcode</code>, the cookie <code>passcode</code>, and the
-		code <code>passcode_required</code>.
+		code <code>passcode_required</code>. An empty <code>headerName</code> or <code>cookieName</code> on
+		<code>keelGate</code> uses that default. <code>GatePasscode</code> throws on an empty name.
 	</p>
 	<p>
 		<code>authCodes</code> is a plain array checked with <code>includes</code>. A code named
@@ -39,9 +40,12 @@
 	</p>
 	<p>
 		Importing the module does not touch <code>document</code>. Pass <code>jar: document</code> only in the
-		browser. Omit the jar under SSR. Browser fetch hides <code>Set-Cookie</code>, so
-		<code>remember()</code> does not read that header there. Node and undici still do. In a browser, use the JSON
-		member <code>passcode</code>, or read the cookie the browser stored.
+		browser. Omit the jar under SSR. Browsers have <code>getSetCookie</code>, but a fetch response returns
+		<code>[]</code> because <code>Set-Cookie</code> is a forbidden response-header name, and
+		<code>get("set-cookie")</code> is null. <code>remember()</code> does not read that header there. Node and
+		undici still do, and a <code>Set-Cookie</code> line wins over a body <code>passcode</code> when both exist.
+		A quoted cookie value is stored without its quotes. In a browser, use the JSON member
+		<code>passcode</code>, or read the cookie the browser stored.
 	</p>
 	<nav aria-label="Pieces"><a href={resolve("/docs")}>back</a></nav>
 </main>

@@ -9,7 +9,9 @@ export const keelPasscodeCookie = "passcode"
 
 /** A gate passcode with Keel's default header, cookie, and passcode_required code.
  * This is the canonical adapter. Copy it for another backend.
- * `GatePasscode` stays generic and does not know these names. */
+ * `GatePasscode` stays generic and does not know these names.
+ * An empty string for `headerName` or `cookieName` means the Keel default.
+ * `GatePasscode` throws on that empty string. This adapter substitutes. */
 export function keelGate(options: Partial<GateOptions> = {}): GatePasscode {
 	return new GatePasscode({
 		headerName: options.headerName || keelPasscodeHeader,

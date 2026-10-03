@@ -51,9 +51,10 @@ describe("gate passcode", () => {
 
 	test("remember keeps a Set-Cookie value where the runtime still exposes it", () => {
 		const helper = gate()
-		const fromCookie = new Response("{}", { headers: { "set-cookie": "app_gate=open-sesame; Path=/" } })
+		const fromCookie = new Response("{}", { headers: { "set-cookie": 'app_gate="open-sesame"; Path=/' } })
+		expect(readCookie('app_gate="open-sesame"', cookieName)).toBe("open-sesame")
 		expect(readSetCookie(fromCookie.headers, cookieName)).toBe("open-sesame")
-		expect(helper.remember(fromCookie)).toBe(true)
+		expect(helper.remember(fromCookie, { passcode: "from-body" })).toBe(true)
 		expect(helper.value).toBe("open-sesame")
 	})
 
@@ -63,6 +64,9 @@ describe("gate passcode", () => {
 			headers: {
 				get() {
 					return null
+				},
+				getSetCookie() {
+					return []
 				},
 			},
 		} as unknown as Response

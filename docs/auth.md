@@ -34,13 +34,13 @@ import { apiWithKeelGate, keelGate } from "@nrynss/chaaya/keel"
 const call = apiWithKeelGate(keelGate())
 ```
 
-`keelGate` uses header `X-Passcode`, cookie `passcode`, and the code `passcode_required`. Override any of them by passing options. The generic class never mentions those strings.
+`keelGate` uses header `X-Passcode`, cookie `passcode`, and the code `passcode_required`. Override any of them by passing options. An empty string for `headerName` or `cookieName` uses that default. `GatePasscode` throws on an empty name instead. The generic class never mentions those strings.
 
 ## Browser and server
 
 Importing the module does not touch `document`. Pass `jar: document` only in the browser, after the page exists. On the server, omit `jar`. Memory still holds a value you `set` in that process, and `apply()` still sets the header. There is no `document.cookie` under SSR.
 
-`remember()` stores a passcode a response exposed. Browser `fetch` forbids the `Set-Cookie` response header, so `getSetCookie` is missing and `get("set-cookie")` is null. That branch does nothing in a browser. It works under Node and undici, which still surface the header. In a browser, store the JSON member `passcode`, or let the browser keep the cookie and read it later through a `document` jar.
+`remember()` stores a passcode a response exposed. Browsers implement `Headers.getSetCookie`, and a fetch response returns `[]` from it, because `Set-Cookie` is a forbidden response-header name and the browser strips it before script sees it. `get("set-cookie")` is null for the same reason. That branch does nothing in a browser. It works under Node and undici, which still surface the header. When both a `Set-Cookie` line and a `passcode` member are present, the cookie wins. In a browser, store the JSON member `passcode`, or let the browser keep the cookie and read it later through a `document` jar. A cookie value written as an RFC 6265 quoted-string is stored without the surrounding quotes.
 
 `apply({})` leaves `credentials` unset. Pass `credentials: "include"` when the cookie must be sent. Pass `credentials: "omit"` to send none.
 
