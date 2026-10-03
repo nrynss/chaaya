@@ -18,8 +18,9 @@ is not Keel does not import it. Nothing in this package names a consumer app.
 - **Audio.** Microphone capture and playback with seeking. Live levels and
   waveform peaks.
 - **Server-sent events.** A frame reader, a frame writer, and a reconnect
-  schedule that keep whatever event name the server sent. `JobStream` follows
-  one stream: the caller supplies a frame map, and the loop stays in core.
+  schedule that keep whatever event name the server sent. `JobStream` and
+  `createJobStream` follow one stream: the caller supplies a frame map, and
+  the loop stays in core.
   The writer emits a frame string. It does not build an HTTP response.
 - **API client.** One fetch wrapper. A failed response is a typed error. The
   caller supplies a parser when a backend has an error envelope. Timeout and
@@ -35,8 +36,9 @@ Published as `@nrynss/chaaya`.
 - `@nrynss/chaaya`: the package name.
 - `@nrynss/chaaya/core`: the generic contracts. `ApiClient`, the parse
   helpers (`ok`, `fail`, `isRecord`, `decodeJson`) for adapter authors, the
-  `SseFrame` reader and `formatNamedFrame` writer, `JobStream` with a
-  `frameMap`, the `JobProgress` shape, `ChaayaError`, and the chunked
+  `SseFrame` reader and `formatNamedFrame` writer, `JobStream` and
+  `createJobStream` with a required `frameMap`, the `JobProgress` shape,
+  `ChaayaError`, and the chunked
   `Uploader` interface. No backend envelope, event names, upload protocol,
   or auth. One-shot upload is not `Uploader`.
 - `@nrynss/chaaya/tokens`: the fixed role names and a checker that reports a
@@ -65,10 +67,10 @@ Published as `@nrynss/chaaya`.
 - `@nrynss/chaaya/testing`: a contrast gate and an accessibility gate a
   consumer points at its own stylesheet and container.
 - `@nrynss/chaaya/keel`: the Keel adapter, checked against Keel `v0.4.0`.
-  It holds the error envelope, job event parser, `keelFrameMap`, the job
-  stream, and the chunked upload protocol. The job stream is the core loop
-  with that map. Its `api` is the generic client with Keel's envelope
-  parser already set.
+  It holds the error envelope, job event parser, `keelFrameMap`, a
+  pre-wired `JobStream` wrapping core with `keelFrameMap`, and the chunked
+  upload protocol. The follow loop stays in core. Its `api` is the generic
+  client with Keel's envelope parser already set.
 
 ## Docs
 
@@ -82,8 +84,9 @@ suggesting a look.
   that paints the stored mode before first paint.
 - [api](/docs/api): the fetch client. The example passes the Keel error parser.
 - [job progress](/docs/job-progress): how any pipeline maps stages and counters
-  onto `JobProgress`, and how `JobStream` applies a frame map. The same
-  guidance is in [docs/job-progress.md](docs/job-progress.md).
+  onto `JobProgress`, and how `JobStream` applies a frame map. The follow
+  loop stays in core. The same guidance is in
+  [docs/job-progress.md](docs/job-progress.md).
 - [errors](docs/errors.md): the `ChaayaError` shape adapter authors can aim at.
 - [wire](/docs/wire): the Keel adapter's error envelope and job event parsers.
 - [job](/docs/job): the Keel job stream.

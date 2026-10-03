@@ -120,10 +120,16 @@
 	<pre data-testid="upload">{show(upload)}</pre>
 	<h2>Stream</h2>
 	<p>
-		<code>JobStream</code> in <code>@nrynss/chaaya/core</code> reads the event stream and publishes one
-		<code>JobProgress</code>. A <code>frameMap</code> turns each event name into an update or a terminal.
-		A name that is not in the map is ignored. The same page's guidance is in
-		<code>docs/job-progress.md</code>.
+		The follow loop lives in <code>@nrynss/chaaya/core</code>. It fetches the stream, splits frames with
+		<code>takeFrames</code>, parses them with <code>parseNamedFrame</code>, applies <code>frameMap</code>,
+		reconnects, aborts, and catches up. An adapter does not write that loop again.
+	</p>
+	<p>
+		<code>JobStream</code> and <code>createJobStream</code> are the same stream. Pass a required
+		<code>frameMap</code>. A name that is not in the map is ignored. Optional <code>shouldAccept</code>,
+		<code>isTerminal</code>, and <code>fetchState</code> stay on the options. A Rust server, or any other
+		server that speaks <code>text/event-stream</code>, supplies that map. It does not reimplement the read
+		loop. The example is in <code>docs/job-progress.md</code>.
 	</p>
 	<h2>Named events</h2>
 	<p>

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 import type { JobProgress } from "../progress"
 import type { JobFrameAction, JobStreamOptions } from "./types"
 import type { NamedEvent } from "../sse/frame"
+import { createJobStream } from "./index"
 import { JobStream } from "./job.svelte"
 
 function frame(name: string, id: number, data: string): string {
@@ -52,6 +53,15 @@ afterEach(() => {
 })
 
 describe("core job stream", () => {
+	test("createJobStream returns a JobStream for the same options", () => {
+		const given = options()
+		const stream = createJobStream(given)
+		expect(stream).toBeInstanceOf(JobStream)
+		expect(stream.connection).toBe("connecting")
+		expect(stream.progress).toEqual({})
+		stream.close()
+	})
+
 	test("progress merges defined fields and a missing name is ignored", async () => {
 		vi.stubGlobal(
 			"fetch",

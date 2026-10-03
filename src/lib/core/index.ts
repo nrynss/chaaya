@@ -8,7 +8,7 @@
 export { ApiError, api, createApi } from "./api.js"
 export type { ApiClient, ApiClientOptions, ApiErrorParser, ApiFailureBody, ApiRequestInit } from "./api.js"
 export type { ChaayaError } from "./error.js"
-export { JobStream } from "./job/index.js"
+export { JobStream, createJobStream } from "./job/index.js"
 export type { JobConnection, JobFrameAction, JobFrameHandler, JobStreamOptions } from "./job/index.js"
 export { decodeJson, fail, isRecord, ok } from "./result.js"
 export type { ParseFailure, ParseResult } from "./result.js"

@@ -87,13 +87,75 @@ When the upload has finished its progress, the last reading can carry the stored
 
 ## Following a stream
 
-`JobStream` in `@nrynss/chaaya/core` reads a `text/event-stream`, reconnects when an open stream drops, and publishes one `JobProgress`. The caller passes a `frameMap`. Each event name returns an action:
+The follow loop lives in core. It fetches the stream, splits frames with `takeFrames`, parses them with `parseNamedFrame`, applies `frameMap`, reconnects, aborts, and catches up. An adapter does not write that loop again.
+
+`JobStream` and `createJobStream` are the same stream. `createJobStream(options)` returns `new JobStream(options)`. Adapters and apps may use either. Both take the same options. `frameMap` is required.
+
+Import them from `@nrynss/chaaya/core`:
+
+```ts
+import { JobStream, createJobStream } from "@nrynss/chaaya/core"
+```
+
+Each event name in the map returns an action:
 
 - `ignore` drops the frame.
 - `progress` merges the reading. A field that is present overwrites. A field that is absent stays.
 - `terminal` ends the watch. It may also carry a reading and an error.
 
-A name that is not in the map is ignored. The loop, the backoff, and the abort handling stay in core. An adapter ships the map for its backend. An app can ship its own. The error on a terminal action uses the shape in [errors.md](errors.md).
+A name that is not in the map is ignored. Optional hooks stay on the options, not in a second loop:
+
+- `shouldAccept` refuses a frame before the map runs.
+- `fetchState` reads a snapshot once the stream is live, so a late join can catch up.
+- `isTerminal` says whether that catch-up reading ends the watch.
+
+The error on a terminal action uses the shape in [errors.md](errors.md).
+
+### Another backend
+
+A Rust server, or any other server that speaks `text/event-stream`, does not get its own client loop. The page imports `JobStream` or `createJobStream` and supplies a map for that server's event names. Reconnect and abort stay options on the same call.
+
+```ts
+import { createJobStream, type JobFrameAction, type NamedEvent } from "@nrynss/chaaya/core"
+
+function onFrame(frame: NamedEvent): JobFrameAction {
+  const data = JSON.parse(frame.data) as {
+    stage?: string
+    current?: number
+    total?: number
+  }
+  if (frame.name === "done") return { kind: "terminal", reading: { status: "done" } }
+  if (frame.name === "error") {
+    return {
+      kind: "terminal",
+      reading: { status: "error" },
+      error: { code: "failed", message: "stopped" },
+    }
+  }
+  return {
+    kind: "progress",
+    reading: {
+      stage: data.stage,
+      current: data.current,
+      total: data.total,
+      status: "running",
+    },
+  }
+}
+
+const stream = createJobStream({
+  url: "/jobs/1/events",
+  reconnect: { baseMs: 500, maxMs: 8000, attempts: 6 },
+  frameMap: {
+    progress: onFrame,
+    done: onFrame,
+    error: onFrame,
+  },
+})
+stream.attach()
+```
+
+`new JobStream({ url, frameMap, reconnect })` is the same call. The example names `progress`, `done`, and `error` only. It does not reimplement fetch, frame splitting, or backoff.
 
 ## When not to use this shape
 
@@ -102,7 +164,8 @@ A name that is not in the map is ignored. The loop, the backoff, and the abort h
 ## Where the code lives
 
 - Import the type: `import type { JobProgress } from "@nrynss/chaaya/core"`.
-- Import the stream: `import { JobStream } from "@nrynss/chaaya/core"`.
+- Import the stream: `import { JobStream, createJobStream } from "@nrynss/chaaya/core"`.
+- The follow loop stays in that module. An adapter supplies `frameMap`, and it may supply `shouldAccept`, `isTerminal`, and `fetchState`.
 - Core does not name stages and does not read a wire format.
-- An adapter may map its snapshot into `JobProgress`, and it may ship a `frameMap`. Both stay in the adapter.
+- An adapter may map its snapshot into `JobProgress`. That mapping stays in the adapter.
 - The app maps its domain into `JobProgress` at the edge that publishes or renders progress.
