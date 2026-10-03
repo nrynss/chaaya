@@ -87,14 +87,46 @@ describe("one-shot upload", () => {
 		expect(fetchMock).not.toHaveBeenCalled()
 	})
 
-	test("an explicit size lets maxBytes apply to FormData", async () => {
+	test("an explicit size lets maxBytes apply to FormData on both entry points", async () => {
 		const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }))
 		vi.stubGlobal("fetch", fetchMock)
+		let opened = 0
+		class FakeXHR {
+			upload = { onprogress: null as ((event: ProgressEvent) => void) | null }
+			status = 200
+			statusText = "OK"
+			responseText = "{}"
+			timeout = 0
+			withCredentials = false
+			onload: (() => void) | null = null
+			onerror: (() => void) | null = null
+			onabort: (() => void) | null = null
+			ontimeout: (() => void) | null = null
+			open() {
+				opened += 1
+			}
+			setRequestHeader() {}
+			getResponseHeader() {
+				return null
+			}
+			send() {
+				this.onload?.()
+			}
+			abort() {
+				this.onabort?.()
+			}
+		}
+		vi.stubGlobal("XMLHttpRequest", FakeXHR)
 		const form = new FormData()
 		form.append("note", "yes")
 		await uploadBlob("/blob", form, { maxBytes: 10, size: 4 })
 		expect(fetchMock).toHaveBeenCalledTimes(1)
 		await expect(uploadBlob("/blob", form, { maxBytes: 3, size: 4 })).rejects.toBeInstanceOf(UploadTooLarge)
+		expect(fetchMock).toHaveBeenCalledTimes(1)
+		await uploadBlobWithProgress("/blob", form, { maxBytes: 10, size: 4 })
+		expect(opened).toBe(1)
+		await expect(uploadBlobWithProgress("/blob", form, { maxBytes: 3, size: 4 })).rejects.toBeInstanceOf(UploadTooLarge)
+		expect(opened).toBe(1)
 		expect(fetchMock).toHaveBeenCalledTimes(1)
 	})
 

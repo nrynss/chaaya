@@ -274,16 +274,21 @@ export function uploadBlob<T>(url: string, body: Blob | FormData, options: BlobU
 }
 
 /**
- * Send one short blob or form with XMLHttpRequest.
+ * Send one short blob or form with XMLHttpRequest. Browser only.
  *
  * `onProgress` is `xhr.upload.onprogress`. It fires while the body is uploading,
- * before the response. This needs `XMLHttpRequest` and does not fall back to fetch.
+ * before the response. The host must provide `XMLHttpRequest`. Without that
+ * constructor (Node, or any other runtime that has none) the promise rejects
+ * with "uploadBlobWithProgress needs XMLHttpRequest". It does not fall back
+ * to fetch. Use `uploadBlob` there.
  *
  * `credentials` is the same option `uploadBlob` reads. `"include"` sets
  * `withCredentials`. That flag only affects cross-origin requests. Same-origin
  * XHR sends cookies either way.
  *
- * The limit, the presigned PUT, and the refusal shape match `uploadBlob`.
+ * `maxBytes` and `size` are the same check `uploadBlob` runs, before any
+ * request. A Blob is measured by its own `size`. FormData uses the explicit
+ * `size`. The presigned PUT and the refusal shape match `uploadBlob` too.
  */
 export function uploadBlobWithProgress<T>(url: string, body: Blob | FormData, options: BlobUploadOptions = {}): Promise<T> {
 	return begin(body, options).then((prepared) => sendUploadWithProgress<T>(url, prepared, options))

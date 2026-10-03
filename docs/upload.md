@@ -14,7 +14,7 @@ Both functions live only on `@nrynss/chaaya/upload`. They send the whole body in
 
 `uploadBlob` uses fetch. `onProgress` fires once, after the response settles, with the known size. Fetch cannot see the socket, so that call is not a progress bar.
 
-`uploadBlobWithProgress` uses `XMLHttpRequest`. `onProgress` is `xhr.upload.onprogress`, so it fires while the bytes are leaving, before the response. A host with no `XMLHttpRequest` rejects. It does not fall back to fetch.
+`uploadBlobWithProgress` is browser-only. It uses `XMLHttpRequest`. `onProgress` is `xhr.upload.onprogress`, so it fires while the bytes are leaving, before the response. A host with no `XMLHttpRequest` rejects with that fact. It does not fall back to fetch. Use `uploadBlob` there.
 
 Both read one `credentials` option. Fetch receives it as-is. XMLHttpRequest sets `withCredentials` only when the value is `"include"`. That flag affects cross-origin requests. Same-origin XHR always sends cookies, so `"omit"` does not strip them there.
 
