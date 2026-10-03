@@ -1,5 +1,7 @@
 # Writing an adapter
 
+Protocol limits (SSE over fetch, one-shot and chunked upload, no WebSocket) are [scope.md](scope.md).
+
 Core follows a job and reads a failed response. It does not know a backend. An adapter is the code that supplies two functions: a `frameMap` for `JobStream`, and a `parseError` for the fetch client. Keel is one adapter, at `@nrynss/chaaya/keel`. It is not the definition of those functions. The file [docs/examples/plain-adapter.ts](examples/plain-adapter.ts) is a complete adapter you can copy. It is not published, and it does not import Keel. Copy that file. In an app, import from `@nrynss/chaaya/core` and `@nrynss/chaaya/auth`. The block below is that file with those specifiers. The repo copy uses `$lib` so the kit can typecheck it.
 
 `JobProgress`, `ChaayaError`, and the follow loop stay in core. The guide for the reading itself is [job-progress.md](job-progress.md). The failure shape is [errors.md](errors.md). Passcode names are [auth.md](auth.md).
