@@ -1,4 +1,5 @@
-import { parseErrorEnvelope, type ParseResult } from "../wire/index.js"
+import { decodeJson, fail, isRecord, ok, type ParseResult } from "../../../core/result.js"
+import { parseErrorEnvelope } from "../wire/index.js"
 import { isRetryableStatus } from "./retry.js"
 import type { UploadError, UploadReceipt, UploadSnapshot } from "./types.js"
 
@@ -68,28 +69,12 @@ export function completePath(base: string, id: string): string {
 	return `${base}/${id}/complete`
 }
 
-function ok<T>(value: T): ParseResult<T> {
-	return { ok: true, value }
-}
-
-function fail<T>(message: string): ParseResult<T> {
-	return { ok: false, failure: { message } }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
 /** Read one body into a JSON object, or fail without throwing. */
-function decodeJson(text: string): ParseResult<Record<string, unknown>> {
-	let value: unknown
-	try {
-		value = JSON.parse(text)
-	} catch {
-		return fail("the body does not hold valid JSON")
-	}
-	if (!isRecord(value)) return fail("the body holds no JSON object")
-	return ok(value)
+function decodeObject(text: string): ParseResult<Record<string, unknown>> {
+	const decoded = decodeJson(text)
+	if (!decoded.ok) return decoded
+	if (!isRecord(decoded.value)) return fail("the body holds no JSON object")
+	return ok(decoded.value)
 }
 
 /** Read one member as a list of chunk indices. */
@@ -107,7 +92,7 @@ function isNumber(value: unknown): value is number {
 
 /** Parse the state body a begin, a chunk write or a state read returns. */
 export function parseUploadSnapshot(body: string): ParseResult<UploadSnapshot> {
-	const decoded = decodeJson(body)
+	const decoded = decodeObject(body)
 	if (!decoded.ok) return decoded
 	const value = decoded.value
 	const id = value.id
@@ -145,7 +130,7 @@ export function parseUploadSnapshot(body: string): ParseResult<UploadSnapshot> {
 
 /** Parse the receipt a completed upload returns. */
 export function parseUploadReceipt(body: string): ParseResult<UploadReceipt> {
-	const decoded = decodeJson(body)
+	const decoded = decodeObject(body)
 	if (!decoded.ok) return decoded
 	const value = decoded.value
 	const id = value.id

@@ -95,7 +95,7 @@ export class JobStream {
 	/** Every frame the core stream kept, in arrival order, as Keel events.
 	 * Ignored and refused frames are not here. A component that mounts after
 	 * the first frames still reads them here. Core `frames` is the same accept
-	 * set as raw named events; Keel views read this list. */
+	 * set as raw named events. Keel views read this list. */
 	get events(): JobEvent[] {
 		return this.#events
 	}

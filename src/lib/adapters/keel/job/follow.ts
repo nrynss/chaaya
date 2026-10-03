@@ -23,8 +23,6 @@ export function isTerminalStatus(status: JobStatus): boolean {
 	return endsJob(status)
 }
 
-export { takeFrames } from "../../../core/sse/frame.js"
-
 /** The ordering rules one Keel job stream obeys.
  *
  * This follower is Keel-shaped: it keys on Keel's `jobId`, Keel's report

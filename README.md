@@ -87,9 +87,10 @@ suggesting a look.
 - [api](/docs/api): the fetch client. The example passes the Keel error parser.
 - [job progress](/docs/job-progress): how any pipeline maps stages and counters
   onto `JobProgress`, and how `JobStream` applies a frame map. The follow
-  loop stays in core. The same guidance is in
-  [docs/job-progress.md](docs/job-progress.md).
-- [errors](docs/errors.md): the `ChaayaError` shape adapter authors can aim at.
+  loop stays in core.
+- errors: `ChaayaError` from `@nrynss/chaaya/core` is the shape adapter authors
+  can aim at. It has `code`, `message`, and optional `retryable` and `detail`.
+  Core does not parse an envelope.
 - [wire](/docs/wire): the Keel adapter's error envelope and job event parsers.
 - [job](/docs/job): the Keel job stream.
 - [audio capture](/docs/audio-capture): microphone capture in compressed and
@@ -125,6 +126,12 @@ This split is breaking. The package version in this tree is `0.3.0`. Generic pat
 
 `timeout` and `network` are unchanged. A body the parser does not recognise
 is still `http_error`.
+
+Progress readings merge instead of replacing. On 0.2.4 a progress frame or a
+snapshot that omitted `stage`, `current`, or `total` cleared that published
+field. On 0.3.0 `mergeProgress` keeps the last value when the new reading
+leaves the field out. A Keel stage-only progress frame is one case. A `done`
+snapshot that omits the counter and the stage is another.
 
 ## Status
 
