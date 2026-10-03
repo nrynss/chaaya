@@ -134,9 +134,10 @@
 		<code>detail</code>.
 		<code>requestInit</code> carries headers and credentials. Accept stays <code>text/event-stream</code>, and
 		the stream owns the abort. A reconnect sends <code>Last-Event-ID</code> when the last accepted frame id is
-		not 0. An empty id line resets it. A missing id line does not. A Rust server, or any other
-		server that speaks <code>text/event-stream</code>, supplies that map. It does not reimplement the read
-		loop. The example is in <code>docs/job-progress.md</code>.
+		not 0. An empty id line resets it. A missing id line does not. A server that is not Keel supplies that
+		map. It does not reimplement the read loop. The field guide is <code>docs/job-progress.md</code>. The
+		adapter, including <code>parseError</code> and the frame writer, is <a href={resolve("/docs/adapters")}>adapters</a>.
+		Do not use <code>JSON.parse</code> in a handler. A throw drops the frame and leaves the cursor.
 	</p>
 	<h2>Named events</h2>
 	<p>

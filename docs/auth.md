@@ -48,4 +48,4 @@ Importing the module does not touch `document`. Pass `jar: document` only in the
 
 `keelGate` in [`src/lib/adapters/keel/gate.ts`](../src/lib/adapters/keel/gate.ts) is the canonical generic-primitive-plus-adapter. It fills Keel's header, cookie, and `passcode_required`, and nothing else. Copy that file for another backend. The generic class never mentions those names.
 
-The adapter guide (#29) is not written yet. When it lands, it should point at that file rather than a second example.
+The adapter guide is [adapters.md](adapters.md). It points at this file rather than inventing a second passcode example. `plainGate` in that guide is the same shape with different names, and it does not import Keel.

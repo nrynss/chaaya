@@ -36,7 +36,7 @@
 	<p>
 		<code>{'apply({})'}</code> leaves <code>credentials</code> unset. Pass <code>credentials: "include"</code> to
 		send the cookie. <code>keelGate</code> in <code>src/lib/adapters/keel/gate.ts</code> is the reference
-		adapter. The adapter guide (#29) should point at that file when it is written.
+		adapter. The guide is <a href={resolve("/docs/adapters")}>adapters</a>. It points here instead of a second passcode example.
 	</p>
 	<p>
 		Importing the module does not touch <code>document</code>. Pass <code>jar: document</code> only in the
