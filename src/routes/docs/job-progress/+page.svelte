@@ -140,9 +140,22 @@
 	</p>
 	<h2>Named events</h2>
 	<p>
-		An event that is not a step, a counter, or a status does not belong in <code>stage</code>. Publish it
-		as named SSE frames (<code>takeFrames</code> / <code>parseNamedFrame</code>). Progress stays a <code>JobProgress</code>
-		reading.
+		An event that is not a step, a counter, or a status does not belong in <code>stage</code>. Follow it
+		with <code>createEventStream</code> from <code>@nrynss/chaaya/sse</code>. That helper uses the same
+		<code>FrameLoop</code> as <code>JobStream</code>. It does not copy the read loop. The transport is named
+		SSE over <code>fetch</code>, not <code>EventSource</code>, and there is no WebSocket path.
+	</p>
+	<p>
+		Ids strictly climb. A positive id at or below the cursor is a replay and is dropped. An empty
+		<code>id:</code> line, or <code>id: 0</code>, on a kept event resets the cursor. A backend whose ids
+		restart without that reset drops the new frames in silence. The first connect sends no
+		<code>Last-Event-ID</code>. A reconnect sends it when the cursor is not 0. A comment frame sets
+		<code>lastComment</code> and calls <code>onComment</code> with the comment text. It does not call
+		<code>onFrame</code>, and an <code>id:</code> on the comment does not move the cursor. That is a
+		deliberate deviation from WHATWG. <code>EventSource</code> would advance last-event-ID before the
+		empty-data check. A terminal name missing from the <code>events</code> filter never stops the stream, because the filter refuses the frame first. <code>prime()</code> with a terminal event closes the stream before <code>attach()</code>, so <code>attach()</code> connects nothing. The worked
+		example is an inbox on any <code>text/event-stream</code> server, in <code>docs/job-progress.md</code>.
+		It is not a job and it names no product adapter.
 	</p>
 	<nav aria-label="Pieces"><a href={resolve("/docs")}>back</a></nav>
 </main>
