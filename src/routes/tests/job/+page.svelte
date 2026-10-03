@@ -3,7 +3,7 @@
 	import { resolve } from "$app/paths"
 	import { page } from "$app/state"
 	import { onMount } from "svelte"
-	import { JobStream, type JobSnapshot } from "$lib/job"
+	import { JobStream, type JobSnapshot } from "$lib/adapters/keel/job/index.js"
 
 	/* The fixture server this page follows. A spec starts one and passes its
 	 * address in, so each test owns its own stream. */

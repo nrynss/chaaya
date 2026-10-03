@@ -3,6 +3,7 @@
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
 	import { ApiError, api } from "$lib/api/index.js";
+	import { keelErrorParser } from "$lib/adapters/keel/index.js";
 
 	let hydrated = $state(false);
 	let code = $state("");
@@ -17,7 +18,7 @@
 	async function run(): Promise<void> {
 		failure = "";
 		try {
-			await api<{ id: string }>("/docs/api/fixture");
+			await api<{ id: string }>("/docs/api/fixture", { parseError: keelErrorParser });
 			code = "unexpected-success";
 		} catch (error) {
 			if (error instanceof ApiError) {

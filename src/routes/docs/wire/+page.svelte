@@ -2,10 +2,10 @@
 	import { resolve } from "$app/paths";
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
-	import { parseErrorEnvelope, parseJobEvent } from "$lib/wire/index.js";
-	import errorRateLimited from "$lib/wire/fixtures/error-rate-limited.json?raw";
-	import eventProgress from "$lib/wire/fixtures/event-progress.txt?raw";
-	import eventDone from "$lib/wire/fixtures/event-done.txt?raw";
+	import { parseErrorEnvelope, parseJobEvent } from "$lib/adapters/keel/wire/index.js";
+	import errorRateLimited from "$lib/adapters/keel/wire/fixtures/error-rate-limited.json?raw";
+	import eventProgress from "$lib/adapters/keel/wire/fixtures/event-progress.txt?raw";
+	import eventDone from "$lib/adapters/keel/wire/fixtures/event-done.txt?raw";
 
 	let hydrated = $state(false);
 
