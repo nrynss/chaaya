@@ -20,7 +20,7 @@ export interface EventStreamOptions {
 	catchUp?: () => Promise<readonly NamedEvent[] | void>
 	/** Run for each accepted event. A comment frame never arrives here. It calls `onComment`. */
 	onFrame?: (event: NamedEvent) => void
-	/** Run when a comment frame arrives, including a heartbeat. The payload is the comment text. */
+	/** Run when a comment frame arrives, including a heartbeat. The argument is the comment text, the same string `FrameLoop` passes. */
 	onComment?: (comment: string) => void
 	/** Run when a dropped stream opens again. It receives the new count. */
 	onReconnect?: (count: number) => void
@@ -108,8 +108,8 @@ class NamedEventStream implements EventStream {
 			requestInit: { ...given, headers },
 			reconnect: options.reconnect,
 			onReconnect: options.onReconnect,
-			onComment: (frame) => {
-				options.onComment?.(frame.comment)
+			onComment: (comment) => {
+				options.onComment?.(comment)
 			},
 			onFrame: (frame) => this.#onWire(frame),
 			catchUp: () => this.#catchUp(),

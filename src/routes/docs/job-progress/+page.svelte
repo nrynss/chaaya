@@ -150,7 +150,10 @@
 		<code>id:</code> line, or <code>id: 0</code>, on a kept event resets the cursor. A backend whose ids
 		restart without that reset drops the new frames in silence. The first connect sends no
 		<code>Last-Event-ID</code>. A reconnect sends it when the cursor is not 0. A comment frame sets
-		<code>lastComment</code> and does not call <code>onFrame</code>. The worked
+		<code>lastComment</code> and calls <code>onComment</code> with the comment text. It does not call
+		<code>onFrame</code>, and an <code>id:</code> on the comment does not move the cursor. That is a
+		deliberate deviation from WHATWG. <code>EventSource</code> would advance last-event-ID before the
+		empty-data check. The worked
 		example is an inbox on any <code>text/event-stream</code> server, in <code>docs/job-progress.md</code>.
 		It is not a job and it names no product adapter.
 	</p>

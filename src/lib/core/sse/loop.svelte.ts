@@ -1,6 +1,6 @@
 import { runInEffect } from "./effect.svelte.js"
 import { parseNamedFrame } from "./frame.js"
-import type { CommentFrame, EventFrame, NamedEvent } from "./frame.js"
+import type { EventFrame, NamedEvent } from "./frame.js"
 import { takeFrames } from "./frame.js"
 import { reconnectDelay, reconnectSettings } from "./reconnect.js"
 import type { ReconnectOptions } from "./reconnect.js"
@@ -36,8 +36,11 @@ export interface FrameLoopOptions {
 	 * They set `lastComment` and call `onComment`, and there is nothing to
 	 * return for them. A thrown error is a dropped frame, not a dropped stream. */
 	onFrame: (frame: EventFrame) => FrameDecision
-	/** A comment frame arrived. `lastComment` is already the timestamp. The loop does not call `onFrame` for it. */
-	onComment?: (frame: CommentFrame) => void
+	/** A comment arrived. The argument is the comment text, the same string
+	 * `createEventStream` passes to its `onComment`. `lastComment` is already
+	 * the timestamp. The loop does not call `onFrame`, and an `id:` on the
+	 * comment does not move the cursor. */
+	onComment?: (comment: string) => void
 	/** Once the connection is live. A throw leaves the stream alone. Call `close()` to end the watch. */
 	catchUp?: () => Promise<void>
 	/** Runs when a dropped stream opens again. It receives the new count. */
@@ -236,7 +239,7 @@ export class FrameLoop {
 		const frame = parsed.value
 		if (frame.kind === "comment") {
 			this.lastComment = Date.now()
-			this.#options.onComment?.(frame)
+			this.#options.onComment?.(frame.comment)
 			return
 		}
 		let decision: FrameDecision

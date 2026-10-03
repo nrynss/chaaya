@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
 import type { NamedEvent } from "./frame"
 import { FrameBuffer, createEventStream } from "./events.svelte"
+import { FrameLoop } from "./loop.svelte"
 
 afterEach(() => {
 	vi.unstubAllGlobals()
@@ -63,6 +64,27 @@ describe("named event stream", () => {
 		expect(stream.lastEventId).toBe(3)
 		const headers = new Headers(vi.mocked(fetch).mock.calls[0]?.[1]?.headers)
 		expect(headers.get("last-event-id")).toBeNull()
+	})
+
+	test("FrameLoop onComment receives the comment text and ignores an id on it", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(streamOf(["id: 9\n: ping\n\n"], false), { status: 200 })),
+		)
+		const comments: unknown[] = []
+		const loop = new FrameLoop({
+			url: "http://notify.test/events",
+			reconnect: { baseMs: 0, maxMs: 0, attempts: 1 },
+			onFrame: () => ({ keep: true }),
+			onComment: (comment) => {
+				comments.push(comment)
+			},
+		})
+		loop.attach(() => () => {})
+		await vi.waitFor(() => expect(comments).toEqual(["ping"]))
+		expect(typeof comments[0]).toBe("string")
+		expect(loop.lastEventId).toBe(0)
+		loop.close()
 	})
 
 	test("a refused stream fails without a retry", async () => {
