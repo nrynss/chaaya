@@ -1,17 +1,17 @@
 # Passcode gate
 
-`GatePasscode` on `@nrynss/chaaya/api` sends one secret on a header and, when you pass a jar, a cookie. It does not know a backend's names. `keelGate` on `@nrynss/chaaya/keel` is the adapter that fills Keel's names in. That split is the pattern for any other backend.
+`GatePasscode` on `@nrynss/chaaya/auth` sends one secret on a header and, when you pass a jar, a cookie. It does not know a backend's names. `keelGate` on `@nrynss/chaaya/keel` is the adapter that fills Keel's names in. That split is the pattern for any other backend.
 
 ## Write an adapter
 
 1. Call `GatePasscode` with the header and cookie that backend reads. Both names are required. An empty name throws.
 2. List the `ApiError` codes that mean "this request needs the passcode" in `authCodes`. Wrap the client with `apiWithGate`. Those codes become `GateError`. Every other `ApiError` stays an `ApiError`.
-3. `GateError` keeps `detail` and `retryAfterSeconds` from that `ApiError`. A caller can still branch on the body and the retry delay.
+3. `GateError` extends `ApiError`, so `instanceof ApiError` still matches. `instanceof GateError` is how a caller tells an auth refusal from any other `ApiError`. `detail` and `retryAfterSeconds` stay on the same object.
 4. `authCodes` is a plain array. The check is `includes`, not a property lookup, so a code named `constructor` or `toString` is not treated as listed unless you put it in the array.
 5. Export a small function, the way `keelGate` does, so the app never repeats the names.
 
 ```ts
-import { apiWithGate, GatePasscode } from "@nrynss/chaaya/api"
+import { apiWithGate, GatePasscode } from "@nrynss/chaaya/auth"
 
 function appGate() {
   return new GatePasscode({
@@ -42,4 +42,10 @@ Importing the module does not touch `document`. Pass `jar: document` only in the
 
 `remember()` stores a passcode a response exposed. Browser `fetch` forbids the `Set-Cookie` response header, so `getSetCookie` is missing and `get("set-cookie")` is null. That branch does nothing in a browser. It works under Node and undici, which still surface the header. In a browser, store the JSON member `passcode`, or let the browser keep the cookie and read it later through a `document` jar.
 
-`apply()` defaults `credentials` to `include` so the cookie is sent. Pass `credentials: "omit"` to keep the caller's choice.
+`apply({})` leaves `credentials` unset. Pass `credentials: "include"` when the cookie must be sent. Pass `credentials: "omit"` to send none.
+
+## The reference adapter
+
+`keelGate` in [`src/lib/adapters/keel/gate.ts`](../src/lib/adapters/keel/gate.ts) is the canonical generic-primitive-plus-adapter. It fills Keel's header, cookie, and `passcode_required`, and nothing else. Copy that file for another backend. The generic class never mentions those names.
+
+The adapter guide (#29) is not written yet. When it lands, it should point at that file rather than a second example.

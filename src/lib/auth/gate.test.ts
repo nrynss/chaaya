@@ -19,7 +19,9 @@ describe("gate passcode", () => {
 		const helper = gate({ initial: "open-sesame" })
 		const init = helper.apply({ method: "POST" })
 		expect(new Headers(init.headers).get(headerName)).toBe("open-sesame")
-		expect(init.credentials).toBe("include")
+		expect(init.credentials).toBeUndefined()
+		expect(helper.apply({}).credentials).toBeUndefined()
+		expect(helper.apply({ credentials: "include" }).credentials).toBe("include")
 		expect(new Headers(helper.apply().headers).has("X-Passcode")).toBe(false)
 	})
 
@@ -82,6 +84,7 @@ describe("gate passcode", () => {
 			retryAfterSeconds: 12,
 		})
 		await expect(call("/render")).rejects.toBeInstanceOf(GateError)
+		await expect(call("/render")).rejects.toBeInstanceOf(ApiError)
 	})
 
 	test("an unlisted refusal stays ApiError, including a prototype-looking code", async () => {

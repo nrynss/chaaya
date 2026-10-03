@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
-import { GateError } from "../../api/gate"
+import { ApiError } from "../../core/api"
+import { GateError } from "../../auth/gate"
 import { apiWithKeelGate, keelGate, keelPasscodeCookie, keelPasscodeHeader } from "./gate"
 
 afterEach(() => {
@@ -36,5 +37,6 @@ describe("keel gate", () => {
 			retryAfterSeconds: 3,
 		})
 		await expect(call("/render")).rejects.toBeInstanceOf(GateError)
+		await expect(call("/render")).rejects.toBeInstanceOf(ApiError)
 	})
 })

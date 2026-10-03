@@ -1,4 +1,4 @@
-import { apiWithGate, GatePasscode, type GateOptions } from "../../api/gate.js"
+import { apiWithGate, GatePasscode, type GateOptions } from "../../auth/gate.js"
 import { api } from "./api.js"
 
 /** The header Keel's gate reads when the config leaves the name at its default. */
@@ -8,7 +8,8 @@ export const keelPasscodeHeader = "X-Passcode"
 export const keelPasscodeCookie = "passcode"
 
 /** A gate passcode with Keel's default header, cookie, and passcode_required code.
- * This is the adapter. `GatePasscode` stays generic and does not know these names. */
+ * This is the canonical adapter. Copy it for another backend.
+ * `GatePasscode` stays generic and does not know these names. */
 export function keelGate(options: Partial<GateOptions> = {}): GatePasscode {
 	return new GatePasscode({
 		headerName: options.headerName || keelPasscodeHeader,

@@ -4,5 +4,3 @@
  */
 export { ApiError, api, createApi } from "../core/api.js"
 export type { ApiClient, ApiClientOptions, ApiErrorParser, ApiFailureBody, ApiRequestInit } from "../core/api.js"
-export { GateError, GatePasscode, apiWithGate, readCookie, readSetCookie } from "./gate.js"
-export type { CookieTarget, GateOptions, PasscodeStore } from "./gate.js"

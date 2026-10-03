@@ -53,13 +53,17 @@ Published as `@nrynss/chaaya`.
 - `@nrynss/chaaya/api`: the fetch client. Pass `parseError` to read a
   backend's envelope. Without a parser, a non-2xx body stays `http_error`.
   `createApi({ parseError })` sets that parser for every call.
-  `GatePasscode` sends a caller-named header and cookie. It has no backend
-  default names. `authCodes` is a plain list checked with `includes`, so a
-  prototype key is not an auth code. `Set-Cookie` is read only where the
-  runtime still exposes it (Node). Browsers hide that header. Pass
-  `jar: document` only in the browser. Omit it under SSR. Importing the
-  module does not touch `document`. Keel's defaults are `keelGate` on
-  `@nrynss/chaaya/keel`.
+- `@nrynss/chaaya/auth`: `GatePasscode` sends a caller-named header and cookie.
+  It has no backend default names. `GateError` extends `ApiError`.
+  `instanceof GateError` marks an auth refusal. `authCodes` is a plain list
+  checked with `includes`, so a prototype key is not an auth code.
+  `Set-Cookie` is read only where the runtime still exposes it (Node, undici).
+  Browsers hide that header. The branch stays for callers that need it.
+  Pass `jar: document` only in the browser. Omit it under SSR. Importing the
+  module does not touch `document`. `apply({})` leaves `credentials` unset.
+  Pass `credentials: "include"` to opt in. Keel's adapter is `keelGate` on
+  `@nrynss/chaaya/keel`, and `src/lib/adapters/keel/gate.ts` is the reference
+  shape. The adapter guide (#29) should point there when it is written.
 - `@nrynss/chaaya/sse`: the shared frame splitter, named-event field parser,
   `formatNamedFrame` writer, reconnect schedule, and `FrameLoop`. Payloads are
   not interpreted. The writer emits a frame string. It does not build a

@@ -1,22 +1,13 @@
 import { ApiError, api, type ApiClient, type ApiRequestInit } from "../core/api.js"
 
-/** An auth refusal the caller listed. It keeps the detail and the retry delay
- * the ApiError already carried, so a branch on the gate does not lose them. */
-export class GateError extends Error {
-	readonly code: string
-	readonly status: number
-	/** The detail object the app alone reads. Empty when the body carried none. */
-	readonly detail: Record<string, unknown>
-	/** The seconds a 429 told the caller to wait, when ApiError had one. */
-	readonly retryAfterSeconds?: number
-
+/** An auth refusal the caller listed.
+ * This extends ApiError, so `instanceof ApiError` still matches, and the
+ * detail and retry delay are the ones ApiError already carried.
+ * `instanceof GateError` is the marker that distinguishes an auth refusal. */
+export class GateError extends ApiError {
 	constructor(source: ApiError) {
-		super(source.message)
+		super(source.message, source.code, source.status, source.detail, source.retryAfterSeconds)
 		this.name = "GateError"
-		this.code = source.code
-		this.status = source.status
-		this.detail = source.detail
-		this.retryAfterSeconds = source.retryAfterSeconds
 	}
 }
 
@@ -162,8 +153,8 @@ export class GatePasscode {
 
 	/**
 	 * The init api() should send. A stored passcode is added unless the caller
-	 * already set the header. credentials include is the default so the cookie
-	 * is sent.
+	 * already set the header. credentials are not set. Pass
+	 * `credentials: "include"` to send the cookie.
 	 */
 	apply(init: ApiRequestInit = {}): ApiRequestInit {
 		const headers = new Headers(init.headers)
@@ -171,7 +162,6 @@ export class GatePasscode {
 		if (value !== "" && !headers.has(this.headerName)) headers.set(this.headerName, value)
 		return {
 			...init,
-			credentials: init.credentials ?? "include",
 			headers,
 		}
 	}
