@@ -1,7 +1,7 @@
 /**
- * Chaaya audio. Microphone capture in compressed and PCM modes, playback
- * through one element unlocked by the first gesture, arriving PCM blocks, and
- * live levels and waveform peaks.
+ * Chaaya audio. Microphone capture in compressed and PCM modes, a headless
+ * recording session over that capture, playback through one element unlocked
+ * by the first gesture, arriving PCM blocks, and live levels and waveform peaks.
  *
  * Chunked upload speaks Keel's protocol and lives on `@nrynss/chaaya/keel`,
  * not here.
@@ -38,3 +38,18 @@ export type { Level } from "./levels/measure.js"
 export { computePeaks } from "./levels/peaks.js"
 export type { Peaks, PeaksRequest } from "./levels/peaks.js"
 export { computePeaksInWorker } from "./levels/peaks-client.js"
+export {
+	RecordingCancelled,
+	RecordingSessionError,
+	captureFromRecorder,
+	createRecordingSession
+} from "./session/index.js"
+export type {
+	RecordingCapture,
+	RecordingPhase,
+	RecordingSession,
+	RecordingSessionCode,
+	RecordingSessionOptions,
+	RecordingSource,
+	RecordingUpload
+} from "./session/index.js"
