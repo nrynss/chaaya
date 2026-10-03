@@ -140,9 +140,17 @@
 	</p>
 	<h2>Named events</h2>
 	<p>
-		An event that is not a step, a counter, or a status does not belong in <code>stage</code>. Publish it
-		as named SSE frames (<code>takeFrames</code> / <code>parseNamedFrame</code>). Progress stays a <code>JobProgress</code>
-		reading.
+		An event that is not a step, a counter, or a status does not belong in <code>stage</code>. Follow it
+		with <code>createEventStream</code> from <code>@nrynss/chaaya/sse</code>. That helper uses the same
+		<code>FrameLoop</code> as <code>JobStream</code>. It does not copy the read loop. The transport is named
+		SSE over <code>fetch</code>, not <code>EventSource</code>, and there is no WebSocket path.
+	</p>
+	<p>
+		Ids strictly climb. A positive id at or below the cursor is a replay and is dropped. An empty
+		<code>id:</code> line resets the cursor. The first connect sends no <code>Last-Event-ID</code>. A
+		reconnect sends it when the cursor is not 0. A comment frame sets <code>lastComment</code>. The worked
+		example is an inbox on any <code>text/event-stream</code> server, in <code>docs/job-progress.md</code>.
+		It is not a job and it names no product adapter.
 	</p>
 	<nav aria-label="Pieces"><a href={resolve("/docs")}>back</a></nav>
 </main>

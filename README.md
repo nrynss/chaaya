@@ -18,10 +18,11 @@ is not Keel does not import it. Nothing in this package names a consumer app.
 - **Audio.** Microphone capture and playback with seeking. Live levels and
   waveform peaks.
 - **Server-sent events.** A frame reader, a frame writer, and a reconnect
-  schedule that keep whatever event name the server sent. `JobStream` and
-  `createJobStream` follow one stream: the caller supplies a frame map, and
-  the loop stays in core.
-  The writer emits a frame string. It does not build an HTTP response.
+  schedule that keep whatever event name the server sent. `FrameLoop` is the
+  only follow loop. `JobStream` maps that loop onto progress. `createEventStream`
+  maps it onto named events. The writer emits a frame string. It does not
+  build an HTTP response. The transport is fetch, not `EventSource`, and there
+  is no WebSocket path.
 - **API client.** One fetch wrapper. A failed response is a typed error. The
   caller supplies a parser when a backend has an error envelope. Timeout and
   network failures are generic.
@@ -53,8 +54,14 @@ Published as `@nrynss/chaaya`.
   backend's envelope. Without a parser, a non-2xx body stays `http_error`.
   `createApi({ parseError })` sets that parser for every call.
 - `@nrynss/chaaya/sse`: the shared frame splitter, named-event field parser,
-  `formatNamedFrame` writer, and reconnect schedule. Payloads are not
-  interpreted. The writer emits a frame string. It does not build a response.
+  `formatNamedFrame` writer, reconnect schedule, and `FrameLoop`. Payloads are
+  not interpreted. The writer emits a frame string. It does not build a
+  response. `createEventStream` follows arbitrary named events on that loop.
+  It is not a job client. Ids are assumed to strictly climb. A replay at or
+  below the cursor is dropped. An empty `id:` line resets the cursor.
+  `Last-Event-ID` is sent only on reconnect, and only when that cursor is
+  not 0. Comment frames set `lastComment`. The first connect does not send
+  `Last-Event-ID`.
 - `@nrynss/chaaya/audio`: microphone capture in compressed and PCM modes,
   playback through one element unlocked by the first gesture, the
   PcmStreamPlayer for arriving blocks, and live levels and waveform peaks.

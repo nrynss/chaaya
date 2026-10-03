@@ -87,7 +87,7 @@ When the upload has finished its progress, the last reading can carry the stored
 
 ## Following a stream
 
-The follow loop lives in core. It fetches the stream, splits frames with `takeFrames`, parses them with `parseNamedFrame`, applies `frameMap`, reconnects, aborts, and catches up. An adapter does not write that loop again.
+The follow loop is `FrameLoop` in core. It fetches the stream, splits frames with `takeFrames`, parses them with `parseNamedFrame`, reconnects, aborts, and records comment frames on `lastComment`. `JobStream` only applies `frameMap`. An adapter does not write that loop again.
 
 `JobStream` and `createJobStream` are the same stream. `createJobStream(options)` returns `new JobStream(options)`. Adapters and apps may use either. Both take the same options. `frameMap` is required.
 
@@ -166,13 +166,44 @@ stream.attach()
 
 ## When not to use this shape
 
-`JobProgress` is only for progress: a step, a counter, a status. An event that is none of those does not belong in `stage`. Publish it as named SSE frames instead: any event name, raw data, no progress fields. Use `takeFrames` and `parseNamedFrame` from `@nrynss/chaaya/core` (or `@nrynss/chaaya/sse`). A follow helper for that path is not in this foundation. It lands separately. Progress stays a `JobProgress` reading. Everything else stays a named frame.
+`JobProgress` is only for progress: a step, a counter, a status. An event that is none of those does not belong in `stage`. Publish it as named SSE frames instead: any event name, raw data, no progress fields. Progress stays a `JobProgress` reading. Everything else stays a named frame.
+
+`createEventStream` follows that stream. It sits on the same `FrameLoop` as `JobStream`. It does not copy the read loop. The transport is named SSE over `fetch`. It is not `EventSource`, which hides a refused status and picks its own retry. There is no WebSocket path.
+
+Ids are assumed to strictly climb. A positive id less than or equal to the cursor is a replay and is dropped. An empty `id:` line resets the cursor to 0, so the next positive id is new. An explicit `id: 0` does the same. A frame with no id line is kept and does not move the cursor. The first connect sends no `Last-Event-ID`, even after `prime()`. A reconnect sends it when the cursor is not 0. A comment frame, such as a heartbeat, sets `lastComment` and calls `onComment`. It does not move the cursor and it is not an event.
+
+This example is an inbox, not a job and not a product adapter. The server can be anything that writes `text/event-stream`.
+
+```ts
+import { createEventStream, FrameBuffer } from "@nrynss/chaaya/sse"
+
+const messages: { name: string; data: string }[] = []
+let heartbeat = ""
+const buffer = new FrameBuffer()
+const stream = createEventStream("/inbox/events", {
+  headers: { authorization: "Bearer t" },
+  requestInit: { credentials: "include" },
+  events: ["message", "closed"],
+  terminal: ["closed"],
+  onComment: (comment) => {
+    heartbeat = comment
+  },
+  onFrame: (event) => {
+    messages.push({ name: event.name, data: event.data })
+  },
+})
+stream.prime(buffer.drain())
+stream.attach()
+```
+
+`FrameBuffer` is only a list of frames captured before the page exists. The name is not a product topic.
 
 ## Where the code lives
 
 - Import the type: `import type { JobProgress } from "@nrynss/chaaya/core"`.
 - Import the stream: `import { JobStream, createJobStream } from "@nrynss/chaaya/core"`.
-- The follow loop stays in that module. An adapter supplies `frameMap`, and it may supply `shouldAccept`, `onAccept`, `isTerminal`, `fetchState`, `prepareState`, and `requestInit`. A catch-up is `{ reading, error? }`. The error is not a field of the reading.
+- The follow loop is `FrameLoop`. `JobStream` supplies `frameMap`, and it may supply `shouldAccept`, `onAccept`, `isTerminal`, `fetchState`, `prepareState`, and `requestInit`. A catch-up is `{ reading, error? }`. The error is not a field of the reading.
+- Named events that are not progress use `createEventStream` from `@nrynss/chaaya/sse` (also exported from core). That helper does not reimplement the loop.
 - Core does not name stages and does not read a wire format.
 - An adapter may map its snapshot into `JobProgress`. That mapping stays in the adapter.
 - The app maps its domain into `JobProgress` at the edge that publishes or renders progress.

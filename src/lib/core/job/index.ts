@@ -2,8 +2,9 @@
  * Follow one server-sent stream and publish a progress reading. The caller
  * supplies a frame map. This module names no backend.
  *
- * The follow loop lives in `JobStream`. `createJobStream` is the same stream
- * in factory form. Adapters and apps may use either.
+ * The follow loop lives in `FrameLoop`. `JobStream` maps frames onto a progress
+ * reading. `createJobStream` is the same stream in factory form. Adapters and
+ * apps may use either.
  */
 import { JobStream } from "./job.svelte.js"
 import type { JobCatchUp, JobConnection, JobFrameAction, JobFrameHandler, JobStreamOptions } from "./types.js"
