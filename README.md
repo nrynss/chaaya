@@ -102,6 +102,14 @@ Published on [npm](https://www.npmjs.com/package/@nrynss/chaaya) as
 npm install @nrynss/chaaya
 ```
 
+## Domain progress
+
+Book and interview streams can be reshaped onto Keel `job.Progress` so
+`JobStream` follows them without a second event vocabulary. The map is
+[src/lib/job/domain.md](src/lib/job/domain.md). The helpers next to it
+(`bookStageReading`, `pageApprovedReading`, `questionReading`, and the
+rest) return the progress frames and the terminal status.
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
