@@ -44,6 +44,11 @@
 
 <main data-testid="docs-job">
 	<h1>job</h1>
+	<p>
+		This page uses the Keel <code>JobStream</code>: the core stream with
+		<code>keelFrameMap</code> pre-bound. Import the generic loop from
+		<code>@nrynss/chaaya/core</code> when the backend is not Keel.
+	</p>
 	<p data-testid="hydrated">{hydrated ? "ready" : ""}</p>
 	<dl>
 		<dt>Status</dt>

@@ -25,7 +25,12 @@ export function isTerminalStatus(status: JobStatus): boolean {
 
 export { takeFrames } from "../../../core/sse/frame.js"
 
-/** The ordering rules one job stream obeys.
+/** The ordering rules one Keel job stream obeys.
+ *
+ * This follower is Keel-shaped: it keys on Keel's `jobId`, Keel's report
+ * types, and Keel's terminal event names. It does not belong in core. A
+ * different backend writes its own `shouldAccept` (or a follower like this
+ * one) instead of importing from the Keel adapter.
  *
  * The stream carries frames for one job, and their ids climb. A repeat of an
  * id this follower already read is a duplicate, so it never lands twice. A
