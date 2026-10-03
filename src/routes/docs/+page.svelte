@@ -35,6 +35,7 @@
 			<li><a href={resolve("/docs/upload")}>upload</a></li>
 			<li><a href={resolve("/docs/job-progress")}>job progress</a></li>
 			<li><a href={resolve("/docs/job")}>keel job</a></li>
+			<li><a href={resolve("/docs/recording-session")}>recording session</a></li>
 			<li><a href={resolve("/docs/audio-capture")}>audio capture</a></li>
 			<li><a href={resolve("/docs/audio-upload")}>keel upload</a></li>
 			<li><a href={resolve("/docs/audio-playback")}>audio playback</a></li>
