@@ -17,19 +17,29 @@ export type JobFrameAction =
 /** Map one named frame to an action. */
 export type JobFrameHandler = (frame: NamedEvent) => JobFrameAction
 
+/** One catch-up answer. `reading` is progress. `error` sits beside it.
+ * Do not put a failure in `reading.detail`. */
+export interface JobCatchUp {
+	/** The progress reading to merge. */
+	reading: JobProgress
+	/** A failure that belongs with this reading. Absent while the work lives. */
+	error?: ChaayaError
+}
+
 /** What one stream needs. The map is the backend. The loop is not. */
 export interface JobStreamOptions {
 	/** The event stream to follow. */
 	url: string
 	/** Handlers keyed by event name. A name that is missing is ignored. */
 	frameMap: Record<string, JobFrameHandler>
-	/** Read current progress once a connection is live. A rejection leaves the stream alone.
-	 * The returned promise is the one the freshness check waits on. Do not wrap it in
-	 * another async function if the caller needs the reading in that same turn. */
-	fetchState?: () => Promise<JobProgress>
-	/** Rewrite the catch-up value before the freshness check. Return undefined to skip it.
+	/** Read current progress once a connection is live. Resolve a catch-up, not a bare reading.
+	 * A rejection leaves the stream alone. The returned promise is the one the freshness check
+	 * waits on. Do not wrap it in another async function if the caller needs the reading in
+	 * that same turn. */
+	fetchState?: () => Promise<JobCatchUp>
+	/** Rewrite the catch-up before the freshness check. Return undefined to skip it.
 	 * This runs in the same turn as `fetchState`'s promise. */
-	prepareState?: (reading: JobProgress) => JobProgress | undefined
+	prepareState?: (catchUp: JobCatchUp) => JobCatchUp | undefined
 	/** Whether a catch-up reading ends the watch. Core has no terminal enum of its own. */
 	isTerminal?: (reading: JobProgress) => boolean
 	/** Refuse a frame before the map runs. Return false to drop it. */

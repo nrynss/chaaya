@@ -54,6 +54,13 @@ function serveStream(frames: string[]): void {
 afterEach(() => {
 	vi.unstubAllGlobals()
 })
+/** Let the snapshot's translation into a catch-up run. That translation is one
+ * promise reaction, then the core stream applies it. */
+async function settleCatchUp(): Promise<void> {
+	await Promise.resolve()
+	await Promise.resolve()
+}
+
 /** Follow one job with the given frames and one held state answer. The answer
  * waits until the frames land, so the snapshot always races from behind. */
 async function follow(frames: string[], snapshot: JobSnapshot): Promise<JobStream> {
@@ -67,6 +74,7 @@ async function follow(frames: string[], snapshot: JobSnapshot): Promise<JobStrea
 	await vi.waitFor(() => expect(stream.events.length).toBe(frames.length), { timeout: 2000 })
 	release.resolve(snapshot)
 	await vi.waitFor(() => expect(stream.connection).not.toBe("connecting"), { timeout: 2000 })
+	await settleCatchUp()
 	return stream
 }
 
@@ -197,6 +205,7 @@ describe("catch-up freshness", () => {
 		await vi.waitFor(() => expect(stream.events).toHaveLength(1), { timeout: 2000 })
 		release.resolve({ jobId, status: "running", current: 1, total: 12 })
 		await vi.waitFor(() => expect(stream.connection).toBe("live"), { timeout: 2000 })
+		await settleCatchUp()
 		expect(stream.events.map((event) => event.name)).toEqual(["progress"])
 		expect(stream.current).toBe(3)
 		stream.close()

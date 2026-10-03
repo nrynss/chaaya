@@ -4,7 +4,7 @@ import { runInEffect } from "../sse/effect.svelte.js"
 import { parseNamedFrame, takeFrames } from "../sse/frame.js"
 import type { NamedEvent } from "../sse/frame.js"
 import { reconnectDelay, reconnectSettings } from "../sse/reconnect.js"
-import type { JobConnection, JobFrameAction, JobStreamOptions } from "./types.js"
+import type { JobCatchUp, JobConnection, JobFrameAction, JobStreamOptions } from "./types.js"
 
 /** Build one fetch init. The caller may pass auth. Accept stays the event
  * stream type, and the abort signal is always the stream's own. On a
@@ -163,22 +163,24 @@ export class JobStream {
 	async #catchUp(): Promise<void> {
 		const fetchState = this.#options.fetchState
 		if (fetchState === undefined) return
-		let reading: JobProgress
+		let catchUp: JobCatchUp
 		try {
-			reading = await fetchState()
+			catchUp = await fetchState()
 			if (this.#options.prepareState !== undefined) {
-				const prepared = this.#options.prepareState(reading)
+				const prepared = this.#options.prepareState(catchUp)
 				if (prepared === undefined) return
-				reading = prepared
+				catchUp = prepared
 			}
 		} catch {
 			return
 		}
 		if (this.#stopped) return
+		const reading = catchUp.reading
 		const latest = this.progress.current
 		if (reading.current !== undefined && latest !== undefined && reading.current < latest) return
 		if (reading.current === undefined && latest !== undefined) return
 		this.progress = mergeProgress(this.progress, reading)
+		if (catchUp.error !== undefined) this.error = catchUp.error
 		this.#options.onState?.(reading)
 		if (this.#options.isTerminal?.(reading)) this.#stop("closed")
 	}

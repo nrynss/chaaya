@@ -6,7 +6,7 @@
  * in factory form. Adapters and apps may use either.
  */
 import { JobStream } from "./job.svelte.js"
-import type { JobConnection, JobFrameAction, JobFrameHandler, JobStreamOptions } from "./types.js"
+import type { JobCatchUp, JobConnection, JobFrameAction, JobFrameHandler, JobStreamOptions } from "./types.js"
 
 /** Factory form of the same stream. Adapters and apps may use either. */
 export function createJobStream(options: JobStreamOptions): JobStream {
@@ -14,4 +14,4 @@ export function createJobStream(options: JobStreamOptions): JobStream {
 }
 
 export { JobStream }
-export type { JobConnection, JobFrameAction, JobFrameHandler, JobStreamOptions }
+export type { JobCatchUp, JobConnection, JobFrameAction, JobFrameHandler, JobStreamOptions }

@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, test, vi } from "vitest"
-import type { JobProgress } from "../progress"
 import type { JobFrameAction, JobStreamOptions } from "./types"
 import type { NamedEvent } from "../sse/frame"
 import { createJobStream } from "./index"
@@ -136,7 +135,7 @@ describe("core job stream", () => {
 	})
 
 	test("a late catch-up does not move the counter backward", async () => {
-		const release = Promise.withResolvers<JobProgress>()
+		const release = Promise.withResolvers<{ reading: { current: number; stage: string; status: string } }>()
 		vi.stubGlobal(
 			"fetch",
 			vi.fn(async () => new Response(streamOf([frame("progress", 1, '{"current":5,"stage":"encode"}')], false))),
@@ -149,7 +148,7 @@ describe("core job stream", () => {
 		)
 		stream.attach(() => () => {})
 		await vi.waitFor(() => expect(stream.progress.current).toBe(5))
-		release.resolve({ current: 1, stage: "older", status: "done" })
+		release.resolve({ reading: { current: 1, stage: "older", status: "done" } })
 		await vi.waitFor(() => expect(stream.connection).toBe("live"))
 		expect(stream.progress.current).toBe(5)
 		expect(stream.progress.stage).toBe("encode")
@@ -158,7 +157,7 @@ describe("core job stream", () => {
 	})
 
 	test("a newer catch-up lands, and isTerminal is what closes it", async () => {
-		const release = Promise.withResolvers<{ status: string; current: number }>()
+		const release = Promise.withResolvers<{ reading: { status: string; current: number } }>()
 		vi.stubGlobal("fetch", vi.fn(async () => new Response(streamOf([], false))))
 		const stream = new JobStream(
 			options({
@@ -167,7 +166,7 @@ describe("core job stream", () => {
 		)
 		stream.attach(() => () => {})
 		await vi.waitFor(() => expect(stream.connection).toBe("live"))
-		release.resolve({ status: "finished", current: 4 })
+		release.resolve({ reading: { status: "finished", current: 4 } })
 		await vi.waitFor(() => expect(stream.progress.status).toBe("finished"))
 		expect(stream.connection).toBe("live")
 		expect(stream.progress.current).toBe(4)
@@ -178,7 +177,7 @@ describe("core job stream", () => {
 		vi.stubGlobal("fetch", vi.fn(async () => new Response(streamOf([], false))))
 		const stream = new JobStream(
 			options({
-				fetchState: async () => ({ status: "done", current: 1 }),
+				fetchState: async () => ({ reading: { status: "done", current: 1 } }),
 				isTerminal: (reading) => reading.status === "done",
 			}),
 		)
@@ -335,6 +334,47 @@ describe("core job stream", () => {
 		await vi.waitFor(() => expect(stream.frames).toHaveLength(1))
 		await new Promise((resolve) => setTimeout(resolve, 20))
 		expect(stream.progress.current).toBe(3)
+		stream.close()
+	})
+
+	test("a catch-up error is published beside the reading", async () => {
+		vi.stubGlobal("fetch", vi.fn(async () => new Response(streamOf([], false))))
+		const stream = new JobStream(
+			options({
+				fetchState: async () => ({
+					reading: { status: "error", current: 1 },
+					error: { code: "upstream_failed", message: "stopped" },
+				}),
+				isTerminal: (reading) => reading.status === "error",
+			}),
+		)
+		stream.attach(() => () => {})
+		await vi.waitFor(() => expect(stream.connection).toBe("closed"))
+		expect(stream.error).toEqual({ code: "upstream_failed", message: "stopped" })
+		expect(stream.progress).toEqual({ status: "error", current: 1 })
+		expect(stream.progress.detail).toBeUndefined()
+		stream.close()
+	})
+
+	test("prepareState can skip a catch-up", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(streamOf([frame("progress", 1, '{"current":2,"stage":"encode"}')], false))),
+		)
+		const stream = new JobStream(
+			options({
+				fetchState: async () => ({
+					reading: { status: "error", current: 9 },
+					error: { code: "nope", message: "skip" },
+				}),
+				prepareState: () => undefined,
+			}),
+		)
+		stream.attach(() => () => {})
+		await vi.waitFor(() => expect(stream.connection).toBe("live"))
+		await new Promise((resolve) => setTimeout(resolve, 20))
+		expect(stream.progress).toEqual({ stage: "encode", current: 2, status: "running" })
+		expect(stream.error).toBeUndefined()
 		stream.close()
 	})
 

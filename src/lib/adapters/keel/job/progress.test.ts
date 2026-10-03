@@ -13,4 +13,14 @@ describe("keel progress mapping", () => {
 			}),
 		).toEqual({ id: "job-1", status: "running", stage: "transcoding", current: 4, total: 12 })
 	})
+
+	test("a snapshot error is not stored in detail", () => {
+		expect(
+			toJobProgress({
+				jobId: "job-1",
+				status: "error",
+				error: { code: "upstream_failed", message: "The media service failed." },
+			}),
+		).toEqual({ id: "job-1", status: "error" })
+	})
 })

@@ -106,8 +106,9 @@ Each event name in the map returns an action:
 A name that is not in the map is ignored. Optional hooks stay on the options, not in a second loop:
 
 - `shouldAccept` refuses a frame before the map runs.
-- `fetchState` reads a snapshot once the stream is live, so a late join can catch up.
-- `isTerminal` says whether that catch-up reading ends the watch.
+- `fetchState` reads a catch-up once the stream is live, so a late join can catch up. It resolves `{ reading, error? }`. `reading` is a `JobProgress`. `error` is a `ChaayaError` beside that reading. Do not put the failure in `reading.detail`.
+- `prepareState` may rewrite that catch-up, or return undefined to skip it.
+- `isTerminal` says whether that catch-up reading ends the watch. It sees the progress reading, not the error.
 - `requestInit` adds fetch fields, usually `headers` and `credentials`, so an adapter can pass auth without a second loop.
 
 `Accept` is always `text/event-stream`. A different `accept` on `requestInit` does not stick. `signal` on `requestInit` is ignored. The stream owns the abort.
@@ -170,7 +171,7 @@ stream.attach()
 
 - Import the type: `import type { JobProgress } from "@nrynss/chaaya/core"`.
 - Import the stream: `import { JobStream, createJobStream } from "@nrynss/chaaya/core"`.
-- The follow loop stays in that module. An adapter supplies `frameMap`, and it may supply `shouldAccept`, `isTerminal`, `fetchState`, and `requestInit`.
+- The follow loop stays in that module. An adapter supplies `frameMap`, and it may supply `shouldAccept`, `isTerminal`, `fetchState`, `prepareState`, and `requestInit`. A catch-up is `{ reading, error? }`. The error is not a field of the reading.
 - Core does not name stages and does not read a wire format.
 - An adapter may map its snapshot into `JobProgress`. That mapping stays in the adapter.
 - The app maps its domain into `JobProgress` at the edge that publishes or renders progress.
