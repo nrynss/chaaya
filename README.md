@@ -154,6 +154,7 @@ suggesting a look.
 - [transcript](/docs/transcript): timed words, the editor that cuts and
   reverts ranges, the regions drawn from the cuts, and the follower that
   binds the words to playback.
+- [transcript stream](/docs/transcript-stream): fold timed-word SSE frames into the transcript editor list.
 - [testing](/docs/testing): the contrast gate and the accessibility gate run
   against the page itself.
 
