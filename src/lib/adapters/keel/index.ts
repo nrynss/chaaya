@@ -10,6 +10,7 @@
 export { ApiError } from "../../core/api.js"
 export type { ApiRequestInit } from "../../core/api.js"
 export { api, keelErrorParser } from "./api.js"
+export { apiWithKeelGate, keelGate, keelPasscodeCookie, keelPasscodeHeader } from "./gate.js"
 export {
 	parseErrorEnvelope,
 	parseJobEvent,

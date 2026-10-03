@@ -27,6 +27,7 @@
 			<li><a href={resolve("/docs/theme")}>theme</a></li>
 			<li><a href={resolve("/docs/wire")}>keel wire</a></li>
 			<li><a href={resolve("/docs/api")}>api</a></li>
+			<li><a href={resolve("/docs/auth")}>auth</a></li>
 			<li><a href={resolve("/docs/job-progress")}>job progress</a></li>
 			<li><a href={resolve("/docs/job")}>keel job</a></li>
 			<li><a href={resolve("/docs/audio-capture")}>audio capture</a></li>
