@@ -76,7 +76,7 @@
 		<tbody>
 			<tr>
 				<th scope="row">id</th>
-				<td>The job, when the producer named one.</td>
+				<td>The job, when the producer named one. Omit it when there is no id. Core does not invent one.</td>
 			</tr>
 			<tr>
 				<th scope="row">stage</th>
@@ -92,7 +92,10 @@
 			</tr>
 			<tr>
 				<th scope="row">status</th>
-				<td>A status string the producer chose. Core does not decide which strings are terminal.</td>
+				<td>
+					Any string the producer chose. Core does not decide which strings are terminal. Apps often use
+					pending, running, done, and error. That set is not required.
+				</td>
 			</tr>
 			<tr>
 				<th scope="row">detail</th>
@@ -115,6 +118,13 @@
 	</p>
 	<pre data-testid="encoded">{show(encoded)}</pre>
 	<pre data-testid="upload">{show(upload)}</pre>
+	<h2>Stream</h2>
+	<p>
+		<code>JobStream</code> in <code>@nrynss/chaaya/core</code> reads the event stream and publishes one
+		<code>JobProgress</code>. A <code>frameMap</code> turns each event name into an update or a terminal.
+		A name that is not in the map is ignored. The same page's guidance is in
+		<code>docs/job-progress.md</code>.
+	</p>
 	<h2>Named events</h2>
 	<p>
 		An event that is not a step, a counter, or a status does not belong in <code>stage</code>. Publish it
