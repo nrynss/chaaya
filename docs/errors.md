@@ -22,3 +22,7 @@ These envelopes map onto it without leftover fields that the caller has to inven
 - A `thiserror`-style `{ error, kind }` uses `kind` as `code` and `error` as `message`.
 
 Agree on this shape at the adapter boundary so callers do not learn a new failure object for every backend.
+
+## Form actions
+
+`ApiError` is what `api()` throws. `@nrynss/chaaya/sveltekit` hands that object to SvelteKit. `failFromApiError()` returns `fail()`. `errorFromApiError()` throws `error()`. `toActionData()` is the shared data: `code`, `message`, `detail`, and, when present, `retryAfterSeconds`. `code` is unchanged. The module does not import an adapter. A caller passes an `ApiError`, or a response body plus the app's `parseError`. The copy-paste is in [form-actions.md](form-actions.md).
