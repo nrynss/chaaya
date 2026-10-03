@@ -153,7 +153,7 @@
 		<code>lastComment</code> and calls <code>onComment</code> with the comment text. It does not call
 		<code>onFrame</code>, and an <code>id:</code> on the comment does not move the cursor. That is a
 		deliberate deviation from WHATWG. <code>EventSource</code> would advance last-event-ID before the
-		empty-data check. The worked
+		empty-data check. A terminal name missing from the <code>events</code> filter never stops the stream, because the filter refuses the frame first. <code>prime()</code> with a terminal event closes the stream before <code>attach()</code>, so <code>attach()</code> connects nothing. The worked
 		example is an inbox on any <code>text/event-stream</code> server, in <code>docs/job-progress.md</code>.
 		It is not a job and it names no product adapter.
 	</p>

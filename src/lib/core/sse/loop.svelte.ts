@@ -39,7 +39,8 @@ export interface FrameLoopOptions {
 	/** A comment arrived. The argument is the comment text, the same string
 	 * `createEventStream` passes to its `onComment`. `lastComment` is already
 	 * the timestamp. The loop does not call `onFrame`, and an `id:` on the
-	 * comment does not move the cursor. */
+	 * comment does not move the cursor. A thrown error is a dropped frame,
+	 * not a dropped stream. */
 	onComment?: (comment: string) => void
 	/** Once the connection is live. A throw leaves the stream alone. Call `close()` to end the watch. */
 	catchUp?: () => Promise<void>
@@ -239,7 +240,11 @@ export class FrameLoop {
 		const frame = parsed.value
 		if (frame.kind === "comment") {
 			this.lastComment = Date.now()
-			this.#options.onComment?.(frame.comment)
+			try {
+				this.#options.onComment?.(frame.comment)
+			} catch {
+				return
+			}
 			return
 		}
 		let decision: FrameDecision

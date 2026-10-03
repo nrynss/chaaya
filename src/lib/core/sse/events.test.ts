@@ -87,6 +87,25 @@ describe("named event stream", () => {
 		loop.close()
 	})
 
+	test("a throwing onComment drops the comment and does not reconnect", async () => {
+		const fetchMock = vi.fn(async () => new Response(streamOf([": ping\n\n"], false), { status: 200 }))
+		vi.stubGlobal("fetch", fetchMock)
+		const loop = new FrameLoop({
+			url: "http://notify.test/events",
+			reconnect: { baseMs: 0, maxMs: 0, attempts: 3 },
+			onFrame: () => ({ keep: true }),
+			onComment: () => {
+				throw new Error("caller bug")
+			},
+		})
+		loop.attach(() => () => {})
+		await vi.waitFor(() => expect(loop.lastComment).toEqual(expect.any(Number)))
+		await new Promise((resolve) => setTimeout(resolve, 50))
+		expect(fetchMock).toHaveBeenCalledTimes(1)
+		expect(loop.connection).toBe("live")
+		loop.close()
+	})
+
 	test("a refused stream fails without a retry", async () => {
 		const fetchMock = vi.fn(async () => new Response("no", { status: 403 }))
 		vi.stubGlobal("fetch", fetchMock)

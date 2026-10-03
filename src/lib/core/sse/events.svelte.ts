@@ -14,7 +14,9 @@ export interface EventStreamOptions {
 	requestInit?: RequestInit
 	/** Event names to keep. Omit to keep every named event. A plain array, so `includes` does not walk the prototype. */
 	events?: readonly string[]
-	/** Event names that end the stream. The first one closes it. */
+	/** Event names that end the stream. The first one closes it.
+	 * A name that is absent from `events` can never stop the stream: the
+	 * filter refuses the frame before the terminal check runs. */
 	terminal?: readonly string[]
 	/** Read events the stream may have missed. It runs once per open connection. */
 	catchUp?: () => Promise<readonly NamedEvent[] | void>
@@ -36,7 +38,9 @@ export interface EventStream {
 	readonly lastEventId: number
 	/** Epoch milliseconds of the last comment frame. Undefined until one arrives. */
 	readonly lastComment: number | undefined
-	/** Adopt events captured before this view existed. Call it before attach(). */
+	/** Adopt events captured before this view existed. Call it before attach().
+	 * A terminal event in this list closes the stream before attach(), so
+	 * attach() then connects nothing. */
 	prime(events: readonly NamedEvent[]): void
 	/** Follow the stream. A test passes its own cleanup runner. */
 	attach(registerCleanup?: (task: () => () => void) => void): void
@@ -79,6 +83,10 @@ export class FrameBuffer {
  * clears the cursor, so the next positive id is new. An explicit `id: 0`
  * does the same. A frame with no id line is kept and does not move the
  * cursor. Comment frames update `lastComment` and call `onComment`. They do not call `onFrame`, they are not events, and they do not move the cursor, even when the comment carries an id line.
+ *
+ * A terminal name that is absent from the `events` filter never arrives, so
+ * it cannot stop the stream. `prime()` with a terminal event closes the
+ * stream before `attach()`, and `attach()` then connects nothing.
  */
 export function createEventStream(url: string, options: EventStreamOptions = {}): EventStream {
 	return new NamedEventStream(url, options)
