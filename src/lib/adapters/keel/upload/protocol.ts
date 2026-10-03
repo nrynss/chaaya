@@ -1,4 +1,4 @@
-import { parseErrorEnvelope, type ParseResult } from "../../wire/index.js"
+import { parseErrorEnvelope, type ParseResult } from "../wire/index.js"
 import { isRetryableStatus } from "./retry.js"
 import type { UploadError, UploadReceipt, UploadSnapshot } from "./types.js"
 

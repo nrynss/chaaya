@@ -1,10 +1,13 @@
 /**
- * Chaaya audio. Microphone capture in compressed and PCM modes, chunked
- * upload that survives a network drop and a reload, playback through one
- * element unlocked by the first gesture, and live levels and waveform peaks.
+ * Chaaya audio. Microphone capture in compressed and PCM modes, playback
+ * through one element unlocked by the first gesture, arriving PCM blocks, and
+ * live levels and waveform peaks.
+ *
+ * Chunked upload speaks Keel's protocol and lives on `@nrynss/chaaya/keel`,
+ * not here.
  *
  * Importing this module does no DOM work. Consumers construct the recorder,
- * the uploader, the player, or the level meter when they need it.
+ * the player, or the level meter when they need it.
  *
  * The re-exports name the .js extension. A plain node import resolves a
  * literal path and never searches for an extension, so the built barrel needs
@@ -18,35 +21,6 @@ export type {
 	CaptureResult,
 	CaptureState
 } from "./capture/index.js"
-export {
-	ChunkBuffer,
-	ChunkUploader,
-	IndexedDbStore,
-	UploadFailure,
-	beginBody,
-	chunkPath,
-	completeBody,
-	completePath,
-	isRetryableStatus,
-	parseUploadReceipt,
-	parseUploadSnapshot,
-	refusal,
-	retryDelayMs,
-	sha256Hex,
-	toUploadFailure,
-	uploadPath
-} from "./upload/index.js"
-export type {
-	SessionRecord,
-	StoredChunk,
-	UploadChunk,
-	UploadError,
-	UploadOptions,
-	UploadReceipt,
-	UploadSnapshot,
-	UploadState,
-	UploadStore
-} from "./upload/index.js"
 export { AudioPlayer } from "./playback/player.svelte.js"
 export type { BufferedSpan, PlaybackError, PlaybackFailure, PlayRefusal } from "./playback/player.svelte.js"
 export { PcmStreamPlayer } from "./playback/stream.svelte.js"

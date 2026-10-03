@@ -88,10 +88,10 @@ keel=${KEEL_DIR:-/home/nryn/work/keel}
 if [ ! -e "$keel/.git" ]; then
 	echo "No Keel checkout at $keel. The gate parses the committed fixtures only, so it skips the copy check."
 else
-	keel_tag=$(cat src/lib/wire/fixtures/KEEL_TAG)
+	keel_tag=$(cat src/lib/adapters/keel/wire/fixtures/KEEL_TAG)
 	keel_staging=$(mktemp -d)
 	git -C "$keel" archive "$keel_tag" testdata/wire | tar -x -C "$keel_staging"
-	diff -ru --exclude=KEEL_TAG "$keel_staging/testdata/wire" src/lib/wire/fixtures
+	diff -ru --exclude=KEEL_TAG "$keel_staging/testdata/wire" src/lib/adapters/keel/wire/fixtures
 fi
 
 step "vitest"

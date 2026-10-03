@@ -1,3 +1,5 @@
+import type { ReconnectOptions } from "../../../core/sse/reconnect.js"
+
 /** The status a job holds. Queued and running are live, and the rest are
  * terminal. */
 export type JobStatus = "queued" | "running" | "done" | "error" | "cancelled" | "interrupted"
@@ -43,4 +45,6 @@ export interface JobStreamOptions {
 	fetchState: () => Promise<JobSnapshot>
 	/** Run when a dropped stream opens again. It receives the new count. */
 	onReconnect?: (count: number) => void
+	/** The reconnect schedule. Omit for the shared default of 500 ms, 8000 ms, and 6 attempts. */
+	reconnect?: ReconnectOptions
 }

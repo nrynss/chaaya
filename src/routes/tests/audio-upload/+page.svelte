@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from "$app/state"
-	import { ChunkUploader } from "$lib/audio/upload"
+	import { ChunkUploader } from "$lib/adapters/keel/upload"
 	import { onMount } from "svelte"
 	import { installGeneratedMicrophone } from "../../../../tests/playwright/support/audio/input"
 

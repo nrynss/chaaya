@@ -2,7 +2,7 @@
 	import { resolve } from "$app/paths";
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
-	import { ChunkUploader, type SessionRecord, type StoredChunk, type UploadStore } from "$lib/audio/upload/index.js";
+	import { ChunkUploader, type SessionRecord, type StoredChunk, type UploadStore } from "$lib/adapters/keel/upload/index.js";
 
 	/** The longest chunk the uploader sends. A small chunk keeps several
 	 * chunks inside one short take. */

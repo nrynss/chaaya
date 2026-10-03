@@ -23,21 +23,7 @@ export function isTerminalStatus(status: JobStatus): boolean {
 	return endsJob(status)
 }
 
-/** A blank line of either ending closes a frame. takeFrames pulls every whole
- * frame out of a decode buffer and leaves the unterminated tail behind. A run
- * of blank lines adds no frame. */
-export function takeFrames(buffer: string): { frames: string[]; rest: string } {
-	const frames: string[] = []
-	let rest = buffer
-	for (;;) {
-		const boundary = /\r?\n\r?\n/.exec(rest)
-		if (boundary === null) break
-		const frame = rest.slice(0, boundary.index)
-		if (frame.trim() !== "") frames.push(frame)
-		rest = rest.slice(boundary.index + boundary[0].length)
-	}
-	return { frames, rest }
-}
+export { takeFrames } from "../../../core/sse/frame.js"
 
 /** The ordering rules one job stream obeys.
  *

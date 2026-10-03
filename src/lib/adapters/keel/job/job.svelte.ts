@@ -1,13 +1,8 @@
+import { reconnectDelay, reconnectSettings } from "../../../core/sse/reconnect.js"
+import { runInEffect } from "../../../core/sse/effect.svelte.js"
 import { parseJobEvent, type ErrorBody, type JobEvent } from "../wire/index.js"
 import { isTerminalStatus, JobFollower, takeFrames } from "./follow.js"
 import type { JobConnection, JobError, JobSnapshot, JobStatus, JobStreamOptions } from "./types.js"
-
-/** The delay before the first reconnect, in milliseconds. */
-const baseReconnectDelayMs = 500
-/** The ceiling the reconnect delay doubles up to, in milliseconds. */
-const maxReconnectDelayMs = 8000
-/** The attempts one stream gets before it gives up. */
-const maxReconnectAttempts = 6
 
 /** Copy an error envelope into the plain shape a view renders. */
 function toJobError(body: ErrorBody): JobError {
@@ -35,11 +30,6 @@ function toJobError(body: ErrorBody): JobError {
  * job, closes the stream, and becomes the last change this stream makes.
  */
 
-/** Run one cleanup task in the calling component's effect context. */
-function runInEffect(task: () => () => void): void {
-	$effect(() => task())
-}
-
 export class JobStream {
 	/** The status of the job. It starts queued and stops at the first terminal. */
 	status = $state<JobStatus>("queued")
@@ -60,6 +50,7 @@ export class JobStream {
 	events = $state<JobEvent[]>([])
 
 	#options: JobStreamOptions
+	#schedule: ReturnType<typeof reconnectSettings>
 	#follower = new JobFollower()
 	#controller: AbortController | undefined = undefined
 	#timer: ReturnType<typeof setTimeout> | undefined = undefined
@@ -69,6 +60,7 @@ export class JobStream {
 
 	constructor(options: JobStreamOptions) {
 		this.#options = options
+		this.#schedule = reconnectSettings(options.reconnect)
 	}
 
 	/** Follow the job. Call it once during component initialisation. The
@@ -105,11 +97,11 @@ export class JobStream {
 	 * reconnects with a bounded delay, up to the attempt ceiling. */
 	#reconnect(): void {
 		if (this.#stopped) return
-		if (!this.#opened || this.#attempts >= maxReconnectAttempts) {
+		if (!this.#opened || this.#attempts >= this.#schedule.attempts) {
 			this.#stop("failed")
 			return
 		}
-		const delay = Math.min(baseReconnectDelayMs * 2 ** this.#attempts, maxReconnectDelayMs)
+		const delay = reconnectDelay(this.#attempts, this.#schedule)
 		this.#attempts += 1
 		this.connection = "reconnecting"
 		this.#timer = setTimeout(() => {

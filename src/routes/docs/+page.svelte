@@ -25,11 +25,11 @@
 		<ul>
 			<li><a href={resolve("/docs/tokens")}>tokens</a></li>
 			<li><a href={resolve("/docs/theme")}>theme</a></li>
-			<li><a href={resolve("/docs/wire")}>wire</a></li>
+			<li><a href={resolve("/docs/wire")}>keel wire</a></li>
 			<li><a href={resolve("/docs/api")}>api</a></li>
-			<li><a href={resolve("/docs/job")}>job</a></li>
+			<li><a href={resolve("/docs/job")}>keel job</a></li>
 			<li><a href={resolve("/docs/audio-capture")}>audio capture</a></li>
-			<li><a href={resolve("/docs/audio-upload")}>audio upload</a></li>
+			<li><a href={resolve("/docs/audio-upload")}>keel upload</a></li>
 			<li><a href={resolve("/docs/audio-playback")}>audio playback</a></li>
 			<li><a href={resolve("/docs/audio-stream")}>audio stream</a></li>
 			<li><a href={resolve("/docs/audio-levels")}>audio levels</a></li>

@@ -2,8 +2,8 @@
  * Chunked upload of a capture.
  *
  * The uploader splits a capture into fixed size chunks, hashes each chunk with
- * Web Crypto, persists it in IndexedDB, and streams it to Keel's upload
- * protocol. A failed chunk retries with backoff, the upload survives a short
+ * Web Crypto, persists it in IndexedDB, and streams it to Keel's chunked upload
+ * protocol. This module is the Keel adapter, not a generic audio helper. A failed chunk retries with backoff, the upload survives a short
  * network drop, and a reloaded page resumes the upload it left behind.
  */
 export { ChunkUploader } from "./upload.svelte.js"

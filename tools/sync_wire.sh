@@ -2,15 +2,15 @@
 # Copy the wire fixtures out of a pinned Keel tag.
 #
 # Keel owns the golden error and event frames. This script regenerates the copy
-# under src/lib/wire/fixtures from the tag named on the command line. It falls
+# under src/lib/adapters/keel/wire/fixtures from the tag named on the command line. It falls
 # back to the pinned tag when the caller omits one. It records the tag it
 # copied in KEEL_TAG, so the gate can rerun the same copy later.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 keel=${KEEL_DIR:-/home/nryn/work/keel}
-tag=${1:-v0.1.1}
-dest=src/lib/wire/fixtures
+tag=${1:-v0.4.0}
+dest=src/lib/adapters/keel/wire/fixtures
 
 if [ ! -e "$keel/.git" ]; then
 	printf 'No Keel checkout at %s\n' "$keel" >&2

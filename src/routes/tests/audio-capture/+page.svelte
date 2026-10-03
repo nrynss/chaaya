@@ -2,8 +2,8 @@
 	import { page } from "$app/state"
 	import type { CaptureChunk, CaptureMode, CaptureResult } from "$lib/audio/capture"
 	import { AudioRecorder } from "$lib/audio/capture"
-	import { ChunkUploader } from "$lib/audio/upload"
-	import { sha256Hex } from "$lib/audio/upload/chunk.js"
+	import { ChunkUploader } from "$lib/adapters/keel/upload"
+	import { sha256Hex } from "$lib/adapters/keel/upload/chunk.js"
 	import { onMount } from "svelte"
 	import {
 		installGeneratedMicrophone,

@@ -6,15 +6,22 @@ A Svelte 5 kit of behaviour, not looks. Each app that uses it keeps its own
 visual identity. Chaaya supplies the parts that are hard to get right and the
 same in every app.
 
+Chaaya is a kit, not a backend SDK. A product's wire contract does not live in
+the generic modules. Keel is one adapter, at `@nrynss/chaaya/keel`. An app that
+is not Keel does not import it. Nothing in this package names a consumer app.
+
 ## Scope
 
 - **Theme tokens.** A fixed set of role names and the three-state theme
   mechanism (system, forced light, forced dark). Each app supplies its own
   values.
-- **Audio.** Microphone capture and playback with seeking.
-- **Job progress.** A client for the server-sent events that Keel's `stream`
-  and `job` packages publish.
-- **API client.** One error envelope, branched on stable codes.
+- **Audio.** Microphone capture and playback with seeking. Live levels and
+  waveform peaks.
+- **Server-sent events.** A frame reader and a reconnect schedule that keep
+  whatever event name the server sent.
+- **API client.** One fetch wrapper. A failed response is a typed error. The
+  caller supplies a parser when a backend has an error envelope. Timeout and
+  network failures are generic.
 
 Accessible primitives such as dialogs and tooltips come from
 [Bits UI](https://bits-ui.com), not from this package.
@@ -24,30 +31,25 @@ Published as `@nrynss/chaaya`.
 ## Exports
 
 - `@nrynss/chaaya`: the package name.
+- `@nrynss/chaaya/core`: the generic contracts. `ApiClient`, the `SseFrame`
+  reader, the `JobProgress` shape, and the `Uploader` interface. No backend
+  envelope, event names, upload protocol, or auth.
 - `@nrynss/chaaya/tokens`: the fixed role names and a checker that reports a
   role a theme block leaves out.
 - `@nrynss/chaaya/tokens/reference.css`: the reference stylesheet a new app
   copies.
-- `@nrynss/chaaya/wire`: the error envelope and job event types, with a parser
-  for each that returns a typed failure instead of throwing.
 - `@nrynss/chaaya/theme`: the three-state theme mechanism and the head
   script that paints the stored mode before first paint.
-- `@nrynss/chaaya/api`: the fetch client that turns a failed response into
-  a typed error branched on a stable code.
-- `@nrynss/chaaya/job`: the job stream client that follows a job's events to
-  its end and stops at the first terminal event. It also carries the
-  JobFollower ordering rules, the isTerminalStatus check, and the JobReport
-  union one accepted event belongs to.
+- `@nrynss/chaaya/api`: the fetch client. Pass `parseError` to read a
+  backend's envelope. Without a parser, a non-2xx body stays `http_error`.
+  `createApi({ parseError })` sets that parser for every call.
+- `@nrynss/chaaya/sse`: the shared frame splitter, named-event field parser,
+  and reconnect schedule. Payloads are not interpreted.
 - `@nrynss/chaaya/audio`: microphone capture in compressed and PCM modes,
-  chunked upload that survives a network drop and a reload, playback through
-  one element unlocked by the first gesture, the PcmStreamPlayer for arriving
-  blocks, and live levels and waveform peaks. Capture adds the resampleLinear
-  and resampleChunks rate conversion and the encodeWav file writer. Upload
-  adds the beginBody and completeBody builders, the uploadPath, chunkPath and
-  completePath route builders, and the parseUploadSnapshot and
-  parseUploadReceipt readers. It also carries the sha256Hex digest and
-  ChunkBuffer splitter, the retryDelayMs backoff and isRetryableStatus check,
-  and the refusal and toUploadFailure error mapping.
+  playback through one element unlocked by the first gesture, the
+  PcmStreamPlayer for arriving blocks, and live levels and waveform peaks.
+  Capture adds the resampleLinear and resampleChunks rate conversion and the
+  encodeWav file writer.
 - `@nrynss/chaaya/guard`: the SessionGuard that closes one live session
   exactly once when its page goes away.
 - `@nrynss/chaaya/transcript`: timed words, the TranscriptEditor that cuts and
@@ -56,6 +58,10 @@ Published as `@nrynss/chaaya`.
   TranscriptFollower that binds the words to playback.
 - `@nrynss/chaaya/testing`: a contrast gate and an accessibility gate a
   consumer points at its own stylesheet and container.
+- `@nrynss/chaaya/keel`: the Keel adapter, checked against Keel `v0.4.0`.
+  It holds the error envelope, job event parser, job stream, and chunked
+  upload protocol. Its `api` is the generic client with Keel's envelope
+  parser already set.
 
 ## Docs
 
@@ -67,16 +73,13 @@ suggesting a look.
   role a theme block leaves out.
 - [theme](/docs/theme): the three-state theme mechanism and the head script
   that paints the stored mode before first paint.
-- [wire](/docs/wire): the error envelope and job event types, with a parser
-  for each that returns a typed failure instead of throwing.
-- [api](/docs/api): the fetch client that turns a failed response into a
-  typed error branched on a stable code.
-- [job](/docs/job): the job stream client that follows a job's events to its
-  end and stops at the first terminal event.
+- [api](/docs/api): the fetch client. The example passes the Keel error parser.
+- [wire](/docs/wire): the Keel adapter's error envelope and job event parsers.
+- [job](/docs/job): the Keel job stream.
 - [audio capture](/docs/audio-capture): microphone capture in compressed and
   PCM modes, recorded from a generated signal.
-- [audio upload](/docs/audio-upload): chunked upload that survives a network
-  drop and a reload, streamed to the route beside the page.
+- [audio upload](/docs/audio-upload): Keel's chunked upload, streamed to the
+  route beside the page.
 - [audio playback](/docs/audio-playback): playback through one element
   unlocked by the first gesture, with seeking.
 - [audio stream](/docs/audio-stream): the PcmStreamPlayer that schedules
@@ -93,10 +96,25 @@ suggesting a look.
 - [testing](/docs/testing): the contrast gate and the accessibility gate run
   against the page itself.
 
+## Migration from 0.2.4
+
+This split is breaking. Generic paths no longer speak Keel.
+
+| 0.2.4 | Now |
+| --- | --- |
+| `@nrynss/chaaya/wire` | `@nrynss/chaaya/keel` |
+| `@nrynss/chaaya/job` | `@nrynss/chaaya/keel` |
+| Chunked upload helpers on `@nrynss/chaaya/audio` | `@nrynss/chaaya/keel` |
+| `api()` parses `{ error: { code, message, detail } }` | Import `api` from `@nrynss/chaaya/keel`, or pass `parseError: keelErrorParser` |
+
+`timeout` and `network` are unchanged. A body the parser does not recognise
+is still `http_error`.
+
 ## Status
 
 Published on [npm](https://www.npmjs.com/package/@nrynss/chaaya) as
-`@nrynss/chaaya`. The current release is `0.2.4`.
+`@nrynss/chaaya`. The current release is `0.2.4`. The adapter split is not
+in that release yet.
 
 ```sh
 npm install @nrynss/chaaya

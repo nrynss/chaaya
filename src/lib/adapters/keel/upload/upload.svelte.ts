@@ -1,3 +1,4 @@
+import type { Uploader } from "../../../core/upload.js"
 import { ChunkBuffer, defaultChunkSize, sha256Hex } from "./chunk.js"
 import {
 	beginBody,
@@ -46,7 +47,7 @@ function wait(ms: number): Promise<void> {
  * start() and finish() resolve when their work ends, and the state reports the
  * outcome. A caller reads state, error and receipt instead of catching.
  */
-export class ChunkUploader {
+export class ChunkUploader implements Uploader {
 	/** Where the upload stands. */
 	state = $state<UploadState>("idle")
 	/** The id the server gave the upload, once it opened. */

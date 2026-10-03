@@ -4,7 +4,7 @@
 	import { onMount } from "svelte";
 	import { a11yGate, contrastGate } from "$lib/testing/index.js";
 	import { AudioRecorder, type CaptureChunk, type CaptureMode } from "$lib/audio/capture/index.js";
-	import { ChunkUploader } from "$lib/audio/upload/index.js";
+	import { ChunkUploader } from "$lib/adapters/keel/upload/index.js";
 	import { resampleChunks } from "$lib/audio/capture/resample.js";
 	import { encodeWav } from "$lib/audio/capture/wav.js";
 

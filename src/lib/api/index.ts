@@ -1,7 +1,6 @@
 /**
- * The HTTP client a Chaaya consumer shares. One fetch wrapper turns a failed
- * response into an ApiError a caller branches on by code. It turns a timeout
- * and a lost network into the same shape, rather than a bare TypeError.
+ * The generic HTTP client. It implements ApiClient and reads no backend
+ * envelope. A Keel caller imports api from `@nrynss/chaaya/keel` instead.
  */
-export { ApiError, api } from "./client.js"
-export type { ApiRequestInit } from "./client.js"
+export { ApiError, api, createApi } from "../core/api.js"
+export type { ApiClient, ApiClientOptions, ApiErrorParser, ApiFailureBody, ApiRequestInit } from "../core/api.js"

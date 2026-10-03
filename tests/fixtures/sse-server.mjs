@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url"
 const jobId = "3f9a1c7e5b2d8046a1c3e5f7092b4d68"
 
 /** The directory holding the wire module's fixture frames. */
-const frameDirectory = fileURLToPath(new URL("../../src/lib/wire/fixtures/", import.meta.url))
+const frameDirectory = fileURLToPath(new URL("../../src/lib/adapters/keel/wire/fixtures/", import.meta.url))
 
 /** Read one fixture frame from its file name. */
 function frame(name) {

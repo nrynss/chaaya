@@ -1,42 +1,19 @@
 /**
- * The wire shapes a Keel client reads. One error envelope covers every failed
- * request, and one event frame covers every step of a job stream. A client
- * branches on the stable names here and never on message wording.
+ * Keel's wire shapes. One error envelope covers every failed request, and one
+ * event frame covers every step of a job stream. A client branches on the
+ * stable names here and never on message wording. These shapes belong to the
+ * Keel adapter. They were checked against Keel v0.4.0. Generic modules do not
+ * import this file.
  *
  * Every parser returns a typed value or a typed failure. A malformed frame
  * never throws, because one bad frame must cost a progress reading and never
  * the screen.
  */
 
-/** The reason a parser rejected its input. */
-export interface ParseFailure {
-	/** A short sentence naming what the input lacked. */
-	message: string
-}
+import { decodeJson, fail, isRecord, ok, type ParseResult } from "../../../core/result.js"
+import { parseNamedFrame } from "../../../core/sse/frame.js"
 
-/** A parsed value, or the failure that replaced it. */
-export type ParseResult<T> = { ok: true; value: T } | { ok: false; failure: ParseFailure }
-
-function ok<T>(value: T): ParseResult<T> {
-	return { ok: true, value }
-}
-
-function fail<T>(message: string): ParseResult<T> {
-	return { ok: false, failure: { message } }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-/** Decode a JSON text into a value, or fail without throwing. */
-function decodeJson(text: string): ParseResult<unknown> {
-	try {
-		return ok(JSON.parse(text))
-	} catch {
-		return fail("the text does not hold valid JSON")
-	}
-}
+export type { ParseFailure, ParseResult } from "../../../core/result.js"
 
 /** The body every non-2xx JSON response carries under its error member. */
 export interface ErrorBody {
@@ -73,57 +50,6 @@ export function parseErrorEnvelope(text: string): ParseResult<ErrorEnvelope> {
 	const decoded = decodeJson(text)
 	if (!decoded.ok) return decoded
 	return decodeErrorEnvelope(decoded.value)
-}
-
-/** One server-sent event frame read from a stream. A comment frame, such as a
- * heartbeat, carries a comment and leaves event, id and data empty. */
-interface EventFrame {
-	comment: string
-	event: string
-	id: number
-	data: string
-}
-
-/** Read one frame from its text. A blank line ends the frame and its data
- * lines join with a newline, so a payload split over several lines reads back
- * whole. The reader never throws, so a malformed id comes back as a failure. */
-function parseFrame(text: string): ParseResult<EventFrame> {
-	const frame: EventFrame = { comment: "", event: "", id: 0, data: "" }
-	const data: string[] = []
-	let sawField = false
-	for (const raw of text.split("\n")) {
-		const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw
-		if (line === "") {
-			if (!sawField) continue
-			break
-		}
-		sawField = true
-		const at = line.indexOf(":")
-		const name = at === -1 ? line : line.slice(0, at)
-		let value = at === -1 ? "" : line.slice(at + 1)
-		if (value.startsWith(" ")) value = value.slice(1)
-		switch (name) {
-			case "":
-				frame.comment = value
-				break
-			case "event":
-				frame.event = value
-				break
-			case "id": {
-				const id = Number(value)
-				if (!Number.isInteger(id) || id < 0) {
-					return fail(`the frame id ${value} is not a whole number`)
-				}
-				frame.id = id
-				break
-			}
-			case "data":
-				data.push(value)
-				break
-		}
-	}
-	if (data.length > 0) frame.data = data.join("\n")
-	return ok(frame)
 }
 
 /** The payload of a progress event. Progress reports work in flight and is
@@ -233,31 +159,31 @@ function parseErrorEvent(
 
 /** Parse one job event frame. It returns the typed event or a typed failure
  * and never throws, so a bad frame costs a progress reading and never the
- * screen. */
+ * screen. Field splitting is the shared frame reader. This function only
+ * accepts Keel's job names and payload. */
 export function parseJobEvent(text: string): ParseResult<JobEvent> {
-	const framed = parseFrame(text)
+	const framed = parseNamedFrame(text)
 	if (!framed.ok) return framed
 	const frame = framed.value
-	if (frame.event === "") {
-		if (frame.comment === "") return fail("the frame carries neither an event nor a comment")
+	if (frame.kind === "comment") {
 		return ok({ id: frame.id, name: "heartbeat", comment: frame.comment })
 	}
-	if (frame.data === "") return fail(`the ${frame.event} frame carries no data`)
+	if (frame.data === "") return fail(`the ${frame.name} frame carries no data`)
 	const decoded = decodeJson(frame.data)
 	if (!decoded.ok) return decoded
-	if (!isRecord(decoded.value)) return fail(`the ${frame.event} data is not a JSON object`)
+	if (!isRecord(decoded.value)) return fail(`the ${frame.name} data is not a JSON object`)
 	const data = decoded.value
-	if (typeof data.job_id !== "string") return fail(`the ${frame.event} data has no job_id string`)
-	switch (frame.event) {
+	if (typeof data.job_id !== "string") return fail(`the ${frame.name} data has no job_id string`)
+	switch (frame.name) {
 		case "progress":
 			return parseProgress(frame.id, data.job_id, data)
 		case "done":
 		case "cancelled":
 		case "interrupted":
-			return parseStatus(frame.id, frame.event, data.job_id, data)
+			return parseStatus(frame.id, frame.name, data.job_id, data)
 		case "error":
 			return parseErrorEvent(frame.id, data.job_id, data)
 		default:
-			return fail(`the event name ${frame.event} is not a job event`)
+			return fail(`the event name ${frame.name} is not a job event`)
 	}
 }

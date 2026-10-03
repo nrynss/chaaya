@@ -1,5 +1,5 @@
 /**
- * Follow one job to its end. A JobStream reads the job's event feed, holds the
+ * Follow one Keel job to its end. A JobStream reads the job's event feed, holds the
  * state a view renders, and stops at the first terminal event. It reads the
  * job's state once per connection to catch up on frames it missed, and it
  * counts the reconnects a consumer may react to.
@@ -11,3 +11,4 @@
 export { JobStream } from "./job.svelte.js"
 export type { JobConnection, JobError, JobSnapshot, JobStatus, JobStreamOptions } from "./types.js"
 export { JobFollower, isTerminalStatus, type JobReport } from "./follow.js"
+export { toJobProgress } from "./progress.js"
