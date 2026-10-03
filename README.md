@@ -17,8 +17,9 @@ is not Keel does not import it. Nothing in this package names a consumer app.
   values.
 - **Audio.** Microphone capture and playback with seeking. Live levels and
   waveform peaks.
-- **Server-sent events.** A frame reader and a reconnect schedule that keep
-  whatever event name the server sent.
+- **Server-sent events.** A frame reader, a frame writer, and a reconnect
+  schedule that keep whatever event name the server sent. The writer emits a
+  frame string. It does not build an HTTP response.
 - **API client.** One fetch wrapper. A failed response is a typed error. The
   caller supplies a parser when a backend has an error envelope. Timeout and
   network failures are generic.
@@ -31,9 +32,10 @@ Published as `@nrynss/chaaya`.
 ## Exports
 
 - `@nrynss/chaaya`: the package name.
-- `@nrynss/chaaya/core`: the generic contracts. `ApiClient`, the `SseFrame`
-  reader, the `JobProgress` shape, and the `Uploader` interface. No backend
-  envelope, event names, upload protocol, or auth.
+- `@nrynss/chaaya/core`: the generic contracts. `ApiClient`, the parse
+  helpers (`ok`, `fail`, `isRecord`, `decodeJson`), the `SseFrame` reader and
+  `formatNamedFrame` writer, the `JobProgress` shape, and the `Uploader`
+  interface. No backend envelope, event names, upload protocol, or auth.
 - `@nrynss/chaaya/tokens`: the fixed role names and a checker that reports a
   role a theme block leaves out.
 - `@nrynss/chaaya/tokens/reference.css`: the reference stylesheet a new app
@@ -44,7 +46,8 @@ Published as `@nrynss/chaaya`.
   backend's envelope. Without a parser, a non-2xx body stays `http_error`.
   `createApi({ parseError })` sets that parser for every call.
 - `@nrynss/chaaya/sse`: the shared frame splitter, named-event field parser,
-  and reconnect schedule. Payloads are not interpreted.
+  `formatNamedFrame` writer, and reconnect schedule. Payloads are not
+  interpreted. The writer emits a frame string. It does not build a response.
 - `@nrynss/chaaya/audio`: microphone capture in compressed and PCM modes,
   playback through one element unlocked by the first gesture, the
   PcmStreamPlayer for arriving blocks, and live levels and waveform peaks.
@@ -74,6 +77,9 @@ suggesting a look.
 - [theme](/docs/theme): the three-state theme mechanism and the head script
   that paints the stored mode before first paint.
 - [api](/docs/api): the fetch client. The example passes the Keel error parser.
+- [job progress](/docs/job-progress): how any pipeline maps stages and counters
+  onto `JobProgress`. The same guidance is in
+  [docs/job-progress.md](docs/job-progress.md).
 - [wire](/docs/wire): the Keel adapter's error envelope and job event parsers.
 - [job](/docs/job): the Keel job stream.
 - [audio capture](/docs/audio-capture): microphone capture in compressed and

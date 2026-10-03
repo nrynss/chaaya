@@ -94,3 +94,59 @@ export function parseNamedFrame(text: string): ParseResult<SseFrame> {
 	}
 	return ok({ kind: "event", id, name, data: data.join("\n") })
 }
+
+/** Fields written into one SSE frame. Set `event` for an event frame, or `comment` for a comment frame, not both. */
+export interface NamedFrameFields {
+	/** A whole number, zero or more. Omitted writes no id line, which the reader treats as zero. */
+	id?: number
+	/** The event name. A line break is rejected. */
+	event?: string
+	/** The payload. A line break becomes another data line. The reader joins those lines with `\n`. */
+	data?: string
+	/** Comment text for a frame that has no event name. A line break is rejected. */
+	comment?: string
+}
+
+function assertWholeId(id: number): void {
+	if (!Number.isInteger(id) || id < 0) {
+		throw new Error(`the frame id ${id} is not a whole number`)
+	}
+}
+
+function assertSingleLine(value: string, label: string): void {
+	if (value.includes("\n") || value.includes("\r")) {
+		throw new Error(`a ${label} cannot hold a line break`)
+	}
+}
+
+/**
+ * Write one SSE frame as text. `takeFrames` splits it, and `parseNamedFrame`
+ * reads the frame back. The payload is not interpreted. This does not build
+ * an HTTP response.
+ */
+export function formatNamedFrame(fields: NamedFrameFields): string {
+	const event = fields.event ?? ""
+	const comment = fields.comment ?? ""
+	if (fields.id !== undefined) assertWholeId(fields.id)
+	assertSingleLine(event, "event name")
+	assertSingleLine(comment, "comment")
+	if (event !== "" && comment !== "") {
+		throw new Error("a frame is either an event or a comment")
+	}
+	if (event === "" && comment === "") {
+		throw new Error("the frame carries neither an event nor a comment")
+	}
+	if (event === "" && fields.data !== undefined && fields.data !== "") {
+		throw new Error("a comment frame cannot carry data")
+	}
+	const lines: string[] = []
+	if (fields.id !== undefined) lines.push(`id: ${fields.id}`)
+	if (event !== "") {
+		lines.push(`event: ${event}`)
+		const data = fields.data ?? ""
+		for (const part of data.split(/\r\n|\r|\n/)) lines.push(`data: ${part}`)
+	} else {
+		lines.push(`: ${comment}`)
+	}
+	return `${lines.join("\n")}\n\n`
+}
