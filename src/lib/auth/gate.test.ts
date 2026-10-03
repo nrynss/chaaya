@@ -44,6 +44,16 @@ describe("gate passcode", () => {
 		expect(helper.value).toBe("")
 	})
 
+	test("quotes that are data survive a cookie round trip", () => {
+		const jar: CookieTarget = { cookie: "" }
+		const helper = gate({ jar })
+		helper.set('"abc"')
+		expect(readCookie(jar.cookie, cookieName)).toBe('"abc"')
+		expect(readCookie("app_gate=%22abc%22", cookieName)).toBe('"abc"')
+		const again = gate({ jar })
+		expect(again.value).toBe('"abc"')
+	})
+
 	test("a line break is refused", () => {
 		const helper = gate()
 		expect(() => helper.set("open\nsesame")).toThrow(/line break/)

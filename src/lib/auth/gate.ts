@@ -54,18 +54,19 @@ function unquoteCookie(value: string): string {
 }
 
 /** Read one cookie from a cookie header. An absent cookie reads as empty.
- * A value written as a quoted-string comes back without the quotes. */
+ * A raw quoted-string loses its surrounding quotes before decoding, so
+ * percent-encoded quotes stay data. */
 export function readCookie(header: string, name: string): string {
 	for (const part of header.split(";")) {
 		const trimmed = part.trim()
 		const at = trimmed.indexOf("=")
 		if (at === -1) continue
 		if (trimmed.slice(0, at) !== name) continue
-		const raw = trimmed.slice(at + 1)
+		const bare = unquoteCookie(trimmed.slice(at + 1))
 		try {
-			return unquoteCookie(decodeURIComponent(raw))
+			return decodeURIComponent(bare)
 		} catch {
-			return unquoteCookie(raw)
+			return bare
 		}
 	}
 	return ""
