@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { ApiError, type ApiErrorParser } from "./api"
-import { UploadSizeUnknown, UploadTooLarge, uploadBlob } from "./upload-blob"
+import { UploadSizeUnknown, UploadTooLarge, uploadBlob, uploadBlobWithProgress } from "./upload-blob"
 
 afterEach(() => {
 	vi.unstubAllGlobals()
@@ -80,8 +80,50 @@ describe("one-shot upload", () => {
 		vi.stubGlobal("fetch", fetchMock)
 		const form = new FormData()
 		form.append("note", "yes")
-		await expect(uploadBlob("/blob", form, { maxBytes: 10 })).rejects.toBeInstanceOf(UploadSizeUnknown)
+		await expect(uploadBlob("/blob", form, { maxBytes: 10 })).rejects.toThrow(
+			"set maxBytes only for Blob bodies, or pass an explicit size.",
+		)
+		await expect(uploadBlobWithProgress("/blob", form, { maxBytes: 10 })).rejects.toBeInstanceOf(UploadSizeUnknown)
 		expect(fetchMock).not.toHaveBeenCalled()
+	})
+
+	test("an explicit size lets maxBytes apply to FormData", async () => {
+		const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }))
+		vi.stubGlobal("fetch", fetchMock)
+		const form = new FormData()
+		form.append("note", "yes")
+		await uploadBlob("/blob", form, { maxBytes: 10, size: 4 })
+		expect(fetchMock).toHaveBeenCalledTimes(1)
+		await expect(uploadBlob("/blob", form, { maxBytes: 3, size: 4 })).rejects.toBeInstanceOf(UploadTooLarge)
+		expect(fetchMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("uploadBlob stays on fetch when XMLHttpRequest exists and passes credentials through", async () => {
+		let opened = 0
+		class FakeXHR {
+			constructor() {
+				opened += 1
+			}
+		}
+		vi.stubGlobal("XMLHttpRequest", FakeXHR)
+		const seen: RequestInit[] = []
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (_url: string, init?: RequestInit) => {
+				seen.push(captured(init))
+				return new Response("{}", { status: 200 })
+			}),
+		)
+		const progress: number[] = []
+		await uploadBlob("/blob", new Blob(["hello"]), {
+			credentials: "include",
+			onProgress: (loaded) => {
+				progress.push(loaded)
+			},
+		})
+		expect(opened).toBe(0)
+		expect(captured(seen[0]).credentials).toBe("include")
+		expect(progress).toEqual([5])
 	})
 
 	test("a refused upload stays http_error unless the caller passes a parser", async () => {
@@ -152,7 +194,7 @@ describe("one-shot upload", () => {
 		}
 		vi.stubGlobal("XMLHttpRequest", FakeXHR)
 		const blob = new Blob(["wave"], { type: "audio/wav" })
-		const saved = await uploadBlob<{ stored: boolean }>("https://store.example/signed", blob, {
+		const saved = await uploadBlobWithProgress<{ stored: boolean }>("https://store.example/signed", blob, {
 			method: "PUT",
 			formData: false,
 			credentials: "omit",
@@ -165,10 +207,20 @@ describe("one-shot upload", () => {
 		expect(sent).toBe(blob)
 		expect(withCredentials).toBe(false)
 		expect(headers.authorization).toBeUndefined()
+		await uploadBlobWithProgress("https://app.example/file", blob, {
+			credentials: "include",
+			formData: false,
+		})
+		expect(withCredentials).toBe(true)
 		expect(headers["content-type"]).toBe("audio/wav")
 		expect(progress).toEqual([
 			[2, 4],
 			[4, 4],
 		])
+	})
+
+	test("uploadBlobWithProgress rejects when the host has no XMLHttpRequest", async () => {
+		vi.stubGlobal("XMLHttpRequest", undefined)
+		await expect(uploadBlobWithProgress("/blob", new Blob(["x"]))).rejects.toThrow(/XMLHttpRequest/)
 	})
 })

@@ -14,12 +14,12 @@ export class UploadTooLarge extends Error {
 	}
 }
 
-/** `maxBytes` was set on a FormData body, which has no size until the browser encodes it. */
+/** `maxBytes` was set, and this body has no size the caller named. */
 export class UploadSizeUnknown extends Error {
 	readonly code = "size_unknown"
 
 	constructor() {
-		super("maxBytes cannot measure a FormData body")
+		super("set maxBytes only for Blob bodies, or pass an explicit size.")
 		this.name = "UploadSizeUnknown"
 	}
 }
@@ -29,7 +29,10 @@ export interface BlobUploadOptions {
 	/** Headers such as a bearer token. A multipart body drops Content-Type so the boundary stays intact.
 	 * A signed URL often sends no Authorization header. Set Content-Type here when the store requires one. */
 	headers?: HeadersInit
-	/** `include` sends cookies (`withCredentials` on the browser path). `omit` sends none, which is what a presigned URL wants. Default matches fetch: cookies stay on the same origin. */
+	/** Cookie policy, read by both transports.
+	 * Fetch receives this value as-is. Omit it and fetch keeps its default, which sends cookies on the same origin.
+	 * XMLHttpRequest sets `withCredentials` only when this is `"include"`. That flag affects cross-origin requests.
+	 * Same-origin XHR always sends cookies, so `"omit"` does not strip them there. */
 	credentials?: RequestCredentials
 	/** Extra text fields when the body is a blob posted as multipart. Ignored when body is already FormData. */
 	fields?: Readonly<Record<string, string>>
@@ -45,24 +48,34 @@ export interface BlobUploadOptions {
 	signal?: AbortSignal
 	/** Give up after this many milliseconds. */
 	timeoutMs?: number
-	/** Refuse a larger blob before any request is sent. A FormData body throws UploadSizeUnknown instead of skipping the check. */
+	/** Refuse a larger body before any request is sent.
+	 * A Blob is measured by `size`. FormData has no size until the browser encodes it, so pass `size` or omit `maxBytes`.
+	 * Otherwise this throws `UploadSizeUnknown` instead of skipping the check. */
 	maxBytes?: number
-	/** Bytes the browser has handed to the socket, then the total when it knows one.
-	 * On a browser this is XMLHttpRequest upload progress, including values before the response.
-	 * A host with no XMLHttpRequest uses fetch, which cannot see the socket, and calls this once after settle with the blob size (or 0, 0 for FormData). */
+	/** Byte length the caller already knows. Required when `maxBytes` is set on FormData.
+	 * A Blob uses its own `size` and ignores this. */
+	size?: number
+	/** Bytes handed to the socket, and the total when one is known.
+	 * `uploadBlob` calls this once, after the response, with the known size (0 when FormData has no `size`).
+	 * `uploadBlobWithProgress` calls this from `xhr.upload.onprogress`, including samples before the response. */
 	onProgress?: (loaded: number, total: number) => void
 	/** Read a refused body. Omit and a non-2xx stays http_error. */
 	parseError?: ApiErrorParser
+}
+
+/** A body ready to send. A later multipart helper should reuse this instead of rebuilding the request. */
+export interface UploadPrepared {
+	method: string
+	headers: Headers
+	payload: BodyInit
+	/** Known byte length, or 0 when the body is FormData and the caller passed no size. */
+	size: number
 }
 
 function fileName(body: Blob, explicit: string | undefined): string {
 	if (explicit !== undefined && explicit !== "") return explicit
 	if (typeof File !== "undefined" && body instanceof File && body.name !== "") return body.name
 	return "upload"
-}
-
-function sizeOf(body: Blob | FormData): number {
-	return body instanceof Blob ? body.size : 0
 }
 
 function detailObject(detail: unknown): Record<string, unknown> {
@@ -85,8 +98,15 @@ function readRetryAfter(header: string | null): number | undefined {
 	return /^\d+$/.test(trimmed) ? Number(trimmed) : undefined
 }
 
-/** The same refusal `api()` builds. A parser throw stays http_error. */
-function failure(status: number, statusText: string, text: string, retryAfter: string | null, parseError: ApiErrorParser | undefined): ApiError {
+/** The same refusal `api()` builds. A parser throw stays http_error.
+ * The XHR path uses this. The fetch path uses `api()`, which applies the same rule. */
+export function uploadFailure(
+	status: number,
+	statusText: string,
+	text: string,
+	retryAfter: string | null,
+	parseError: ApiErrorParser | undefined,
+): ApiError {
 	const retryAfterSeconds = readRetryAfter(retryAfter)
 	let parsed: ApiFailureBody | undefined
 	try {
@@ -103,22 +123,21 @@ function failure(status: number, statusText: string, text: string, retryAfter: s
 	return new ApiError(`${status} ${statusText}`, "http_error", status, {}, retryAfterSeconds)
 }
 
-interface Prepared {
-	method: string
-	headers: Headers
-	payload: BodyInit
-	size: number
+/** The one progress callback both transports call. A multipart helper should call this too, not a second shape. */
+export function reportUploadProgress(
+	onProgress: BlobUploadOptions["onProgress"],
+	loaded: number,
+	total: number,
+): void {
+	onProgress?.(loaded, total)
 }
 
-function prepare(body: Blob | FormData, options: BlobUploadOptions): Prepared {
+/** Measure, limit, and shape one body. Blob and FormData share this, and a later part upload should too. */
+export function prepareUpload(body: Blob | FormData, options: BlobUploadOptions): UploadPrepared {
 	const limit = options.maxBytes
-	const size = sizeOf(body)
-	if (body instanceof FormData && limit !== undefined) {
-		throw new UploadSizeUnknown()
-	}
-	if (limit !== undefined && body instanceof Blob && size > limit) {
-		throw new UploadTooLarge(size, limit)
-	}
+	const known = body instanceof Blob ? body.size : options.size
+	if (limit !== undefined && known === undefined) throw new UploadSizeUnknown()
+	if (limit !== undefined && known !== undefined && known > limit) throw new UploadTooLarge(known, limit)
 	const headers = new Headers(options.headers)
 	let payload: BodyInit
 	if (body instanceof FormData) {
@@ -136,15 +155,41 @@ function prepare(body: Blob | FormData, options: BlobUploadOptions): Prepared {
 		headers.delete("content-type")
 		payload = form
 	}
-	return { method: options.method ?? "POST", headers, payload, size }
+	return { method: options.method ?? "POST", headers, payload, size: known ?? 0 }
 }
 
-function settle<T>(status: number, statusText: string, text: string, retryAfter: string | null, parseError: ApiErrorParser | undefined): T {
-	if (status < 200 || status >= 300) throw failure(status, statusText, text, retryAfter, parseError)
+function settle<T>(
+	status: number,
+	statusText: string,
+	text: string,
+	retryAfter: string | null,
+	parseError: ApiErrorParser | undefined,
+): T {
+	if (status < 200 || status >= 300) throw uploadFailure(status, statusText, text, retryAfter, parseError)
 	return decodeBody(text) as T
 }
 
-function sendWithXhr<T>(url: string, prepared: Prepared, options: BlobUploadOptions): Promise<T> {
+/** Fetch transport. Progress is one call after settle. `#31` should not copy this request. */
+export function sendUpload<T>(url: string, prepared: UploadPrepared, options: BlobUploadOptions): Promise<T> {
+	return api<T>(url, {
+		method: prepared.method,
+		headers: prepared.headers,
+		body: prepared.payload,
+		credentials: options.credentials,
+		signal: options.signal,
+		timeoutMs: options.timeoutMs,
+		parseError: options.parseError,
+	}).then((value) => {
+		reportUploadProgress(options.onProgress, prepared.size, prepared.size)
+		return value
+	})
+}
+
+/** XMLHttpRequest transport. Progress is `xhr.upload.onprogress`. `#31` should send parts through this. */
+export function sendUploadWithProgress<T>(url: string, prepared: UploadPrepared, options: BlobUploadOptions): Promise<T> {
+	if (typeof XMLHttpRequest === "undefined") {
+		return Promise.reject(new Error("uploadBlobWithProgress needs XMLHttpRequest"))
+	}
 	return new Promise<T>((resolve, reject) => {
 		const xhr = new XMLHttpRequest()
 		xhr.open(prepared.method, url)
@@ -154,12 +199,9 @@ function sendWithXhr<T>(url: string, prepared: Prepared, options: BlobUploadOpti
 		xhr.responseType = "text"
 		xhr.withCredentials = options.credentials === "include"
 		if (options.timeoutMs !== undefined) xhr.timeout = options.timeoutMs
-		const progress = options.onProgress
-		if (progress !== undefined) {
-			xhr.upload.onprogress = (event) => {
-				const total = event.lengthComputable ? event.total : prepared.size
-				progress(event.loaded, total)
-			}
+		xhr.upload.onprogress = (event) => {
+			const total = event.lengthComputable ? event.total : prepared.size
+			reportUploadProgress(options.onProgress, event.loaded, total)
 		}
 		const signal = options.signal
 		const onAbort = () => {
@@ -200,44 +242,49 @@ function sendWithXhr<T>(url: string, prepared: Prepared, options: BlobUploadOpti
 	})
 }
 
+function begin(body: Blob | FormData, options: BlobUploadOptions): Promise<UploadPrepared> {
+	try {
+		return Promise.resolve(prepareUpload(body, options))
+	} catch (cause) {
+		return Promise.reject(cause)
+	}
+}
+
 /**
- * Send one short blob or form. The caller supplies the route and the fields.
+ * Send one short blob or form with fetch.
  *
  * This is the one-shot sibling of `Uploader`. `Uploader` is chunked (`start`,
  * `append`, `finish`) and can resume. This helper sends the whole body in one
  * request and cannot resume. A large file belongs on `Uploader`.
  *
+ * `onProgress` fires once, after the response settles, with the known size.
+ * Fetch cannot see the socket. Use `uploadBlobWithProgress` when the bar must
+ * move while the bytes are leaving.
+ *
  * A presigned store URL is `method: "PUT"`, `formData: false`, and
  * `credentials: "omit"`. Pass no Authorization header unless the signer asked
  * for one. The raw blob is the body.
  *
- * A browser sends through XMLHttpRequest so `onProgress` sees socket progress.
- * A host with no XMLHttpRequest falls back to fetch and reports progress once,
- * after the response, because fetch does not expose upload progress.
- *
  * A refusal matches `api()`: `parseError` may name the code, otherwise it is
  * `http_error`. A blob past `maxBytes` throws `UploadTooLarge` and never leaves
- * the caller. `maxBytes` on FormData throws `UploadSizeUnknown` instead of
- * pretending the form is empty.
+ * the caller. `maxBytes` on FormData without `size` throws `UploadSizeUnknown`.
  */
 export function uploadBlob<T>(url: string, body: Blob | FormData, options: BlobUploadOptions = {}): Promise<T> {
-	let prepared: Prepared
-	try {
-		prepared = prepare(body, options)
-	} catch (cause) {
-		return Promise.reject(cause)
-	}
-	if (typeof XMLHttpRequest !== "undefined") return sendWithXhr(url, prepared, options)
-	return api<T>(url, {
-		method: prepared.method,
-		headers: prepared.headers,
-		body: prepared.payload,
-		credentials: options.credentials,
-		signal: options.signal,
-		timeoutMs: options.timeoutMs,
-		parseError: options.parseError,
-	}).then((value) => {
-		options.onProgress?.(prepared.size, prepared.size)
-		return value
-	})
+	return begin(body, options).then((prepared) => sendUpload<T>(url, prepared, options))
+}
+
+/**
+ * Send one short blob or form with XMLHttpRequest.
+ *
+ * `onProgress` is `xhr.upload.onprogress`. It fires while the body is uploading,
+ * before the response. This needs `XMLHttpRequest` and does not fall back to fetch.
+ *
+ * `credentials` is the same option `uploadBlob` reads. `"include"` sets
+ * `withCredentials`. That flag only affects cross-origin requests. Same-origin
+ * XHR sends cookies either way.
+ *
+ * The limit, the presigned PUT, and the refusal shape match `uploadBlob`.
+ */
+export function uploadBlobWithProgress<T>(url: string, body: Blob | FormData, options: BlobUploadOptions = {}): Promise<T> {
+	return begin(body, options).then((prepared) => sendUploadWithProgress<T>(url, prepared, options))
 }

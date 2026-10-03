@@ -25,14 +25,20 @@
 		belongs there.
 	</p>
 	<p>
-		<code>uploadBlob</code> on <code>@nrynss/chaaya/upload</code> sends one body and cannot resume. A browser
-		reports socket progress through <code>XMLHttpRequest</code>. A host with no <code>XMLHttpRequest</code>
-		uses fetch and calls <code>onProgress</code> once after settle, because fetch cannot see the socket.
+		<code>uploadBlob</code> on <code>@nrynss/chaaya/upload</code> sends one body with fetch and cannot resume.
+		<code>onProgress</code> fires once, after settle. <code>uploadBlobWithProgress</code> uses
+		<code>XMLHttpRequest</code>, so <code>onProgress</code> is socket progress before the response. It does
+		not fall back to fetch. Neither function is exported from <code>@nrynss/chaaya/core</code>.
 	</p>
 	<p>
-		<code>maxBytes</code> refuses an oversized blob before the request. On <code>FormData</code> it throws
-		<code>UploadSizeUnknown</code>. The form has no size until the browser encodes it, so the limit is not
-		skipped in silence.
+		<code>credentials</code> is one option. Fetch receives it as-is. XMLHttpRequest sets
+		<code>withCredentials</code> only for <code>"include"</code>, and that flag only affects cross-origin
+		requests. Same-origin XHR always sends cookies.
+	</p>
+	<p>
+		<code>maxBytes</code> refuses an oversized blob before the request. On <code>FormData</code> without
+		<code>size</code> it throws <code>UploadSizeUnknown</code>: set <code>maxBytes</code> only for Blob
+		bodies, or pass an explicit size. The limit is not skipped in silence.
 	</p>
 	<h2>Presigned PUT</h2>
 	<p>

@@ -6,38 +6,46 @@ Two helpers, two jobs. Neither one names a backend.
 
 `Uploader` on `@nrynss/chaaya/core` is the resumable contract: `start`, `append`, `finish`. An adapter implements it. Keel's chunked protocol is one implementation, on `@nrynss/chaaya/keel`. A large recording belongs there, because a dropped connection can send the missing blocks again.
 
-Core does not know the route, the hash field, or the error envelope.
+Core does not know the route, the hash field, or the error envelope. One-shot upload is not exported from core.
 
 ## One-shot
 
-`uploadBlob` on `@nrynss/chaaya/upload` (also exported from `@nrynss/chaaya/core`) sends the whole body in one request. It cannot resume. Use it for a short file, or for a presigned store URL.
+Both functions live only on `@nrynss/chaaya/upload`. They send the whole body in one request and cannot resume. Use them for a short file, or for a presigned store URL. A large file belongs on `Uploader`.
 
-A browser uses `XMLHttpRequest`, so `onProgress` receives socket progress before the response. A host with no `XMLHttpRequest` uses `fetch` and calls `onProgress` once after settle, with the blob size, because fetch does not report upload progress. That fallback is not a progress bar.
+`uploadBlob` uses fetch. `onProgress` fires once, after the response settles, with the known size. Fetch cannot see the socket, so that call is not a progress bar.
 
-`maxBytes` refuses a blob larger than the limit before the request. It does not apply to `FormData`, which has no size until the browser encodes it. Passing `maxBytes` with `FormData` throws `UploadSizeUnknown` instead of skipping the check.
+`uploadBlobWithProgress` uses `XMLHttpRequest`. `onProgress` is `xhr.upload.onprogress`, so it fires while the bytes are leaving, before the response. A host with no `XMLHttpRequest` rejects. It does not fall back to fetch.
+
+Both read one `credentials` option. Fetch receives it as-is. XMLHttpRequest sets `withCredentials` only when the value is `"include"`. That flag affects cross-origin requests. Same-origin XHR always sends cookies, so `"omit"` does not strip them there.
+
+`maxBytes` refuses a blob larger than the limit before the request. `FormData` has no size until the browser encodes it. Passing `maxBytes` on `FormData` without `size` throws `UploadSizeUnknown`. The message is the fix: set `maxBytes` only for Blob bodies, or pass an explicit `size`.
 
 A refusal matches `api()`. Pass `parseError` to read a backend envelope. Without it, a non-2xx stays `http_error`.
 
+Prepare, refusal, and progress reporting are shared. A later direct-to-storage multipart helper should call those, not a second copy of the request.
+
 ### Presigned PUT
 
-Direct-to-storage is a raw body, not a form, and it usually must not send cookies or an app token.
+Direct-to-storage is a raw body, not a form, and it usually must not send cookies or an app token. Use the progress helper when the file is large enough to show a bar.
 
 ```ts
-import { uploadBlob } from "@nrynss/chaaya/upload"
+import { uploadBlobWithProgress } from "@nrynss/chaaya/upload"
 
-await uploadBlob(signedUrl, blob, {
+await uploadBlobWithProgress(signedUrl, blob, {
   method: "PUT",
   formData: false,
   credentials: "omit",
   headers: { "content-type": blob.type },
   onProgress: (loaded, total) => {
-    // loaded grows until total
+    // loaded grows until total, from xhr.upload.onprogress
   },
 })
 ```
 
-`credentials: "include"` is the other end of that option, for an app route that uses a cookie. The default leaves cookies on the same origin and does not set `withCredentials`.
+`credentials: "include"` is the other end of that option, for an app route that uses a cookie. On XMLHttpRequest it sets `withCredentials`, which only changes a cross-origin request.
+
+`uploadBlob` is the same call on fetch, with one progress sample after settle.
 
 ### Multipart
 
-The default posts a blob as `FormData` under the field `file`. `fields` adds text parts. A body that is already `FormData` is sent as given. Do not set `Content-Type` yourself. The browser writes the boundary.
+The default posts a blob as `FormData` under the field `file`. `fields` adds text parts. A body that is already `FormData` is sent as given. Do not set `Content-Type` yourself. The browser writes the boundary. Pass `size` when `maxBytes` must apply to that form.
