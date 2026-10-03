@@ -164,7 +164,7 @@ stream.attach()
 
 ## When not to use this shape
 
-`JobProgress` is only for progress: a step, a counter, a status. An event that is none of those does not belong in `stage`. Publish it on a named event stream (`createEventStream`): any event name, raw data, no progress fields. Progress stays a `JobProgress` reading. Everything else stays a named frame.
+`JobProgress` is only for progress: a step, a counter, a status. An event that is none of those does not belong in `stage`. Publish it as named SSE frames instead: any event name, raw data, no progress fields. Use `takeFrames` and `parseNamedFrame` from `@nrynss/chaaya/core` (or `@nrynss/chaaya/sse`). A follow helper for that path is not in this foundation; it lands separately. Progress stays a `JobProgress` reading. Everything else stays a named frame.
 
 ## Where the code lives
 

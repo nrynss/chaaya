@@ -137,7 +137,7 @@
 	<h2>Named events</h2>
 	<p>
 		An event that is not a step, a counter, or a status does not belong in <code>stage</code>. Publish it
-		on a named event stream (<code>createEventStream</code>). Progress stays a <code>JobProgress</code>
+		as named SSE frames (<code>takeFrames</code> / <code>parseNamedFrame</code>). Progress stays a <code>JobProgress</code>
 		reading.
 	</p>
 	<nav aria-label="Pieces"><a href={resolve("/docs")}>back</a></nav>
