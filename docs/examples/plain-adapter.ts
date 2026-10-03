@@ -49,6 +49,19 @@ function numberField(record: Record<string, unknown>, key: string): number | und
 	return value
 }
 
+/**
+ * Host `again` becomes `ChaayaError.retryable`.
+ * The error frame and a failed catch-up share this mapping.
+ */
+function failedError(reason: unknown, again: unknown): ChaayaError {
+	const error: ChaayaError = {
+		code: "failed",
+		message: typeof reason === "string" && reason !== "" ? reason : "the work stopped",
+	}
+	if (typeof again === "boolean") error.retryable = again
+	return error
+}
+
 /** Map `{ step, done, of, result? }` onto a progress reading. Absent fields stay absent. */
 function progressReading(value: Record<string, unknown>): JobProgress {
 	const reading: JobProgress = { status: "running" }
@@ -88,13 +101,11 @@ function onError(frame: NamedEvent): JobFrameAction {
 			error: { code: "unreadable", message: body.failure.message },
 		}
 	}
-	const reason = body.value.reason
-	const error: ChaayaError = {
-		code: "failed",
-		message: typeof reason === "string" && reason !== "" ? reason : "the work stopped",
+	return {
+		kind: "terminal",
+		reading: { status: "error" },
+		error: failedError(body.value.reason, body.value.again),
 	}
-	if (typeof body.value.again === "boolean") error.retryable = body.value.again
-	return { kind: "terminal", reading: { status: "error" }, error }
 }
 
 /** Handlers for the event names `progress`, `done`, and `error`. Any other name is absent, so the loop ignores it. */
@@ -130,6 +141,8 @@ export function plainIsTerminal(reading: JobProgress): boolean {
  * Read a state document.
  * `failed: true` wins over `finished: true`.
  * The error sits beside the reading. It is not stored in `detail`.
+ * A failed document may carry `again`; it maps onto `retryable` the same way
+ * an error frame does. A finished or running document has no `again`.
  */
 export function plainCatchUp(body: unknown): ParseResult<JobCatchUp> {
 	if (!isRecord(body)) return fail("the state is not an object")
@@ -137,8 +150,10 @@ export function plainCatchUp(body: unknown): ParseResult<JobCatchUp> {
 	if (body.failed === true) {
 		reading.status = "error"
 		const catchUp: JobCatchUp = { reading }
-		if (typeof body.reason === "string" && body.reason !== "") {
-			catchUp.error = { code: "failed", message: body.reason }
+		const hasReason = typeof body.reason === "string" && body.reason !== ""
+		const hasAgain = typeof body.again === "boolean"
+		if (hasReason || hasAgain) {
+			catchUp.error = failedError(hasReason ? body.reason : undefined, body.again)
 		}
 		return ok(catchUp)
 	}
@@ -146,7 +161,13 @@ export function plainCatchUp(body: unknown): ParseResult<JobCatchUp> {
 	return ok({ reading })
 }
 
-/** One stream. `fetchState` runs only after the event response is open. A bad state document leaves the stream alone. */
+/**
+ * One stream. `fetchState` runs only after the event response is open.
+ * A bad state document leaves the stream alone.
+ * The state document is translated on its own promise, the same way Keel's
+ * wrapper does. Pass a ready `JobCatchUp` into `createJobStream` when a
+ * caller needs the reading in that same turn.
+ */
 export function plainJobStream(options: {
 	url: string
 	watchId: string
@@ -164,11 +185,13 @@ export function plainJobStream(options: {
 	}
 	const fetchState = options.fetchState
 	if (fetchState !== undefined) {
-		streamOptions.fetchState = async () => {
-			const parsed = plainCatchUp(await fetchState())
-			if (!parsed.ok) throw new Error(parsed.failure.message)
-			return parsed.value
-		}
+		/** Translate on its own promise. Callers still pass `() => Promise<unknown>`. */
+		streamOptions.fetchState = () =>
+			fetchState().then((body) => {
+				const parsed = plainCatchUp(body)
+				if (!parsed.ok) throw new Error(parsed.failure.message)
+				return parsed.value
+			})
 	}
 	return createJobStream(streamOptions)
 }

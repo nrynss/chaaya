@@ -6,7 +6,7 @@ model's read. It is not a maintainer approval.
 - Hash reviewed: `4a1bcbba41c38638e2b12513a66999e79210416e` (branch `issue-10-passcode`, the
   round-2 remediation on top of the carried round-2 review file)
 - Worktree: `/home/nryn/work/chaaya-wt/issue10-rev-r3` (detached at the hash)
-- Round 2 file: `reviews/glm-vibe-issue-10-passcode-gate-round2.md`, verdict REMEDIATE with one
+- Round 2 review: commit `f0fe501` (the round 2 carry), verdict REMEDIATE with one
   new L (the unquoting order in `readCookie`)
 
 ## Branch shape since round 2

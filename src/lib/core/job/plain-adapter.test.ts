@@ -117,6 +117,14 @@ describe("plain adapter", () => {
 			error: { code: "failed", message: "disk full" },
 		})
 		expect(failed.ok && plainIsTerminal(failed.value.reading)).toBe(true)
+		const again = plainCatchUp({ step: "encode", done: 1, of: 10, failed: true, reason: "disk full", again: true })
+		expect(again.ok && again.value.error).toEqual({ code: "failed", message: "disk full", retryable: true })
+		const againOnly = plainCatchUp({ failed: true, again: false })
+		expect(againOnly.ok && againOnly.value.error).toEqual({
+			code: "failed",
+			message: "the work stopped",
+			retryable: false,
+		})
 		expect(plainCatchUp([]).ok).toBe(false)
 	})
 

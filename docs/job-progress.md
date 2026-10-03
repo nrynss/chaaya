@@ -126,20 +126,17 @@ A server that is not Keel does not get its own client loop. The page imports `Jo
 
 ```ts
 import { createJobStream } from "@nrynss/chaaya/core"
+import { plainFrameMap } from "./plain-adapter" // copy docs/examples/plain-adapter.ts
 
 const stream = createJobStream({
   url: "/jobs/1/events",
   reconnect: { baseMs: 500, maxMs: 8000, attempts: 6 },
-  frameMap: {
-    progress: onProgress,
-    done: onDone,
-    error: onError,
-  },
+  frameMap: plainFrameMap(),
 })
 stream.attach()
 ```
 
-`new JobStream({ url, frameMap, reconnect })` is the same call. The names `progress`, `done`, and `error` are the caller's. The handlers are the ones in the adapter guide. This call does not reimplement fetch, frame splitting, or backoff.
+`new JobStream({ url, frameMap, reconnect })` is the same call. The names inside `plainFrameMap` are the caller's. Copy the full adapter from [adapters.md](adapters.md) rather than inventing handlers here. This call does not reimplement fetch, frame splitting, or backoff.
 
 ## When not to use this shape
 

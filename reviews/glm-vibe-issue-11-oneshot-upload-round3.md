@@ -6,7 +6,7 @@ model's read. It is not a maintainer approval.
 - Hash reviewed: `6ea6e4ee51faf1d2e9a39f0456d2d734e9974d54` (branch `issue-11-oneshot-upload`,
   the follow-up remediation on top of the carried round-2 review file)
 - Worktree: `/home/nryn/work/chaaya-wt/issue11-rev-r3` (detached at the hash)
-- Round 2 file: `reviews/glm-vibe-issue-11-oneshot-upload-round2.md`, verdict APPROVE with zero
+- Round 2 review: commit `7bda1cd` (the round 2 carry), verdict APPROVE with zero
   findings. This round reviews the additional commit that answers another reviewer's finding.
 
 ## Branch shape since round 2
