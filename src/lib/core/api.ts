@@ -95,10 +95,16 @@ function joinSignals(
 }
 
 /** Turn a failed response into the one error a caller branches on. A parser
- * that recognises the body supplies the code. Anything else keeps http_error. */
+ * that recognises the body supplies the code. A throw or anything else keeps
+ * http_error, so a bad body never becomes a network failure. */
 function failure(response: Response, text: string, parseError: ApiErrorParser | undefined): ApiError {
 	const retryAfterSeconds = readRetryAfter(response)
-	const parsed = parseError?.(text, response)
+	let parsed: ApiFailureBody | undefined
+	try {
+		parsed = parseError?.(text, response)
+	} catch {
+		parsed = undefined
+	}
 	if (parsed !== undefined) {
 		return new ApiError(
 			parsed.message,

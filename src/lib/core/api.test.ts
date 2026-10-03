@@ -62,6 +62,20 @@ describe("responses", () => {
 		expect(error.retryAfterSeconds).toBe(12)
 	})
 
+	test("a parser that throws keeps the HTTP status and retry hint", async () => {
+		serve("<html>bad gateway</html>", 502, { "Retry-After": "7" })
+		const error = await caught(() =>
+			api("/upload", {
+				parseError() {
+					throw new SyntaxError("Unexpected token")
+				},
+			}),
+		)
+		expect(error.code).toBe("http_error")
+		expect(error.status).toBe(502)
+		expect(error.retryAfterSeconds).toBe(7)
+	})
+
 	test("a response without a parser keeps the code http_error", async () => {
 		serve("<html>bad gateway</html>", 502)
 		const error = await caught(() => api("/upload"))
