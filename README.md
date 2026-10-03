@@ -53,6 +53,13 @@ Published as `@nrynss/chaaya`.
 - `@nrynss/chaaya/api`: the fetch client. Pass `parseError` to read a
   backend's envelope. Without a parser, a non-2xx body stays `http_error`.
   `createApi({ parseError })` sets that parser for every call.
+  `GatePasscode` sends a caller-named header and cookie. It has no backend
+  default names. `authCodes` is a plain list checked with `includes`, so a
+  prototype key is not an auth code. `Set-Cookie` is read only where the
+  runtime still exposes it (Node). Browsers hide that header. Pass
+  `jar: document` only in the browser. Omit it under SSR. Importing the
+  module does not touch `document`. Keel's defaults are `keelGate` on
+  `@nrynss/chaaya/keel`.
 - `@nrynss/chaaya/sse`: the shared frame splitter, named-event field parser,
   `formatNamedFrame` writer, reconnect schedule, and `FrameLoop`. Payloads are
   not interpreted. The writer emits a frame string. It does not build a
@@ -94,6 +101,8 @@ suggesting a look.
 - [theme](/docs/theme): the three-state theme mechanism and the head script
   that paints the stored mode before first paint.
 - [api](/docs/api): the fetch client. The example passes the Keel error parser.
+- [gate](/docs/gate): a passcode on a caller-named header, and how `keelGate`
+  is the adapter for one backend.
 - [job progress](/docs/job-progress): how any pipeline maps stages and counters
   onto `JobProgress`, and how `JobStream` applies a frame map. The follow
   loop stays in core.
