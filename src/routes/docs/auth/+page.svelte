@@ -11,16 +11,17 @@
 </script>
 
 <svelte:head>
-	<title>passcode gate</title>
+	<title>auth</title>
 	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 	{@html `<style>${referenceCss}</style>`}
 </svelte:head>
 
-<main data-testid="docs-gate">
-	<h1>passcode gate</h1>
+<main data-testid="docs-auth">
+	<h1>auth</h1>
 	<p data-testid="hydrated">{hydrated ? "ready" : ""}</p>
 	<p>
-		<code>GatePasscode</code> on <code>@nrynss/chaaya/auth</code> sends a caller-named header and cookie. It
+		This page is <code>/docs/auth</code>, the same name as <code>@nrynss/chaaya/auth</code>. The feature is a
+		passcode gate. <code>GatePasscode</code> sends a caller-named header and cookie. It
 		names no backend. An adapter is a function that fills those names. <code>keelGate</code> on
 		<code>@nrynss/chaaya/keel</code> fills <code>X-Passcode</code>, the cookie <code>passcode</code>, and the
 		code <code>passcode_required</code>.

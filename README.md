@@ -105,8 +105,8 @@ suggesting a look.
 - [theme](/docs/theme): the three-state theme mechanism and the head script
   that paints the stored mode before first paint.
 - [api](/docs/api): the fetch client. The example passes the Keel error parser.
-- [gate](/docs/gate): a passcode on a caller-named header, and how `keelGate`
-  is the adapter for one backend.
+- [auth](/docs/auth): a passcode on a caller-named header, and how `keelGate`
+  is the adapter for one backend. The route matches the `@nrynss/chaaya/auth` export.
 - [job progress](/docs/job-progress): how any pipeline maps stages and counters
   onto `JobProgress`, and how `JobStream` applies a frame map. The follow
   loop stays in core.

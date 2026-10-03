@@ -1,6 +1,6 @@
-# Passcode gate
+# Auth
 
-`GatePasscode` on `@nrynss/chaaya/auth` sends one secret on a header and, when you pass a jar, a cookie. It does not know a backend's names. `keelGate` on `@nrynss/chaaya/keel` is the adapter that fills Keel's names in. That split is the pattern for any other backend.
+The export is `@nrynss/chaaya/auth`. This page is `/docs/auth`, the same name. The feature is a passcode gate. `GatePasscode` sends one secret on a header and, when you pass a jar, a cookie. It does not know a backend's names. `keelGate` on `@nrynss/chaaya/keel` is the adapter that fills Keel's names in. That split is the pattern for any other backend.
 
 ## Write an adapter
 
