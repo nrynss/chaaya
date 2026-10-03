@@ -126,13 +126,15 @@
 	</p>
 	<p>
 		<code>JobStream</code> and <code>createJobStream</code> are the same stream. Pass a required
-		<code>frameMap</code>. A name that is not in the map is ignored. Optional <code>shouldAccept</code>,
+		<code>frameMap</code>. A name that is not in the map is ignored, including an inherited name such as
+		<code>toString</code>. Optional <code>shouldAccept</code>, <code>onAccept</code>,
 		<code>isTerminal</code>, <code>fetchState</code>, <code>prepareState</code>, and <code>requestInit</code> stay on the options.
+		<code>onAccept</code> runs only when the frame is kept.
 		<code>fetchState</code> resolves a catch-up: a progress reading, and an optional error beside it. That error is not
 		<code>detail</code>.
 		<code>requestInit</code> carries headers and credentials. Accept stays <code>text/event-stream</code>, and
 		the stream owns the abort. A reconnect sends <code>Last-Event-ID</code> when the last accepted frame id is
-		not 0. A Rust server, or any other
+		not 0. An empty id line resets it. A missing id line does not. A Rust server, or any other
 		server that speaks <code>text/event-stream</code>, supplies that map. It does not reimplement the read
 		loop. The example is in <code>docs/job-progress.md</code>.
 	</p>

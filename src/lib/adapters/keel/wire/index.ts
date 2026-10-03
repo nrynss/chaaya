@@ -11,7 +11,7 @@
  */
 
 import { decodeJson, fail, isRecord, ok, type ParseResult } from "../../../core/result.js"
-import { parseNamedFrame } from "../../../core/sse/frame.js"
+import { parseNamedFrame, type NamedEvent } from "../../../core/sse/frame.js"
 
 export type { ParseFailure, ParseResult } from "../../../core/result.js"
 
@@ -157,10 +157,43 @@ function parseErrorEvent(
 	return ok({ id, name: "error", jobId, status: "error", error: envelope.value })
 }
 
+/** A job event that is not a heartbeat. Comment frames never take this path. */
+type JobDataEvent = ProgressEvent | StatusEvent | ErrorEvent
+
+/** Read Keel's JSON payload off an event the frame reader already split.
+ * Comment frames are not represented here. Heartbeats stay on `parseJobEvent`. */
+function parseEventPayload(id: number, name: string, dataText: string): ParseResult<JobDataEvent> {
+	if (dataText === "") return fail(`the ${name} frame carries no data`)
+	const decoded = decodeJson(dataText)
+	if (!decoded.ok) return decoded
+	if (!isRecord(decoded.value)) return fail(`the ${name} data is not a JSON object`)
+	const data = decoded.value
+	if (typeof data.job_id !== "string") return fail(`the ${name} data has no job_id string`)
+	switch (name) {
+		case "progress":
+			return parseProgress(id, data.job_id, data)
+		case "done":
+		case "cancelled":
+		case "interrupted":
+			return parseStatus(id, name, data.job_id, data)
+		case "error":
+			return parseErrorEvent(id, data.job_id, data)
+		default:
+			return fail(`the event name ${name} is not a job event`)
+	}
+}
+
+/** Parse one named event the frame reader already split. This does not accept
+ * comments. The JSON, `job_id`, and name rules match `parseJobEvent`. */
+export function parseJobEventFromNamed(frame: NamedEvent): ParseResult<JobDataEvent> {
+	return parseEventPayload(frame.id, frame.name, frame.data)
+}
+
 /** Parse one job event frame. It returns the typed event or a typed failure
  * and never throws, so a bad frame costs a progress reading and never the
- * screen. Field splitting is the shared frame reader. This function only
- * accepts Keel's job names and payload. */
+ * screen. Field splitting is the shared frame reader. A comment frame is a
+ * heartbeat. An event frame uses the same payload rules as
+ * `parseJobEventFromNamed`. */
 export function parseJobEvent(text: string): ParseResult<JobEvent> {
 	const framed = parseNamedFrame(text)
 	if (!framed.ok) return framed
@@ -168,22 +201,5 @@ export function parseJobEvent(text: string): ParseResult<JobEvent> {
 	if (frame.kind === "comment") {
 		return ok({ id: frame.id, name: "heartbeat", comment: frame.comment })
 	}
-	if (frame.data === "") return fail(`the ${frame.name} frame carries no data`)
-	const decoded = decodeJson(frame.data)
-	if (!decoded.ok) return decoded
-	if (!isRecord(decoded.value)) return fail(`the ${frame.name} data is not a JSON object`)
-	const data = decoded.value
-	if (typeof data.job_id !== "string") return fail(`the ${frame.name} data has no job_id string`)
-	switch (frame.name) {
-		case "progress":
-			return parseProgress(frame.id, data.job_id, data)
-		case "done":
-		case "cancelled":
-		case "interrupted":
-			return parseStatus(frame.id, frame.name, data.job_id, data)
-		case "error":
-			return parseErrorEvent(frame.id, data.job_id, data)
-		default:
-			return fail(`the event name ${frame.name} is not a job event`)
-	}
+	return parseEventPayload(frame.id, frame.name, frame.data)
 }

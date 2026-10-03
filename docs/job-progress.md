@@ -103,9 +103,10 @@ Each event name in the map returns an action:
 - `progress` merges the reading. A field that is present overwrites. A field that is absent stays.
 - `terminal` ends the watch. It may also carry a reading and an error.
 
-A name that is not in the map is ignored. Optional hooks stay on the options, not in a second loop:
+A name that is not in the map is ignored. `frameMap` is a plain object's own keys. The loop uses `Object.hasOwn`, so an event named `toString` or `constructor` does not call an inherited function and does not end the watch. A handler result whose `kind` is not `ignore`, `progress`, or `terminal` is ignored the same way. Optional hooks stay on the options, not in a second loop:
 
-- `shouldAccept` refuses a frame before the map runs.
+- `shouldAccept` refuses a frame before the map runs. It does not mean the frame was kept.
+- `onAccept` runs only after a `progress` or `terminal` action. Use it to record the frame. An ignore does not call it.
 - `fetchState` reads a catch-up once the stream is live, so a late join can catch up. It resolves `{ reading, error? }`. `reading` is a `JobProgress`. `error` is a `ChaayaError` beside that reading. Do not put the failure in `reading.detail`.
 - `prepareState` may rewrite that catch-up, or return undefined to skip it.
 - `isTerminal` says whether that catch-up reading ends the watch. It sees the progress reading, not the error.
@@ -113,7 +114,7 @@ A name that is not in the map is ignored. Optional hooks stay on the options, no
 
 `Accept` is always `text/event-stream`. A different `accept` on `requestInit` does not stick. `signal` on `requestInit` is ignored. The stream owns the abort.
 
-The first request sends no `Last-Event-ID`. A reconnect sends it when the last accepted frame has an id other than 0. Zero means the frame carried no id, and then the header is omitted. An ignored frame does not move that id.
+The first request sends no `Last-Event-ID`. A reconnect sends it when the last accepted id is not 0. An accepted frame with no id line leaves that id alone. An empty id line (`id:`) on an accepted frame resets it, and the next reconnect omits the header. An explicit `id: 0` does the same. An ignored frame does not move that id. Comment frames, including Keel heartbeats, never reach `frameMap`.
 
 The error on a terminal action uses the shape in [errors.md](errors.md).
 
@@ -171,7 +172,7 @@ stream.attach()
 
 - Import the type: `import type { JobProgress } from "@nrynss/chaaya/core"`.
 - Import the stream: `import { JobStream, createJobStream } from "@nrynss/chaaya/core"`.
-- The follow loop stays in that module. An adapter supplies `frameMap`, and it may supply `shouldAccept`, `isTerminal`, `fetchState`, `prepareState`, and `requestInit`. A catch-up is `{ reading, error? }`. The error is not a field of the reading.
+- The follow loop stays in that module. An adapter supplies `frameMap`, and it may supply `shouldAccept`, `onAccept`, `isTerminal`, `fetchState`, `prepareState`, and `requestInit`. A catch-up is `{ reading, error? }`. The error is not a field of the reading.
 - Core does not name stages and does not read a wire format.
 - An adapter may map its snapshot into `JobProgress`. That mapping stays in the adapter.
 - The app maps its domain into `JobProgress` at the edge that publishes or renders progress.

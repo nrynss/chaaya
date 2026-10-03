@@ -1,7 +1,7 @@
 import type { JobFrameAction } from "../../../core/job/types.js"
 import type { JobProgress } from "../../../core/progress.js"
-import { formatNamedFrame, type NamedEvent } from "../../../core/sse/frame.js"
-import { parseJobEvent, type ErrorBody, type JobEvent } from "../wire/index.js"
+import type { NamedEvent } from "../../../core/sse/frame.js"
+import { parseJobEventFromNamed, type ErrorBody, type JobEvent } from "../wire/index.js"
 import { type JobFollower, type JobReport } from "./follow.js"
 
 /** Copy an error envelope into the plain shape a view renders. */
@@ -11,26 +11,11 @@ function toJobError(body: ErrorBody): { code: string; message: string; detail?: 
 		: { code: body.code, message: body.message, detail: body.detail }
 }
 
-/** Rebuild the frame text the Keel parser reads. */
-function asText(frame: NamedEvent): string | undefined {
-	try {
-		return formatNamedFrame({
-			id: frame.id === 0 ? undefined : frame.id,
-			event: frame.name,
-			data: frame.data,
-		})
-	} catch {
-		return undefined
-	}
-}
-
-/** The job report inside one named frame, or undefined when it is not one. */
+/** The job report inside one named frame, or undefined when it is not one.
+ * Comment heartbeats never arrive here: core drops them before the map. */
 function keelReport(frame: NamedEvent): JobReport | undefined {
-	const text = asText(frame)
-	if (text === undefined) return undefined
-	const parsed = parseJobEvent(text)
+	const parsed = parseJobEventFromNamed(frame)
 	if (!parsed.ok) return undefined
-	if (parsed.value.name === "heartbeat") return undefined
 	return parsed.value
 }
 
@@ -64,11 +49,18 @@ export function keelFrameMap(): Record<string, (frame: NamedEvent) => JobFrameAc
 	}
 }
 
-/** Run the Keel follower, and keep the report when it is accepted. */
-export function keelShouldAccept(follower: JobFollower, frame: NamedEvent, push: (event: JobEvent) => void): boolean {
+/** Whether the follower would keep this frame. This does not record it.
+ * The stream pushes the report from `keelOnAccept` only after the action is progress or terminal. */
+export function keelShouldAccept(follower: JobFollower, frame: NamedEvent): boolean {
 	const report = keelReport(frame)
 	if (report === undefined) return false
-	if (!follower.accept(report)) return false
-	push(report)
-	return true
+	return follower.allows(report)
+}
+
+/** Record one frame the core stream kept, and return it for the Keel event list. */
+export function keelOnAccept(follower: JobFollower, frame: NamedEvent): JobEvent | undefined {
+	const report = keelReport(frame)
+	if (report === undefined) return undefined
+	if (!follower.accept(report)) return undefined
+	return report
 }

@@ -2,7 +2,7 @@ import { JobStream as CoreJobStream } from "../../../core/job/job.svelte.js"
 import type { JobCatchUp } from "../../../core/job/types.js"
 import type { JobProgress } from "../../../core/progress.js"
 import { isTerminalStatus, JobFollower } from "./follow.js"
-import { keelFrameMap, keelShouldAccept } from "./map.js"
+import { keelFrameMap, keelOnAccept, keelShouldAccept } from "./map.js"
 import { toJobProgress } from "./progress.js"
 import type { JobEvent } from "../wire/index.js"
 import type { JobConnection, JobError, JobStatus, JobStreamOptions } from "./types.js"
@@ -45,9 +45,11 @@ export class JobStream {
 				if (reading.status === undefined) return false
 				return isTerminalStatus(reading.status as JobStatus)
 			},
-			shouldAccept: (frame) => keelShouldAccept(follower, frame, (event) => {
-				this.#events.push(event)
-			}),
+			shouldAccept: (frame) => keelShouldAccept(follower, frame),
+			onAccept: (frame) => {
+				const event = keelOnAccept(follower, frame)
+				if (event !== undefined) this.#events.push(event)
+			},
 			onReconnect: options.onReconnect,
 			reconnect: options.reconnect,
 			requestInit: options.requestInit,
@@ -90,8 +92,10 @@ export class JobStream {
 		return this.#core.reconnects
 	}
 
-	/** Every accepted frame in arrival order. A component that mounts after
-	 * the first frames still reads them here. */
+	/** Every frame the core stream kept, in arrival order, as Keel events.
+	 * Ignored and refused frames are not here. A component that mounts after
+	 * the first frames still reads them here. Core `frames` is the same accept
+	 * set as raw named events; Keel views read this list. */
 	get events(): JobEvent[] {
 		return this.#events
 	}

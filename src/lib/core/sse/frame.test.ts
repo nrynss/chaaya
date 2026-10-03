@@ -6,7 +6,7 @@ describe("named frames", () => {
 	test("an event keeps its name and a comment stays a comment", () => {
 		expect(parseNamedFrame('event: alpha\nid: 3\ndata: {"n":1}')).toEqual({
 			ok: true,
-			value: { kind: "event", id: 3, name: "alpha", data: '{"n":1}' },
+			value: { kind: "event", id: 3, name: "alpha", data: '{"n":1}', idSet: true },
 		})
 		expect(parseNamedFrame(": ping")).toEqual({
 			ok: true,
@@ -42,7 +42,7 @@ describe("frame writing", () => {
 		expect(taken.frames).toEqual(['id: 3\nevent: alpha\ndata: {"n":1}'])
 		expect(parseNamedFrame(taken.frames[0]!)).toEqual({
 			ok: true,
-			value: { kind: "event", id: 3, name: "alpha", data: '{"n":1}' },
+			value: { kind: "event", id: 3, name: "alpha", data: '{"n":1}', idSet: true },
 		})
 		expect(parseNamedFrame(wire)).toEqual(parseNamedFrame(taken.frames[0]!))
 	})
@@ -56,12 +56,31 @@ describe("frame writing", () => {
 		expect(taken.frames).toHaveLength(2)
 		expect(parseNamedFrame(taken.frames[0]!)).toEqual({
 			ok: true,
-			value: { kind: "comment", id: 1, comment: "ping" },
+			value: { kind: "comment", id: 1, comment: "ping", idSet: true },
 		})
 		expect(parseNamedFrame(taken.frames[1]!)).toEqual({
 			ok: true,
 			value: { kind: "event", id: 0, name: "beta", data: "a\nb" },
 		})
+	})
+
+	test("an empty id line resets and a missing id does not", () => {
+		expect(parseNamedFrame("event: alpha\nid:\ndata: x")).toEqual({
+			ok: true,
+			value: { kind: "event", id: 0, name: "alpha", data: "x", idSet: true, resetId: true },
+		})
+		expect(parseNamedFrame("event: alpha\nid: 0\ndata: x")).toEqual({
+			ok: true,
+			value: { kind: "event", id: 0, name: "alpha", data: "x", idSet: true },
+		})
+		const missing = parseNamedFrame("event: alpha\ndata: x")
+		expect(missing).toEqual({
+			ok: true,
+			value: { kind: "event", id: 0, name: "alpha", data: "x" },
+		})
+		if (!missing.ok) return
+		expect(missing.value).not.toHaveProperty("resetId")
+		expect(missing.value).not.toHaveProperty("idSet")
 	})
 
 	test("a missing id reads back as zero and a bad frame is refused", () => {

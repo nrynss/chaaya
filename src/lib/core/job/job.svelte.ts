@@ -8,7 +8,8 @@ import type { JobCatchUp, JobConnection, JobFrameAction, JobStreamOptions } from
 
 /** Build one fetch init. The caller may pass auth. Accept stays the event
  * stream type, and the abort signal is always the stream's own. On a
- * reconnect, a last accepted id other than 0 is sent as Last-Event-ID. */
+ * reconnect, a last accepted id other than 0 is sent as Last-Event-ID.
+ * An empty id line on an accepted frame clears that id. A missing id line does not. */
 function fetchInit(options: JobStreamOptions, signal: AbortSignal, lastEventId: number, reconnecting: boolean): RequestInit {
 	const given = options.requestInit
 	const headers = new Headers(given?.headers)
@@ -47,8 +48,11 @@ function mergeProgress(base: JobProgress, reading: JobProgress): JobProgress {
  * opened fails instead, because a first failure usually repeats. A terminal
  * action ends the watch and becomes the last change this stream makes.
  *
- * `frameMap` decides what each event name means. A name that is not in the
- * map is ignored. `shouldAccept` can refuse a frame before the map runs.
+ * `frameMap` decides what each event name means. It is a plain object's own
+ * keys. `Object.hasOwn` ignores inherited names such as `toString`. A name
+ * that is missing, a handler that is not a function, and a result that is not
+ * `ignore`, `progress`, or `terminal` are all ignored. They do not end the
+ * watch. `shouldAccept` can refuse a frame before the map runs.
  */
 export class JobStream {
 	/** The published reading. Fields stay absent until a frame or a catch-up sets them. */
@@ -69,7 +73,7 @@ export class JobStream {
 	#attempts = 0
 	#opened = false
 	#stopped = false
-	/** Id of the last accepted event. Zero means none, or a frame that carried no id. */
+	/** Id of the last accepted event that carried an id line. Zero means none yet, an explicit zero, or an empty id line that reset it. A later accepted frame with no id line leaves this alone. */
 	#lastEventId = 0
 
 	constructor(options: JobStreamOptions) {
@@ -213,14 +217,20 @@ export class JobStream {
 		const parsed = parseNamedFrame(text)
 		if (!parsed.ok) return
 		const frame = parsed.value
+		/** Comment frames (Keel heartbeats) never reach frameMap. */
 		if (frame.kind !== "event") return
 		const named: NamedEvent = { id: frame.id, name: frame.name, data: frame.data }
+		if (frame.idSet) named.idSet = true
+		if (frame.resetId) named.resetId = true
 		if (this.#options.shouldAccept !== undefined && !this.#options.shouldAccept(named)) return
-		const handler = this.#options.frameMap[named.name]
-		const action: JobFrameAction = handler === undefined ? { kind: "ignore" } : handler(named)
+		const map = this.#options.frameMap
+		const own = Object.hasOwn(map, named.name) ? map[named.name] : undefined
+		if (typeof own !== "function") return
+		const action = asFrameAction(own(named))
 		if (action.kind === "ignore") return
 		this.frames.push(named)
-		this.#lastEventId = named.id
+		if (named.resetId || named.idSet) this.#lastEventId = named.id
+		this.#options.onAccept?.(named)
 		if (action.kind === "progress") {
 			this.progress = mergeProgress(this.progress, action.reading)
 			return
@@ -229,4 +239,27 @@ export class JobStream {
 		if (action.error !== undefined) this.error = action.error
 		this.#stop("closed")
 	}
+}
+
+/** Keep a handler result only when its kind is one this loop understands. Anything else is an ignore, never a terminal. */
+function asFrameAction(value: unknown): JobFrameAction {
+	if (typeof value !== "object" || value === null) return { kind: "ignore" }
+	const kind = (value as { kind?: unknown }).kind
+	if (kind === "ignore") return { kind: "ignore" }
+	if (kind === "progress") {
+		const reading = (value as { reading?: unknown }).reading
+		if (typeof reading !== "object" || reading === null) return { kind: "ignore" }
+		return { kind: "progress", reading: reading as JobProgress }
+	}
+	if (kind === "terminal") {
+		const source = value as { reading?: unknown; error?: unknown }
+		const action: JobFrameAction = { kind: "terminal" }
+		if (source.reading !== undefined) {
+			if (typeof source.reading !== "object" || source.reading === null) return { kind: "ignore" }
+			action.reading = source.reading as JobProgress
+		}
+		if (source.error !== undefined) action.error = source.error as ChaayaError
+		return action
+	}
+	return { kind: "ignore" }
 }

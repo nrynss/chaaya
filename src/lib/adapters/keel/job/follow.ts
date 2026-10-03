@@ -58,6 +58,14 @@ export class JobFollower {
 		return this.#ended
 	}
 
+	/** Whether `accept` would take this event. This does not record it. */
+	allows(event: JobReport): boolean {
+		if (this.#jobId !== undefined && this.#jobId !== event.jobId) return false
+		if (event.id !== 0 && event.id <= this.#lastEventId) return false
+		if (this.#ended) return false
+		return true
+	}
+
 	/** Accept one event, or refuse it as a repeat. A frame with an id this
 	 * follower already read, a frame for another job, and a frame after the
 	 * terminal all come back false. */

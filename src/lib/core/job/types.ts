@@ -30,7 +30,11 @@ export interface JobCatchUp {
 export interface JobStreamOptions {
 	/** The event stream to follow. */
 	url: string
-	/** Handlers keyed by event name. A name that is missing is ignored. */
+	/** Handlers keyed by event name. Use a plain object's own keys. A missing
+	 * name is ignored. Inherited keys such as `toString` are ignored too:
+	 * the loop checks `Object.hasOwn` before it calls a handler. A handler
+	 * result whose `kind` is not `ignore`, `progress`, or `terminal` is ignored
+	 * and does not end the watch. */
 	frameMap: Record<string, JobFrameHandler>
 	/** Read current progress once a connection is live. Resolve a catch-up, not a bare reading.
 	 * A rejection leaves the stream alone. The returned promise is the one the freshness check
@@ -42,8 +46,13 @@ export interface JobStreamOptions {
 	prepareState?: (catchUp: JobCatchUp) => JobCatchUp | undefined
 	/** Whether a catch-up reading ends the watch. Core has no terminal enum of its own. */
 	isTerminal?: (reading: JobProgress) => boolean
-	/** Refuse a frame before the map runs. Return false to drop it. */
+	/** Refuse a frame before the map runs. Return false to drop it. This does
+	 * not mean the frame was kept. `onAccept` runs only after a progress or
+	 * terminal action. */
 	shouldAccept?: (frame: NamedEvent) => boolean
+	/** Runs when a frame is kept as progress or terminal. Ignored frames,
+	 * refused frames, and comment frames do not call it. */
+	onAccept?: (frame: NamedEvent) => void
 	/** Runs after a catch-up reading is applied. */
 	onState?: (reading: JobProgress) => void
 	/** Runs when a dropped stream opens again. It receives the new count. */

@@ -9,7 +9,8 @@ import errorEvent from "./fixtures/event-error.txt?raw"
 import heartbeat from "./fixtures/event-heartbeat.txt?raw"
 import interrupted from "./fixtures/event-interrupted.txt?raw"
 import progress from "./fixtures/event-progress.txt?raw"
-import { parseErrorEnvelope, parseJobEvent, type JobEvent } from "./index"
+import { parseNamedFrame } from "../../../core/sse/frame"
+import { parseErrorEnvelope, parseJobEvent, parseJobEventFromNamed, type JobEvent } from "./index"
 
 const jobId = "3f9a1c7e5b2d8046a1c3e5f7092b4d68"
 
@@ -86,6 +87,15 @@ describe("job events", () => {
 				error: { error: { code: "upstream_failed", message: "The media service failed.", detail: { attempts: 3 } } },
 			},
 		})
+	})
+
+	test("a named event parses without rebuilding frame text", () => {
+		const framed = parseNamedFrame(progress.trimEnd())
+		expect(framed.ok).toBe(true)
+		if (!framed.ok || framed.value.kind !== "event") return
+		expect(parseJobEventFromNamed({ id: framed.value.id, name: framed.value.name, data: framed.value.data })).toEqual(
+			parseJobEvent(progress),
+		)
 	})
 
 	test("a heartbeat parses from its comment line", () => {

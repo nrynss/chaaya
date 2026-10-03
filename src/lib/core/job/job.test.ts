@@ -378,6 +378,146 @@ describe("core job stream", () => {
 		stream.close()
 	})
 
+	test("a prototype event name does not end the watch", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(
+				async () =>
+					new Response(
+						streamOf(
+							[
+								"event: toString\nid: 1\ndata: {}\n\n",
+								"event: constructor\nid: 2\ndata: {}\n\n",
+								frame("progress", 3, '{"stage":"encode","current":4,"total":8}'),
+							],
+							false,
+						),
+					),
+			),
+		)
+		const stream = new JobStream(options())
+		stream.attach(() => () => {})
+		await vi.waitFor(() => expect(stream.progress.current).toBe(4))
+		expect(stream.connection).toBe("live")
+		expect(stream.frames.map((item) => item.name)).toEqual(["progress"])
+		stream.close()
+	})
+
+	test("a handler result with an unknown kind is ignored", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(
+				async () =>
+					new Response(
+						streamOf(
+							[
+								frame("weird", 1, "{}"),
+								frame("progress", 2, '{"current":6,"stage":"encode"}'),
+							],
+							false,
+						),
+					),
+			),
+		)
+		const stream = new JobStream(
+			options({
+				frameMap: {
+					...options().frameMap,
+					weird: () => ({ kind: "explode" }) as never,
+				},
+			}),
+		)
+		stream.attach(() => () => {})
+		await vi.waitFor(() => expect(stream.progress.current).toBe(6))
+		expect(stream.connection).toBe("live")
+		expect(stream.frames.map((item) => item.name)).toEqual(["progress"])
+		stream.close()
+	})
+
+	test("onAccept runs only for a kept frame", async () => {
+		const accepted: string[] = []
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(
+				async () =>
+					new Response(
+						streamOf(
+							[
+								frame("ping", 1, "{}"),
+								frame("note", 2, "{}"),
+								frame("progress", 3, '{"current":1,"stage":"encode"}'),
+								frame("done", 4, '{"status":"done"}'),
+							],
+							false,
+						),
+					),
+			),
+		)
+		const stream = new JobStream(
+			options({
+				onAccept: (item) => {
+					accepted.push(item.name)
+				},
+			}),
+		)
+		stream.attach(() => () => {})
+		await vi.waitFor(() => expect(stream.connection).toBe("closed"))
+		expect(accepted).toEqual(["progress", "done"])
+		stream.close()
+	})
+
+	test("a missing id line keeps Last-Event-ID", async () => {
+		let calls = 0
+		const fetchMock = vi.fn(async () => {
+			calls += 1
+			if (calls === 1) {
+				return new Response(
+					streamOf(
+						[
+							frame("progress", 4, '{"current":1}'),
+							["event: progress", 'data: {"current":2}', "", ""].join("\n"),
+						],
+						true,
+					),
+				)
+			}
+			return new Response(streamOf([frame("progress", 8, '{"current":3}')], false))
+		})
+		vi.stubGlobal("fetch", fetchMock)
+		const stream = new JobStream(options())
+		stream.attach(() => () => {})
+		await vi.waitFor(() => expect(stream.progress.current).toBe(3))
+		const second = new Headers(vi.mocked(fetch).mock.calls[1]?.[1]?.headers)
+		expect(second.get("last-event-id")).toBe("4")
+		stream.close()
+	})
+
+	test("an empty id line clears Last-Event-ID", async () => {
+		let calls = 0
+		const fetchMock = vi.fn(async () => {
+			calls += 1
+			if (calls === 1) {
+				return new Response(
+					streamOf(
+						[
+							frame("progress", 4, '{"current":1}'),
+							["event: progress", "id:", 'data: {"current":2}', "", ""].join("\n"),
+						],
+						true,
+					),
+				)
+			}
+			return new Response(streamOf([frame("progress", 8, '{"current":3}')], false))
+		})
+		vi.stubGlobal("fetch", fetchMock)
+		const stream = new JobStream(options())
+		stream.attach(() => () => {})
+		await vi.waitFor(() => expect(stream.progress.current).toBe(3))
+		const second = new Headers(vi.mocked(fetch).mock.calls[1]?.[1]?.headers)
+		expect(second.get("last-event-id")).toBeNull()
+		stream.close()
+	})
+
 	test("a rejected catch-up leaves the stream alone", async () => {
 		vi.stubGlobal(
 			"fetch",

@@ -12,7 +12,8 @@ export type { ApiRequestInit } from "../../core/api.js"
 export { api, keelErrorParser } from "./api.js"
 export {
 	parseErrorEnvelope,
-	parseJobEvent
+	parseJobEvent,
+	parseJobEventFromNamed
 } from "./wire/index.js"
 export type {
 	ErrorBody,

@@ -2,12 +2,16 @@ import { fail, ok, type ParseResult } from "../result.js"
 
 /** A named server-sent event. The data is the raw payload, so the app parses it. */
 export interface NamedEvent {
-	/** The frame id. Zero when the frame carries no id. */
+	/** The frame id. Zero when the frame carries no id, an empty id line, or an explicit zero. */
 	id: number
 	/** The event name from the frame's event line. */
 	name: string
 	/** The data lines joined with a newline. Empty when the frame carries none. */
 	data: string
+	/** True when the frame included an id line. Absent when it did not, so a stored id stays. */
+	idSet?: boolean
+	/** True when that id line was empty. `id` is 0. Accepting the frame resets Last-Event-ID. */
+	resetId?: boolean
 }
 
 /** A comment frame, such as a heartbeat. It carries no event name. */
@@ -15,6 +19,10 @@ export interface CommentFrame {
 	kind: "comment"
 	id: number
 	comment: string
+	/** True when the frame included an id line. */
+	idSet?: boolean
+	/** True when that id line was empty. `id` is 0. That resets Last-Event-ID. */
+	resetId?: boolean
 }
 
 /** A named event frame. */
@@ -23,6 +31,10 @@ export interface EventFrame {
 	id: number
 	name: string
 	data: string
+	/** True when the frame included an id line. */
+	idSet?: boolean
+	/** True when that id line was empty. `id` is 0. That resets Last-Event-ID. */
+	resetId?: boolean
 }
 
 /** One frame a stream can carry before a product parser reads it. */
@@ -46,13 +58,28 @@ export function takeFrames(buffer: string): { frames: string[]; rest: string } {
 	return { frames, rest }
 }
 
+/** Id flags for one frame. An empty id line is a reset, not `Number("")`. */
+function idMarks(idSet: boolean, resetId: boolean): { idSet?: true; resetId?: true } {
+	if (resetId) return { idSet: true, resetId: true }
+	if (idSet) return { idSet: true }
+	return {}
+}
+
 /**
  * Read one SSE frame. Any event name is kept. A comment with no event name is
  * a comment frame. A bad id is a failure, and this never throws. The payload
  * is not interpreted.
+ *
+ * A whole-number id line is kept, including `id: 0`. An empty id line (`id:`)
+ * is a reset: `id` is 0 and `resetId` is set. It is not parsed with
+ * `Number("")`. A frame with no id line has `id` 0 and neither flag, so a
+ * stored Last-Event-ID stays. A job stream clears Last-Event-ID only when it
+ * accepts a frame that carries `resetId` or an explicit id of 0.
  */
 export function parseNamedFrame(text: string): ParseResult<SseFrame> {
 	let id = 0
+	let idSet = false
+	let resetId = false
 	let name = ""
 	let comment = ""
 	const data: string[] = []
@@ -76,6 +103,13 @@ export function parseNamedFrame(text: string): ParseResult<SseFrame> {
 				name = value
 				break
 			case "id": {
+				idSet = true
+				if (value === "") {
+					resetId = true
+					id = 0
+					break
+				}
+				resetId = false
 				const parsed = Number(value)
 				if (!Number.isInteger(parsed) || parsed < 0) {
 					return fail(`the frame id ${value} is not a whole number`)
@@ -88,16 +122,17 @@ export function parseNamedFrame(text: string): ParseResult<SseFrame> {
 				break
 		}
 	}
+	const marks = idMarks(idSet, resetId)
 	if (name === "") {
 		if (comment === "") return fail("the frame carries neither an event nor a comment")
-		return ok({ kind: "comment", id, comment })
+		return ok({ kind: "comment", id, comment, ...marks })
 	}
-	return ok({ kind: "event", id, name, data: data.join("\n") })
+	return ok({ kind: "event", id, name, data: data.join("\n"), ...marks })
 }
 
 /** Fields written into one SSE frame. Set `event` for an event frame, or `comment` for a comment frame, not both. */
 export interface NamedFrameFields {
-	/** A whole number, zero or more. Omitted writes no id line, which the reader treats as zero. */
+	/** A whole number, zero or more. Omitted writes no id line. The reader then reports id 0 and does not reset Last-Event-ID. This writer does not emit an empty id line; that reset is `id:` on the wire. */
 	id?: number
 	/** The event name. A line break is rejected. */
 	event?: string

@@ -61,6 +61,16 @@ describe("frame splitting", () => {
 })
 
 describe("job follower", () => {
+	test("allows does not record the frame", () => {
+		const follower = new JobFollower()
+		const event = report(progress)
+		expect(follower.allows(event)).toBe(true)
+		expect(follower.lastEventId).toBe(0)
+		expect(follower.jobId).toBeUndefined()
+		expect(follower.accept(event)).toBe(true)
+		expect(follower.allows(event)).toBe(false)
+	})
+
 	test("a frame lands once and keeps its id and its job", () => {
 		const follower = new JobFollower()
 		expect(follower.accept(report(progress))).toBe(true)
