@@ -159,6 +159,10 @@ tarball=$(ls "$probe_dir"/*.tgz)
 mkdir -p "$probe_dir/consumer/node_modules/@nrynss"
 tar -xzf "$tarball" -C "$probe_dir/consumer/node_modules/@nrynss"
 mv "$probe_dir/consumer/node_modules/@nrynss/package" "$probe_dir/consumer/node_modules/@nrynss/chaaya"
+# @nrynss/chaaya/sveltekit calls @sveltejs/kit. The probe unpacks Chaaya
+# alone, so that peer resolves from the copy this checkout installed.
+mkdir -p "$probe_dir/consumer/node_modules/@sveltejs"
+ln -s "$(pwd)/node_modules/@sveltejs/kit" "$probe_dir/consumer/node_modules/@sveltejs/kit"
 node --input-type=module -e "import { readFileSync } from 'node:fs'; import { join } from 'node:path'; import { pathToFileURL } from 'node:url'; const root = '$probe_dir/consumer/node_modules/@nrynss/chaaya'; const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')); for (const key of Object.keys(pkg.exports)) { const entry = pkg.exports[key]; const target = typeof entry === 'string' ? entry : entry.default; if (target.endsWith('.css')) { readFileSync(join(root, target), 'utf8'); continue; } await import(pathToFileURL(join(root, target)).href); }"
 # The probe follows the packed exports map. A hardcoded list would still
 # import entries this version removed, and a wildcard path would miss an
