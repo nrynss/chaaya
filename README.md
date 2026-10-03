@@ -64,6 +64,9 @@ Published as `@nrynss/chaaya`.
   Pass `credentials: "include"` to opt in. Keel's adapter is `keelGate` on
   `@nrynss/chaaya/keel`, and `src/lib/adapters/keel/gate.ts` is the reference
   shape. The adapter guide is [Writing an adapter](#writing-an-adapter).
+- `@nrynss/chaaya/sveltekit`: form-action mappers for `ApiError`, and
+  `createJobStreamResponse` for a `text/event-stream` `+server.ts`. Optional
+  `@sveltejs/kit` peer.
 - `@nrynss/chaaya/sse`: the shared frame splitter, named-event field parser,
   `formatNamedFrame` writer, reconnect schedule, and `FrameLoop`. Payloads are
   not interpreted. The writer emits a frame string. It does not build a
@@ -130,6 +133,8 @@ suggesting a look.
   importing Keel. The copy-pasteable example is `docs/examples/plain-adapter.ts`.
 - [form-actions](/docs/form-actions): map `ApiError` into SvelteKit `fail` /
   `error` data via the shared `readApiError` path.
+- [job stream response](/docs/job-stream-response): `createJobStreamResponse` for a
+  SvelteKit `+server.ts`.
 - [upload](/docs/upload): one-shot `uploadBlob` beside the chunked `Uploader`.
 - [job progress](/docs/job-progress): how any pipeline maps stages and counters
   onto `JobProgress`, and how `JobStream` applies a frame map. The follow
