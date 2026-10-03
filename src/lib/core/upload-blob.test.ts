@@ -255,4 +255,163 @@ describe("one-shot upload", () => {
 		vi.stubGlobal("XMLHttpRequest", undefined)
 		await expect(uploadBlobWithProgress("/blob", new Blob(["x"]))).rejects.toThrow(/XMLHttpRequest/)
 	})
+
+	test("timeoutMs of zero is refused before either transport sends", async () => {
+		const fetchMock = vi.fn()
+		vi.stubGlobal("fetch", fetchMock)
+		let opened = 0
+		class FakeXHR {
+			open() {
+				opened += 1
+			}
+		}
+		vi.stubGlobal("XMLHttpRequest", FakeXHR)
+		const blob = new Blob(["x"])
+		await expect(uploadBlob("/blob", blob, { timeoutMs: 0 })).rejects.toThrow(/positive number/)
+		await expect(uploadBlobWithProgress("/blob", blob, { timeoutMs: 0 })).rejects.toThrow(/positive number/)
+		expect(fetchMock).not.toHaveBeenCalled()
+		expect(opened).toBe(0)
+	})
+
+	test("a refused XHR gives parseError the headers the response carried", async () => {
+		class FakeXHR {
+			upload = { onprogress: null as ((event: ProgressEvent) => void) | null }
+			status = 429
+			statusText = "Too Many Requests"
+			responseText = "{}"
+			timeout = 0
+			withCredentials = false
+			onload: (() => void) | null = null
+			onerror: (() => void) | null = null
+			onabort: (() => void) | null = null
+			ontimeout: (() => void) | null = null
+			open() {}
+			setRequestHeader() {}
+			getAllResponseHeaders() {
+				return "retry-after: 7\r\nx-request-id: req-1\r\n"
+			}
+			send() {
+				this.onload?.()
+			}
+			abort() {
+				this.onabort?.()
+			}
+		}
+		vi.stubGlobal("XMLHttpRequest", FakeXHR)
+		const seen: Array<string | null> = []
+		const parser: ApiErrorParser = (_text, response) => {
+			seen.push(response.headers.get("retry-after"))
+			seen.push(response.headers.get("x-request-id"))
+			return undefined
+		}
+		const error = await uploadBlobWithProgress("/blob", new Blob(["x"]), { parseError: parser }).then(
+			() => {
+				throw new Error("the upload resolved")
+			},
+			(cause: unknown) => cause,
+		)
+		expect(seen).toEqual(["7", "req-1"])
+		expect(error).toBeInstanceOf(ApiError)
+		expect(error).toMatchObject({ code: "http_error", status: 429, retryAfterSeconds: 7 })
+	})
+
+	test("an aborted XHR rejects with the signal reason and does not send a pre-aborted body", async () => {
+		let sent = 0
+		class FakeXHR {
+			upload = { onprogress: null as ((event: ProgressEvent) => void) | null }
+			status = 200
+			statusText = "OK"
+			responseText = "{}"
+			timeout = 0
+			withCredentials = false
+			onload: (() => void) | null = null
+			onerror: (() => void) | null = null
+			onabort: (() => void) | null = null
+			ontimeout: (() => void) | null = null
+			open() {}
+			setRequestHeader() {}
+			getAllResponseHeaders() {
+				return ""
+			}
+			send() {
+				sent += 1
+			}
+			abort() {
+				this.onabort?.()
+			}
+		}
+		vi.stubGlobal("XMLHttpRequest", FakeXHR)
+		const reason = new Error("stopped")
+		await expect(
+			uploadBlobWithProgress("/blob", new Blob(["x"]), { signal: AbortSignal.abort(reason) }),
+		).rejects.toBe(reason)
+		expect(sent).toBe(0)
+		let markSent: () => void = () => {}
+		const started = new Promise<void>((resolve) => {
+			markSent = resolve
+		})
+		FakeXHR.prototype.send = function send() {
+			sent += 1
+			markSent()
+		}
+		const controller = new AbortController()
+		const pending = uploadBlobWithProgress("/blob", new Blob(["x"]), { signal: controller.signal })
+		await started
+		controller.abort(new Error("later"))
+		await expect(pending).rejects.toMatchObject({ message: "later" })
+		expect(sent).toBe(1)
+	})
+
+	test("an XHR timeout and a network error reject before a body is parsed", async () => {
+		class FakeXHR {
+			upload = { onprogress: null as ((event: ProgressEvent) => void) | null }
+			status = 200
+			statusText = "OK"
+			responseText = '{"ok":true}'
+			timeout = 0
+			withCredentials = false
+			onload: (() => void) | null = null
+			onerror: (() => void) | null = null
+			onabort: (() => void) | null = null
+			ontimeout: (() => void) | null = null
+			mode: "timeout" | "error" = "timeout"
+			open() {}
+			setRequestHeader() {}
+			getAllResponseHeaders() {
+				return ""
+			}
+			send() {
+				if (this.mode === "timeout") this.ontimeout?.()
+				else this.onerror?.()
+			}
+			abort() {
+				this.onabort?.()
+			}
+		}
+		const xhr = new FakeXHR()
+		vi.stubGlobal(
+			"XMLHttpRequest",
+			class extends FakeXHR {
+				constructor() {
+					super()
+					return xhr
+				}
+			},
+		)
+		const timedOut = await uploadBlobWithProgress("/blob", new Blob(["x"]), { timeoutMs: 5 }).then(
+			() => {
+				throw new Error("the upload resolved")
+			},
+			(cause: unknown) => cause,
+		)
+		expect(timedOut).toMatchObject({ code: "timeout", status: 0 })
+		xhr.mode = "error"
+		const offline = await uploadBlobWithProgress("/blob", new Blob(["x"])).then(
+			() => {
+				throw new Error("the upload resolved")
+			},
+			(cause: unknown) => cause,
+		)
+		expect(offline).toMatchObject({ code: "network", status: 0 })
+	})
 })

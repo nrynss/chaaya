@@ -58,23 +58,23 @@ export interface ApiClientOptions {
 }
 
 /** Read the seconds a Retry-After header names. Whole seconds count, so an
- * HTTP date or a malformed value reads as absent. */
-function readRetryAfter(response: Response): number | undefined {
+ * HTTP date or a malformed value reads as absent. Upload shares this. */
+export function readRetryAfter(response: Response): number | undefined {
 	const header = response.headers.get("Retry-After")
 	if (header === null) return undefined
 	const trimmed = header.trim()
 	return /^\d+$/.test(trimmed) ? Number(trimmed) : undefined
 }
 
-/** Keep a detail object as the app's own record, and read anything else as empty. */
-function detailObject(detail: unknown): Record<string, unknown> {
+/** Keep a detail object as the app's own record, and read anything else as empty. Upload shares this. */
+export function detailObject(detail: unknown): Record<string, unknown> {
 	if (typeof detail !== "object" || detail === null || Array.isArray(detail)) return {}
 	return detail as Record<string, unknown>
 }
 
 /** Decode a response body into a value. An empty or malformed body reads as
- * null, so a success with no body costs nothing and never throws. */
-function decodeBody(text: string): unknown {
+ * null, so a success with no body costs nothing and never throws. Upload shares this. */
+export function decodeBody(text: string): unknown {
 	if (text.length === 0) return null
 	try {
 		return JSON.parse(text)

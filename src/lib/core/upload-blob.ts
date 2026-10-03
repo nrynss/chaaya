@@ -1,4 +1,4 @@
-import { ApiError, api, type ApiErrorParser, type ApiFailureBody } from "./api.js"
+import { ApiError, api, decodeBody, detailObject, readRetryAfter, type ApiErrorParser, type ApiFailureBody } from "./api.js"
 
 /** A file refused before it is sent, because it is past the caller's limit. */
 export class UploadTooLarge extends Error {
@@ -46,7 +46,8 @@ export interface BlobUploadOptions {
 	method?: string
 	/** Abort the request. */
 	signal?: AbortSignal
-	/** Give up after this many milliseconds. */
+	/** Give up after this many milliseconds. Omit for no deadline.
+	 * Zero is refused. Fetch would abort immediately, and XMLHttpRequest would wait forever. */
 	timeoutMs?: number
 	/** Refuse a larger body before any request is sent.
 	 * A Blob is measured by `size`. FormData has no size until the browser encodes it, so pass `size` or omit `maxBytes`.
@@ -67,7 +68,7 @@ export interface BlobUploadOptions {
 export interface UploadPrepared {
 	method: string
 	headers: Headers
-	payload: BodyInit
+	payload: FormData | Blob
 	/** Known byte length, or 0 when the body is FormData and the caller passed no size. */
 	size: number
 }
@@ -78,42 +79,46 @@ function fileName(body: Blob, explicit: string | undefined): string {
 	return "upload"
 }
 
-function detailObject(detail: unknown): Record<string, unknown> {
-	if (typeof detail !== "object" || detail === null || Array.isArray(detail)) return {}
-	return detail as Record<string, unknown>
-}
-
-function decodeBody(text: string): unknown {
-	if (text.length === 0) return null
-	try {
-		return JSON.parse(text)
-	} catch {
-		return null
+/** Omit means no deadline. Zero and any other non-positive value are refused,
+ * so the two transports cannot disagree on what they mean. */
+function positiveTimeout(timeoutMs: number | undefined): number | undefined {
+	if (timeoutMs === undefined) return undefined
+	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+		throw new RangeError("timeoutMs must be a positive number of milliseconds, or omitted for no deadline")
 	}
+	return timeoutMs
 }
 
-function readRetryAfter(header: string | null): number | undefined {
-	if (header === null) return undefined
-	const trimmed = header.trim()
-	return /^\d+$/.test(trimmed) ? Number(trimmed) : undefined
+/** Headers the XHR actually received, so a parser sees the same fields fetch would. */
+function xhrHeaders(xhr: XMLHttpRequest): Headers {
+	const headers = new Headers()
+	const raw = xhr.getAllResponseHeaders?.() ?? ""
+	for (const line of raw.split(/\r?\n/)) {
+		if (line === "") continue
+		const index = line.indexOf(":")
+		if (index <= 0) continue
+		const name = line.slice(0, index).trim()
+		const value = line.slice(index + 1).trim()
+		if (name !== "") headers.append(name, value)
+	}
+	return headers
 }
 
 /** The same refusal `api()` builds. A parser throw stays http_error.
- * The XHR path uses this. The fetch path uses `api()`, which applies the same rule. */
+ * The XHR path uses this. The fetch path uses `api()`, which applies the same rule.
+ * `headers` are the ones the transport saw, including Retry-After. */
 export function uploadFailure(
 	status: number,
 	statusText: string,
 	text: string,
-	retryAfter: string | null,
+	headers: Headers,
 	parseError: ApiErrorParser | undefined,
 ): ApiError {
-	const retryAfterSeconds = readRetryAfter(retryAfter)
+	const response = new Response(text, { status, statusText, headers })
+	const retryAfterSeconds = readRetryAfter(response)
 	let parsed: ApiFailureBody | undefined
 	try {
-		if (parseError !== undefined) {
-			const response = new Response(text, { status, statusText })
-			parsed = parseError(text, response)
-		}
+		if (parseError !== undefined) parsed = parseError(text, response)
 	} catch {
 		parsed = undefined
 	}
@@ -139,7 +144,7 @@ export function prepareUpload(body: Blob | FormData, options: BlobUploadOptions)
 	if (limit !== undefined && known === undefined) throw new UploadSizeUnknown()
 	if (limit !== undefined && known !== undefined && known > limit) throw new UploadTooLarge(known, limit)
 	const headers = new Headers(options.headers)
-	let payload: BodyInit
+	let payload: FormData | Blob
 	if (body instanceof FormData) {
 		headers.delete("content-type")
 		payload = body
@@ -162,22 +167,23 @@ function settle<T>(
 	status: number,
 	statusText: string,
 	text: string,
-	retryAfter: string | null,
+	headers: Headers,
 	parseError: ApiErrorParser | undefined,
 ): T {
-	if (status < 200 || status >= 300) throw uploadFailure(status, statusText, text, retryAfter, parseError)
+	if (status < 200 || status >= 300) throw uploadFailure(status, statusText, text, headers, parseError)
 	return decodeBody(text) as T
 }
 
 /** Fetch transport. Progress is one call after settle. `#31` should not copy this request. */
 export function sendUpload<T>(url: string, prepared: UploadPrepared, options: BlobUploadOptions): Promise<T> {
+	const timeoutMs = positiveTimeout(options.timeoutMs)
 	return api<T>(url, {
 		method: prepared.method,
 		headers: prepared.headers,
 		body: prepared.payload,
 		credentials: options.credentials,
 		signal: options.signal,
-		timeoutMs: options.timeoutMs,
+		timeoutMs,
 		parseError: options.parseError,
 	}).then((value) => {
 		reportUploadProgress(options.onProgress, prepared.size, prepared.size)
@@ -187,6 +193,7 @@ export function sendUpload<T>(url: string, prepared: UploadPrepared, options: Bl
 
 /** XMLHttpRequest transport. Progress is `xhr.upload.onprogress`. `#31` should send parts through this. */
 export function sendUploadWithProgress<T>(url: string, prepared: UploadPrepared, options: BlobUploadOptions): Promise<T> {
+	const timeoutMs = positiveTimeout(options.timeoutMs)
 	if (typeof XMLHttpRequest === "undefined") {
 		return Promise.reject(new Error("uploadBlobWithProgress needs XMLHttpRequest"))
 	}
@@ -198,7 +205,7 @@ export function sendUploadWithProgress<T>(url: string, prepared: UploadPrepared,
 		})
 		xhr.responseType = "text"
 		xhr.withCredentials = options.credentials === "include"
-		if (options.timeoutMs !== undefined) xhr.timeout = options.timeoutMs
+		if (timeoutMs !== undefined) xhr.timeout = timeoutMs
 		xhr.upload.onprogress = (event) => {
 			const total = event.lengthComputable ? event.total : prepared.size
 			reportUploadProgress(options.onProgress, event.loaded, total)
@@ -220,7 +227,7 @@ export function sendUploadWithProgress<T>(url: string, prepared: UploadPrepared,
 		xhr.onload = () => {
 			finish()
 			try {
-				resolve(settle(xhr.status, xhr.statusText, xhr.responseText, xhr.getResponseHeader("Retry-After"), options.parseError))
+				resolve(settle(xhr.status, xhr.statusText, xhr.responseText, xhrHeaders(xhr), options.parseError))
 			} catch (cause) {
 				reject(cause)
 			}
@@ -268,6 +275,8 @@ function begin(body: Blob | FormData, options: BlobUploadOptions): Promise<Uploa
  * A refusal matches `api()`: `parseError` may name the code, otherwise it is
  * `http_error`. A blob past `maxBytes` throws `UploadTooLarge` and never leaves
  * the caller. `maxBytes` on FormData without `size` throws `UploadSizeUnknown`.
+ * `timeoutMs` is a positive number of milliseconds, or omitted for no deadline.
+ * Zero is refused here and on `uploadBlobWithProgress`.
  */
 export function uploadBlob<T>(url: string, body: Blob | FormData, options: BlobUploadOptions = {}): Promise<T> {
 	return begin(body, options).then((prepared) => sendUpload<T>(url, prepared, options))
@@ -289,6 +298,7 @@ export function uploadBlob<T>(url: string, body: Blob | FormData, options: BlobU
  * `maxBytes` and `size` are the same check `uploadBlob` runs, before any
  * request. A Blob is measured by its own `size`. FormData uses the explicit
  * `size`. The presigned PUT and the refusal shape match `uploadBlob` too.
+ * `timeoutMs` matches too: a positive number, or omitted. Zero is refused.
  */
 export function uploadBlobWithProgress<T>(url: string, body: Blob | FormData, options: BlobUploadOptions = {}): Promise<T> {
 	return begin(body, options).then((prepared) => sendUploadWithProgress<T>(url, prepared, options))

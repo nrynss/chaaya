@@ -36,6 +36,10 @@
 		requests. Same-origin XHR always sends cookies.
 	</p>
 	<p>
+		<code>timeoutMs</code> is a positive number of milliseconds, or omitted for no deadline. Zero is
+		refused. Fetch would abort immediately, and XMLHttpRequest would treat zero as no timeout.
+	</p>
+	<p>
 		<code>maxBytes</code> refuses an oversized blob before the request. On <code>FormData</code> without
 		<code>size</code> it throws <code>UploadSizeUnknown</code>: set <code>maxBytes</code> only for Blob
 		bodies, or pass an explicit size. The limit is not skipped in silence.

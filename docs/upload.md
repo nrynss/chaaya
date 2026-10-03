@@ -16,6 +16,8 @@ Both functions live only on `@nrynss/chaaya/upload`. They send the whole body in
 
 `uploadBlobWithProgress` is browser-only. It uses `XMLHttpRequest`. `onProgress` is `xhr.upload.onprogress`, so it fires while the bytes are leaving, before the response. A host with no `XMLHttpRequest` rejects with that fact. It does not fall back to fetch. Use `uploadBlob` there.
 
+`timeoutMs` is a positive number of milliseconds, or omitted for no deadline. Zero is refused on both helpers. Fetch would abort immediately, and XMLHttpRequest would treat zero as no timeout.
+
 Both read one `credentials` option. Fetch receives it as-is. XMLHttpRequest sets `withCredentials` only when the value is `"include"`. That flag affects cross-origin requests. Same-origin XHR always sends cookies, so `"omit"` does not strip them there.
 
 `maxBytes` refuses a blob larger than the limit before the request. `FormData` has no size until the browser encodes it. Passing `maxBytes` on `FormData` without `size` throws `UploadSizeUnknown`. The message is the fix: set `maxBytes` only for Blob bodies, or pass an explicit `size`.
