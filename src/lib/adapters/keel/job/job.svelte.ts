@@ -57,6 +57,7 @@ export class JobStream {
 			},
 			onReconnect: options.onReconnect,
 			reconnect: options.reconnect,
+			requestInit: options.requestInit,
 		})
 	}
 

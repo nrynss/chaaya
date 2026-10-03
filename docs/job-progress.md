@@ -108,6 +108,11 @@ A name that is not in the map is ignored. Optional hooks stay on the options, no
 - `shouldAccept` refuses a frame before the map runs.
 - `fetchState` reads a snapshot once the stream is live, so a late join can catch up.
 - `isTerminal` says whether that catch-up reading ends the watch.
+- `requestInit` adds fetch fields, usually `headers` and `credentials`, so an adapter can pass auth without a second loop.
+
+`Accept` is always `text/event-stream`. A different `accept` on `requestInit` does not stick. `signal` on `requestInit` is ignored. The stream owns the abort.
+
+The first request sends no `Last-Event-ID`. A reconnect sends it when the last accepted frame has an id other than 0. Zero means the frame carried no id, and then the header is omitted. An ignored frame does not move that id.
 
 The error on a terminal action uses the shape in [errors.md](errors.md).
 
@@ -165,7 +170,7 @@ stream.attach()
 
 - Import the type: `import type { JobProgress } from "@nrynss/chaaya/core"`.
 - Import the stream: `import { JobStream, createJobStream } from "@nrynss/chaaya/core"`.
-- The follow loop stays in that module. An adapter supplies `frameMap`, and it may supply `shouldAccept`, `isTerminal`, and `fetchState`.
+- The follow loop stays in that module. An adapter supplies `frameMap`, and it may supply `shouldAccept`, `isTerminal`, `fetchState`, and `requestInit`.
 - Core does not name stages and does not read a wire format.
 - An adapter may map its snapshot into `JobProgress`. That mapping stays in the adapter.
 - The app maps its domain into `JobProgress` at the edge that publishes or renders progress.

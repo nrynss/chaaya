@@ -40,4 +40,8 @@ export interface JobStreamOptions {
 	onReconnect?: (count: number) => void
 	/** The reconnect schedule. Omit for the shared default of 500 ms, 8000 ms, and 6 attempts. */
 	reconnect?: ReconnectOptions
+	/** Extra fetch fields. An adapter passes `headers` and `credentials` here
+	 * for auth and does not fork the loop. `accept` is always
+	 * `text/event-stream`. `signal` is ignored. The stream owns the abort. */
+	requestInit?: RequestInit
 }

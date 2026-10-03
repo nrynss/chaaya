@@ -6,6 +6,17 @@ import type { NamedEvent } from "../sse/frame.js"
 import { reconnectDelay, reconnectSettings } from "../sse/reconnect.js"
 import type { JobConnection, JobFrameAction, JobStreamOptions } from "./types.js"
 
+/** Build one fetch init. The caller may pass auth. Accept stays the event
+ * stream type, and the abort signal is always the stream's own. On a
+ * reconnect, a last accepted id other than 0 is sent as Last-Event-ID. */
+function fetchInit(options: JobStreamOptions, signal: AbortSignal, lastEventId: number, reconnecting: boolean): RequestInit {
+	const given = options.requestInit
+	const headers = new Headers(given?.headers)
+	headers.set("accept", "text/event-stream")
+	if (reconnecting && lastEventId !== 0) headers.set("last-event-id", String(lastEventId))
+	return { ...given, headers, signal }
+}
+
 /** Copy defined fields onto the published reading. An omitted field stays. */
 function mergeProgress(base: JobProgress, reading: JobProgress): JobProgress {
 	const next: JobProgress = { ...base }
@@ -58,6 +69,8 @@ export class JobStream {
 	#attempts = 0
 	#opened = false
 	#stopped = false
+	/** Id of the last accepted event. Zero means none, or a frame that carried no id. */
+	#lastEventId = 0
 
 	constructor(options: JobStreamOptions) {
 		this.#options = options
@@ -117,10 +130,10 @@ export class JobStream {
 		this.#controller = controller
 		let response: Response
 		try {
-			response = await fetch(this.#options.url, {
-				headers: { accept: "text/event-stream" },
-				signal: controller.signal,
-			})
+			response = await fetch(
+				this.#options.url,
+				fetchInit(this.#options, controller.signal, this.#lastEventId, this.#opened),
+			)
 		} catch {
 			if (this.#stopped) return
 			this.#reconnect()
@@ -205,6 +218,7 @@ export class JobStream {
 		const action: JobFrameAction = handler === undefined ? { kind: "ignore" } : handler(named)
 		if (action.kind === "ignore") return
 		this.frames.push(named)
+		this.#lastEventId = named.id
 		if (action.kind === "progress") {
 			this.progress = mergeProgress(this.progress, action.reading)
 			return

@@ -37,10 +37,11 @@ Published as `@nrynss/chaaya`.
 - `@nrynss/chaaya/core`: the generic contracts. `ApiClient`, the parse
   helpers (`ok`, `fail`, `isRecord`, `decodeJson`) for adapter authors, the
   `SseFrame` reader and `formatNamedFrame` writer, `JobStream` and
-  `createJobStream` with a required `frameMap`, the `JobProgress` shape,
-  `ChaayaError`, and the chunked
-  `Uploader` interface. No backend envelope, event names, upload protocol,
-  or auth. One-shot upload is not `Uploader`.
+  `createJobStream` with a required `frameMap`. `requestInit` carries
+  auth. A reconnect sends `Last-Event-ID` when the last accepted id is
+  not 0. Also the `JobProgress` shape, `ChaayaError`, and the chunked
+  `Uploader` interface. No backend envelope, event names, or upload
+  protocol. One-shot upload is not `Uploader`.
 - `@nrynss/chaaya/tokens`: the fixed role names and a checker that reports a
   role a theme block leaves out.
 - `@nrynss/chaaya/tokens/reference.css`: the reference stylesheet a new app

@@ -90,7 +90,9 @@ describe("core job stream", () => {
 		expect(stream.frames.map((item) => item.name)).toEqual(["progress", "progress"])
 		expect(stream.connection).toBe("live")
 		const calls = vi.mocked(fetch).mock.calls
-		expect(calls[0]?.[1]).toMatchObject({ headers: { accept: "text/event-stream" } })
+		const headers = new Headers(calls[0]?.[1]?.headers)
+		expect(headers.get("accept")).toBe("text/event-stream")
+		expect(headers.get("last-event-id")).toBeNull()
 		stream.close()
 		expect(stream.connection).toBe("closed")
 	})
@@ -206,6 +208,74 @@ describe("core job stream", () => {
 		stream.attach(() => () => {})
 		await vi.waitFor(() => expect(stream.connection).toBe("failed"))
 		expect(fetchMock).toHaveBeenCalledTimes(1)
+		stream.close()
+	})
+
+	test("requestInit merges auth and the stream keeps accept and its own signal", async () => {
+		const caller = new AbortController()
+		const fetchMock = vi.fn(async () => new Response(streamOf([frame("progress", 1, '{"current":1}')], false)))
+		vi.stubGlobal("fetch", fetchMock)
+		const stream = new JobStream(
+			options({
+				requestInit: {
+					credentials: "include",
+					headers: { authorization: "Bearer t", accept: "application/json" },
+					signal: caller.signal,
+				},
+			}),
+		)
+		stream.attach(() => () => {})
+		await vi.waitFor(() => expect(stream.progress.current).toBe(1))
+		const init = vi.mocked(fetch).mock.calls[0]?.[1]
+		const headers = new Headers(init?.headers)
+		expect(headers.get("accept")).toBe("text/event-stream")
+		expect(headers.get("authorization")).toBe("Bearer t")
+		expect(headers.get("last-event-id")).toBeNull()
+		expect(init?.credentials).toBe("include")
+		expect(init?.signal).toBeInstanceOf(AbortSignal)
+		expect(init?.signal).not.toBe(caller.signal)
+		stream.close()
+	})
+
+	test("a reconnect sends Last-Event-ID from the last accepted frame", async () => {
+		let calls = 0
+		const fetchMock = vi.fn(async () => {
+			calls += 1
+			if (calls === 1) {
+				return new Response(
+					streamOf([frame("progress", 4, '{"current":1}'), frame("ping", 9, "{}")], true),
+				)
+			}
+			return new Response(streamOf([frame("progress", 6, '{"current":2}')], false))
+		})
+		vi.stubGlobal("fetch", fetchMock)
+		const stream = new JobStream(options())
+		stream.attach(() => () => {})
+		await vi.waitFor(() => expect(stream.reconnects).toBe(1))
+		const first = new Headers(vi.mocked(fetch).mock.calls[0]?.[1]?.headers)
+		const second = new Headers(vi.mocked(fetch).mock.calls[1]?.[1]?.headers)
+		expect(first.get("last-event-id")).toBeNull()
+		expect(second.get("last-event-id")).toBe("4")
+		stream.close()
+	})
+
+	test("a last accepted id of 0 omits Last-Event-ID", async () => {
+		let calls = 0
+		const fetchMock = vi.fn(async () => {
+			calls += 1
+			if (calls === 1) {
+				return new Response(
+					streamOf([frame("progress", 5, '{"current":1}'), frame("progress", 0, '{"current":2}')], true),
+				)
+			}
+			return new Response(streamOf([frame("progress", 8, '{"current":3}')], false))
+		})
+		vi.stubGlobal("fetch", fetchMock)
+		const stream = new JobStream(options())
+		stream.attach(() => () => {})
+		await vi.waitFor(() => expect(stream.progress.current).toBe(3))
+		const second = new Headers(vi.mocked(fetch).mock.calls[1]?.[1]?.headers)
+		expect(second.get("last-event-id")).toBeNull()
 		stream.close()
 	})
 

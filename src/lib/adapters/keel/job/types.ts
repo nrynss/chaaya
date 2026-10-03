@@ -44,4 +44,6 @@ export interface JobStreamOptions {
 	onReconnect?: (count: number) => void
 	/** The reconnect schedule. Omit for the shared default of 500 ms, 8000 ms, and 6 attempts. */
 	reconnect?: ReconnectOptions
+	/** Passed to the core stream. Use it for headers and credentials. */
+	requestInit?: RequestInit
 }
