@@ -5,6 +5,7 @@ import { JobStream } from "./job.svelte"
 import type { JobSnapshot } from "./types"
 
 const jobId = "3f9a1c7e5b2d8046a1c3e5f7092b4d68"
+const otherJobId = "9c1d5a3b7e2f40689b0d2c4e6f8a1b35"
 
 /** One progress frame reporting the given work on the fixture job. */
 function progressFrame(id: number, current: number): string {
@@ -130,6 +131,74 @@ describe("catch-up freshness", () => {
 		})
 		expect(stream.current).toBe(4)
 		expect(stream.status).toBe("running")
+		stream.close()
+	})
+
+	test("a snapshot for another job does not land", async () => {
+		const stream = await follow([progressFrame(2, 3)], {
+			jobId: otherJobId,
+			status: "running",
+			stage: "uploading",
+			current: 9,
+			total: 12
+		})
+		expect(stream.current).toBe(3)
+		expect(stream.stage).toBe("transcoding")
+		expect(stream.status).toBe("running")
+		stream.close()
+	})
+
+	test("an error frame ends the stream before a late snapshot", async () => {
+		const frame = [
+			"event: error",
+			"id: 5",
+			`data: {"job_id":"${jobId}","status":"error","error":{"error":{"code":"upstream_failed","message":"The media service failed.","detail":{"attempts":3}}}}`,
+			"",
+			""
+		].join("\n")
+		const stream = await follow([frame], {
+			jobId,
+			status: "running",
+			stage: "transcoding",
+			current: 1,
+			total: 12
+		})
+		expect(stream.status).toBe("error")
+		expect(stream.connection).toBe("closed")
+		expect(stream.error).toEqual({
+			code: "upstream_failed",
+			message: "The media service failed.",
+			detail: { attempts: 3 }
+		})
+		expect(stream.current).toBeUndefined()
+		stream.close()
+	})
+
+	test("a terminal snapshot publishes its error", async () => {
+		const stream = await follow([], {
+			jobId,
+			status: "error",
+			error: { code: "upstream_failed", message: "The media service failed." }
+		})
+		expect(stream.status).toBe("error")
+		expect(stream.connection).toBe("closed")
+		expect(stream.error).toEqual({ code: "upstream_failed", message: "The media service failed." })
+		stream.close()
+	})
+
+	test("a duplicate frame and a heartbeat do not land", async () => {
+		serveStream([": ping\n\n", progressFrame(2, 3), progressFrame(2, 9)])
+		const release = Promise.withResolvers<JobSnapshot>()
+		const stream = new JobStream({
+			url: "http://job.test/events",
+			fetchState: () => release.promise
+		})
+		stream.attach(() => () => {})
+		await vi.waitFor(() => expect(stream.events).toHaveLength(1), { timeout: 2000 })
+		release.resolve({ jobId, status: "running", current: 1, total: 12 })
+		await vi.waitFor(() => expect(stream.connection).toBe("live"), { timeout: 2000 })
+		expect(stream.events.map((event) => event.name)).toEqual(["progress"])
+		expect(stream.current).toBe(3)
 		stream.close()
 	})
 })

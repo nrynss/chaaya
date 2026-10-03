@@ -1,6 +1,6 @@
 /**
  * The Keel adapter. Error envelopes, job frames, the job stream, and the
- * chunked upload protocol live here. Generic Chaaya modules do not import
+ * chunked upload protocol live here. The job stream is the core loop with Keel's frame map. Generic Chaaya modules do not import
  * this folder. Shapes were checked against Keel v0.4.0.
  *
  * Import `api` from this path when a refusal should keep Keel's stable code.
@@ -24,7 +24,7 @@ export type {
 	ProgressEvent,
 	StatusEvent
 } from "./wire/index.js"
-export { JobFollower, JobStream, isTerminalStatus, toJobProgress } from "./job/index.js"
+export { JobFollower, JobStream, isTerminalStatus, keelFrameMap, toJobProgress } from "./job/index.js"
 export type { JobConnection, JobError, JobReport, JobSnapshot, JobStatus, JobStreamOptions } from "./job/index.js"
 export {
 	ChunkBuffer,

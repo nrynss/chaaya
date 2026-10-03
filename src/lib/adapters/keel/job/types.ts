@@ -4,10 +4,7 @@ import type { ReconnectOptions } from "../../../core/sse/reconnect.js"
  * terminal. */
 export type JobStatus = "queued" | "running" | "done" | "error" | "cancelled" | "interrupted"
 
-/** Where one stream stands. Connecting covers the first attempt, live covers
- * an open stream, reconnecting covers a retry, failed covers a stream that
- * gave up, and closed covers a watch that ended. */
-export type JobConnection = "connecting" | "live" | "reconnecting" | "failed" | "closed"
+export type { JobConnection } from "../../../core/job/types.js"
 
 /** The error a failed job carries. It mirrors the envelope a failed request
  * carries, so a consumer reads both the same way. */

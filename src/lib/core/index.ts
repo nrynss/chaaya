@@ -1,9 +1,15 @@
 /**
  * Generic contracts. An adapter implements these. This module imports no
  * adapter and names no backend.
+ *
+ * `decodeJson`, `isRecord`, `ok`, and `fail` are decoder primitives for
+ * adapter authors. They are not a utility belt for app code.
  */
 export { ApiError, api, createApi } from "./api.js"
 export type { ApiClient, ApiClientOptions, ApiErrorParser, ApiFailureBody, ApiRequestInit } from "./api.js"
+export type { ChaayaError } from "./error.js"
+export { JobStream } from "./job/index.js"
+export type { JobConnection, JobFrameAction, JobFrameHandler, JobStreamOptions } from "./job/index.js"
 export { decodeJson, fail, isRecord, ok } from "./result.js"
 export type { ParseFailure, ParseResult } from "./result.js"
 export { formatNamedFrame, parseNamedFrame, takeFrames, defaultReconnect, reconnectDelay, reconnectSettings } from "./sse/index.js"

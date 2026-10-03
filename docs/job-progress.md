@@ -12,10 +12,14 @@ Core does not map a wire format. An adapter maps its backend snapshot onto this 
 | `stage` | The step the job is on. Any string the app chooses. |
 | `current` | Work done so far, in the one counter the view cares about. |
 | `total` | How much that counter totals. |
-| `status` | A status string the producer chose. Core does not decide which strings are terminal. |
+| `status` | A freeform status string. Core does not decide which strings are terminal. |
 | `detail` | Payload only the app reads: a URL, a nested counter, or any other value. |
 
 Every field is optional.
+
+`id` stays optional on purpose. A backend that does not assign job ids omits it. Core never invents one, and an adapter should not invent one either.
+
+`status` is not an enum. Apps often use `pending` or `queued`, then `running`, `done`, and `error`. Nothing in core requires that set. A reading ends the job only when the caller says so: `isTerminal` on a catch-up, or a `terminal` action from the `frameMap`.
 
 ## Stage list
 
@@ -80,6 +84,17 @@ const reading: JobProgress = {
 
 When the upload has finished its progress, the last reading can carry the stored location in `detail`. The terminal frame stays thin.
 
+
+## Following a stream
+
+`JobStream` in `@nrynss/chaaya/core` reads a `text/event-stream`, reconnects when an open stream drops, and publishes one `JobProgress`. The caller passes a `frameMap`. Each event name returns an action:
+
+- `ignore` drops the frame.
+- `progress` merges the reading. A field that is present overwrites. A field that is absent stays.
+- `terminal` ends the watch. It may also carry a reading and an error.
+
+A name that is not in the map is ignored. The loop, the backoff, and the abort handling stay in core. An adapter ships the map for its backend. An app can ship its own. The error on a terminal action uses the shape in [errors.md](errors.md).
+
 ## When not to use this shape
 
 `JobProgress` is only for progress: a step, a counter, a status. An event that is none of those does not belong in `stage`. Publish it on a named event stream (`createEventStream`): any event name, raw data, no progress fields. Progress stays a `JobProgress` reading. Everything else stays a named frame.
@@ -87,6 +102,7 @@ When the upload has finished its progress, the last reading can carry the stored
 ## Where the code lives
 
 - Import the type: `import type { JobProgress } from "@nrynss/chaaya/core"`.
+- Import the stream: `import { JobStream } from "@nrynss/chaaya/core"`.
 - Core does not name stages and does not read a wire format.
-- An adapter may map its snapshot into `JobProgress`. That function stays in the adapter.
+- An adapter may map its snapshot into `JobProgress`, and it may ship a `frameMap`. Both stay in the adapter.
 - The app maps its domain into `JobProgress` at the edge that publishes or renders progress.

@@ -1,239 +1,117 @@
-import { reconnectDelay, reconnectSettings } from "../../../core/sse/reconnect.js"
-import { runInEffect } from "../../../core/sse/effect.svelte.js"
-import { parseJobEvent, type ErrorBody, type JobEvent } from "../wire/index.js"
-import { isTerminalStatus, JobFollower, takeFrames } from "./follow.js"
+import { JobStream as CoreJobStream } from "../../../core/job/job.svelte.js"
+import type { JobProgress } from "../../../core/progress.js"
+import { isTerminalStatus, JobFollower } from "./follow.js"
+import { keelFrameMap, keelShouldAccept } from "./map.js"
+import { toJobProgress } from "./progress.js"
+import type { JobEvent } from "../wire/index.js"
 import type { JobConnection, JobError, JobSnapshot, JobStatus, JobStreamOptions } from "./types.js"
 
-/** Copy an error envelope into the plain shape a view renders. */
-function toJobError(body: ErrorBody): JobError {
-	return body.detail === undefined
-		? { code: body.code, message: body.message }
-		: { code: body.code, message: body.message, detail: body.detail }
+/** Read a catch-up detail back into the error a Keel snapshot stored there. */
+function errorFromDetail(detail: unknown): JobError | undefined {
+	if (typeof detail !== "object" || detail === null) return undefined
+	if (!("code" in detail) || !("message" in detail)) return undefined
+	const { code, message } = detail
+	if (typeof code !== "string" || typeof message !== "string") return undefined
+	if ("detail" in detail) return { code, message, detail: detail.detail }
+	return { code, message }
 }
 
-/** Follow one job to its end over that job's event feed.
+/** Follow one Keel job to its end over that job's event feed.
  *
- * The stream reads with fetch and not with EventSource. Fetch reports the
- * status of a refused stream, and it lets this class bound its own reconnect
- * delay instead of taking the browser's schedule.
+ * The read loop, the reconnect schedule, and the catch-up freshness rule live
+ * in the core stream. This class supplies Keel's frame map and the follower
+ * that drops duplicates and frames for another job. The fields below are the
+ * ones a Keel view already reads.
  *
  * Construction touches nothing, so importing this module on a server is safe.
  * attach() opens the stream, and a component calls it during initialisation.
- * The stream therefore opens before the first render, and any frame that
- * arrives before the component mounts still lands in the published state.
- *
- * Each connection waits for the stream to open, then reads the job's state to
- * catch up, then applies frames as they arrive. A refused stream fails at
- * once, because a status is an answer. A stream that opened and then dropped
- * reconnects with a bounded delay. A stream that never opened fails instead,
- * because a first failure usually repeats. The first terminal event ends the
- * job, closes the stream, and becomes the last change this stream makes.
  */
-
 export class JobStream {
-	/** The status of the job. It starts queued and stops at the first terminal. */
-	status = $state<JobStatus>("queued")
-	/** The step the job runs, or undefined before the first reading. */
-	stage = $state<string | undefined>(undefined)
-	/** The work done so far, or undefined before the first reading. */
-	current = $state<number | undefined>(undefined)
-	/** The work the job totals, or undefined before the first reading. */
-	total = $state<number | undefined>(undefined)
-	/** The error of a failed job, or undefined while the job lives. */
-	error = $state<JobError | undefined>(undefined)
-	/** Where the stream stands. */
-	connection = $state<JobConnection>("connecting")
-	/** The count of dropped streams that opened again. */
-	reconnects = $state(0)
-	/** Every accepted frame in arrival order. A component that mounts after
-	 * the first frames still reads them here. */
-	events = $state<JobEvent[]>([])
-
-	#options: JobStreamOptions
-	#schedule: ReturnType<typeof reconnectSettings>
+	#events = $state<JobEvent[]>([])
+	#snapshotError = $state<JobError | undefined>(undefined)
 	#follower = new JobFollower()
-	#controller: AbortController | undefined = undefined
-	#timer: ReturnType<typeof setTimeout> | undefined = undefined
-	#attempts = 0
-	#opened = false
-	#stopped = false
+	#core: CoreJobStream
 
 	constructor(options: JobStreamOptions) {
-		this.#options = options
-		this.#schedule = reconnectSettings(options.reconnect)
+		const follower = this.#follower
+		this.#core = new CoreJobStream({
+			url: options.url,
+			frameMap: keelFrameMap(),
+			/** Pass the snapshot promise through unchanged so catch-up lands in its turn. */
+			fetchState: () => options.fetchState() as Promise<JobProgress>,
+			prepareState: (reading) => {
+				const snapshot = reading as unknown as JobSnapshot
+				if (follower.jobId !== undefined && follower.jobId !== snapshot.jobId) return undefined
+				if (follower.ended) return undefined
+				return toJobProgress(snapshot)
+			},
+			isTerminal: (reading: JobProgress) => {
+				if (reading.status === undefined) return false
+				return isTerminalStatus(reading.status as JobStatus)
+			},
+			shouldAccept: (frame) => keelShouldAccept(follower, frame, (event) => {
+				this.#events.push(event)
+			}),
+			onState: (reading) => {
+				this.#snapshotError = errorFromDetail(reading.detail)
+			},
+			onReconnect: options.onReconnect,
+			reconnect: options.reconnect,
+		})
+	}
+
+	/** The status of the job. It starts queued and stops at the first terminal. */
+	get status(): JobStatus {
+		const status = this.#core.progress.status
+		return (status as JobStatus | undefined) ?? "queued"
+	}
+
+	/** The step the job runs, or undefined before the first reading. */
+	get stage(): string | undefined {
+		return this.#core.progress.stage
+	}
+
+	/** The work done so far, or undefined before the first reading. */
+	get current(): number | undefined {
+		return this.#core.progress.current
+	}
+
+	/** The work the job totals, or undefined before the first reading. */
+	get total(): number | undefined {
+		return this.#core.progress.total
+	}
+
+	/** The error of a failed job, or undefined while the job lives. */
+	get error(): JobError | undefined {
+		return this.#core.error ?? this.#snapshotError
+	}
+
+	/** Where the stream stands. */
+	get connection(): JobConnection {
+		return this.#core.connection
+	}
+
+	/** The count of dropped streams that opened again. */
+	get reconnects(): number {
+		return this.#core.reconnects
+	}
+
+	/** Every accepted frame in arrival order. A component that mounts after
+	 * the first frames still reads them here. */
+	get events(): JobEvent[] {
+		return this.#events
 	}
 
 	/** Follow the job. Call it once during component initialisation. The
 	 * stream opens before the first render, and it closes when that component
 	 * is destroyed. A test passes its own cleanup runner, because only a
 	 * component owns the effect context the default runner needs. */
-	attach(registerCleanup: (task: () => () => void) => void = runInEffect): void {
-		void this.#connect()
-		registerCleanup(() => () => this.close())
+	attach(registerCleanup?: (task: () => () => void) => void): void {
+		this.#core.attach(registerCleanup)
 	}
 
-	/** Stop following the job. It cancels the stream and any pending
-	 * reconnect. A second call changes nothing. */
+	/** Stop following the job. It cancels the stream and any pending reconnect. A second call changes nothing. */
 	close(): void {
-		if (this.#stopped) return
-		this.#stop("closed")
-	}
-
-	/** End the watch in one state. Every path out of the read loop lands
-	 * here, so the stream stops exactly once. */
-	#stop(state: JobConnection): void {
-		this.#stopped = true
-		if (this.#timer !== undefined) {
-			clearTimeout(this.#timer)
-			this.#timer = undefined
-		}
-		this.#controller?.abort()
-		this.#controller = undefined
-		this.connection = state
-	}
-
-	/** Answer a stream that dropped. A stream that never opened gives up,
-	 * because a first failure usually repeats. A stream that opened
-	 * reconnects with a bounded delay, up to the attempt ceiling. */
-	#reconnect(): void {
-		if (this.#stopped) return
-		if (!this.#opened || this.#attempts >= this.#schedule.attempts) {
-			this.#stop("failed")
-			return
-		}
-		const delay = reconnectDelay(this.#attempts, this.#schedule)
-		this.#attempts += 1
-		this.connection = "reconnecting"
-		this.#timer = setTimeout(() => {
-			this.#timer = undefined
-			void this.#connect()
-		}, delay)
-	}
-
-	async #connect(): Promise<void> {
-		if (this.#stopped) return
-		/** A server has no stream to open, so it runs no part of this. */
-		if (typeof window === "undefined") return
-		const controller = new AbortController()
-		this.#controller = controller
-		let response: Response
-		try {
-			response = await fetch(this.#options.url, {
-				headers: { accept: "text/event-stream" },
-				signal: controller.signal
-			})
-		} catch {
-			if (this.#stopped) return
-			this.#reconnect()
-			return
-		}
-		if (this.#stopped) return
-		const body = response.body
-		if (!response.ok || body === null) {
-			this.#stop("failed")
-			return
-		}
-		this.#attempts = 0
-		if (this.#opened) {
-			this.reconnects += 1
-			this.#options.onReconnect?.(this.reconnects)
-		}
-		this.#opened = true
-		this.connection = "live"
-		/** Read the frames while the state read runs. A terminal that arrives
-		 * first wins, because it stops the watch. */
-		void this.#read(body)
-		await this.#catchUp()
-	}
-
-	/** Read the job's state once the stream is open. A failed read leaves the
-	 * stream alone, because only the stream reports the end of the job. A state
-	 * read answers late, so it never overwrites a reading the stream already
-	 * carried past it. */
-	async #catchUp(): Promise<void> {
-		let snapshot: JobSnapshot
-		try {
-			snapshot = await this.#options.fetchState()
-		} catch {
-			return
-		}
-		if (this.#stopped) return
-		const followed = this.#follower.jobId
-		if (followed !== undefined && followed !== snapshot.jobId) return
-		if (this.#follower.ended) return
-		const latest = this.#latestProgress()
-		if (snapshot.current !== undefined && latest !== undefined && snapshot.current < latest) return
-		if (snapshot.current === undefined && latest !== undefined) return
-		this.#applySnapshot(snapshot)
-	}
-
-	/** The newest work the stream carried. Undefined before the first progress
-	 * frame, so a snapshot then is the only reading and still lands. */
-	#latestProgress(): number | undefined {
-		for (let at = this.events.length - 1; at >= 0; at -= 1) {
-			const event = this.events[at]
-			if (event.name === "progress" && event.current !== undefined) return event.current
-		}
-		return this.current
-	}
-
-	/** Apply one state read. Only the freshness guard above reaches here, so a
-	 * late answer never moves the stream backward. */
-	#applySnapshot(snapshot: JobSnapshot): void {
-		this.stage = snapshot.stage
-		this.current = snapshot.current
-		this.total = snapshot.total
-		this.error = snapshot.error
-		this.status = snapshot.status
-		if (isTerminalStatus(snapshot.status)) this.#stop("closed")
-	}
-
-	async #read(body: ReadableStream<Uint8Array>): Promise<void> {
-		const reader = body.getReader()
-		const decoder = new TextDecoder()
-		let buffer = ""
-		try {
-			for (;;) {
-				const { done, value } = await reader.read()
-				if (done) break
-				buffer += decoder.decode(value, { stream: true })
-				const taken = takeFrames(buffer)
-				buffer = taken.rest
-				for (const frame of taken.frames) {
-					this.#accept(frame)
-					if (this.#stopped) return
-				}
-			}
-		} catch {
-			/** A read error is a dropped stream, and the rule below answers it. */
-		}
-		if (this.#stopped) return
-		this.#reconnect()
-	}
-
-	/** Apply one frame. A frame the wire cannot read costs one reading and
-	 * never the stream. */
-	#accept(text: string): void {
-		const parsed = parseJobEvent(text)
-		if (!parsed.ok) return
-		const event = parsed.value
-		if (event.name === "heartbeat") return
-		if (!this.#follower.accept(event)) return
-		this.events.push(event)
-		if (event.name === "progress") {
-			this.stage = event.stage
-			this.current = event.current
-			this.total = event.total
-			this.status = "running"
-			return
-		}
-		if (event.name === "error") {
-			this.error = toJobError(event.error.error)
-			this.status = "error"
-			this.#stop("closed")
-			return
-		}
-		this.status = event.status
-		this.#stop("closed")
+		this.#core.close()
 	}
 }

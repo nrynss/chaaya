@@ -1,3 +1,8 @@
+/**
+ * Shared decoder primitives for adapter authors. An adapter uses them to
+ * parse a payload without throwing. App code does not need them.
+ */
+
 /** The reason a parser rejected its input. */
 export interface ParseFailure {
 	/** A short sentence naming what the input lacked. */
