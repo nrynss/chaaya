@@ -114,3 +114,41 @@ test("loading a new source resets the published state", async ({ page }) => {
 	await expect(page.getByTestId("failure")).toHaveText("none")
 	await expect(page.getByTestId("playing")).toHaveText("false")
 })
+
+test("the first gesture preserves the element's mute state in both directions", async ({
+	page
+}) => {
+	/** A muted adopted element comes out of the prime as it went in. The
+	 * prime mutes for its silent clip and must not force an unmute past
+	 * what the element carried. */
+	await open(page)
+	await page.evaluate(() => {
+		const video = document.querySelector("video")
+		if (!video) throw new Error("no video element")
+		video.muted = true
+	})
+	await page.getByTestId("play").click()
+	await expect(page.getByTestId("playing")).toHaveText("true")
+	await expect.poll(() => readNumber(page, "current-time")).toBeGreaterThan(0.5)
+	await page.waitForTimeout(500)
+	const mutedAfter = await page.evaluate(() => {
+		const video = document.querySelector("video")
+		return video ? video.muted : null
+	})
+	expect(mutedAfter).toBe(true)
+
+	/** The reverse direction pins the restore against an overcorrection.
+	 * The reload builds a fresh player, so the prime runs again on an
+	 * element nobody muted. */
+	await page.reload()
+	await open(page)
+	await page.getByTestId("play").click()
+	await expect(page.getByTestId("playing")).toHaveText("true")
+	await expect.poll(() => readNumber(page, "current-time")).toBeGreaterThan(0.5)
+	await page.waitForTimeout(500)
+	const unmutedAfter = await page.evaluate(() => {
+		const video = document.querySelector("video")
+		return video ? video.muted : null
+	})
+	expect(unmutedAfter).toBe(false)
+})
