@@ -214,23 +214,26 @@ export class AudioPlayer {
 		element.addEventListener("error", this.#onError)
 	}
 
-	/** Play a silent clip inside the gesture, then rewind and unmute. A muted
-	 * clip unlocks a mobile browser, and the rewind hides it from the user.
-	 * A refusal sets lastPlayError, and a success clears it. */
+	/** Play a silent clip inside the gesture, then rewind and restore the
+	 * mute state the element carried. A muted clip unlocks a mobile browser,
+	 * and the rewind hides the clip from the user. An element the caller
+	 * muted in its own markup comes out of the prime as it went in. A
+	 * refusal sets lastPlayError, and a success clears it. */
 	async #prime(element: HTMLMediaElement): Promise<boolean> {
 		this.#loaded = silentClip
+		const mutedBefore = element.muted
 		element.muted = true
 		element.src = silentClip
 		try {
 			await element.play()
 			element.pause()
 			element.currentTime = 0
-			element.muted = false
+			element.muted = mutedBefore
 			this.#unlocked = true
 			this.lastPlayError = null
 			return true
 		} catch (error) {
-			element.muted = false
+			element.muted = mutedBefore
 			this.lastPlayError = toRefusal(error)
 			return false
 		}
