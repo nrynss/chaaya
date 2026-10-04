@@ -218,8 +218,9 @@ snapshot that omits the counter and the stage is another.
 ## Status
 
 Published on [npm](https://www.npmjs.com/package/@nrynss/chaaya) as
-`@nrynss/chaaya`. The current npm release is `0.2.4`. This tree is `0.3.0`
-and is not published yet.
+`@nrynss/chaaya`. The current npm release is `0.2.4`. This tree freezes
+`0.3.0` in `api/0.3.0/`. It is not the published release until this record
+is on `main`, tagged `v0.3.0`, and published.
 
 ```sh
 npm install @nrynss/chaaya
@@ -229,25 +230,28 @@ npm install @nrynss/chaaya
 
 `api/<version>/` is the frozen public declarations for a version that has
 been tagged. It is history, not a copy that every pull request refreshes.
-`api/0.1.0` through `api/0.2.4` stay as published. Nothing in those
-directories is rewritten.
+`api/0.1.0` through `api/0.3.0` stay. Nothing in those directories is
+rewritten.
 
-Until `api/0.3.0/` exists, the gate does not diff `dist` against a freeze.
-It does fail if a published record changes, and it fails if `package.json`
-is not strictly newer than every frozen record. The packed tarball is still
-typechecked. Once `api/<version>/` exists, it must match the build, and a
-non-breaking bump must keep the previous record's public files and exports.
-Before `1.0.0` a minor bump may remove declarations (`0.2.4` to `0.3.0`).
-A patch may not. From `1.0.0` only a major bump may remove them.
+`api/0.3.0/` is the freeze for this release. The gate diffs `dist` against
+that record. It fails if a published record changes, and it fails if
+`package.json` is not strictly newer than every frozen record. The packed
+tarball is still typechecked. A record that exists must match the build,
+and a non-breaking bump must keep the previous record's public files and
+exports. Before `1.0.0` a minor bump may remove declarations (`0.2.4` to
+`0.3.0`). A patch may not. From `1.0.0` only a major bump may remove them.
+
+The next freeze needs a package bump first. `tools/freeze-api.sh` refuses
+to overwrite `api/0.3.0/`.
 
 Freeze at the tag, from a clean tree, after the gate has passed:
 
 ```sh
 ./tools/check.sh
 ./tools/freeze-api.sh
-git add api/0.3.0
-git commit -m "Freeze the 0.3.0 declarations"
-git tag -a v0.3.0 -m "0.3.0"
+git add api/<version>
+git commit -m "Freeze the <version> declarations"
+git tag -a v<version> -m "<version>"
 ```
 
 `tools/freeze-api.sh` copies the public `.d.ts` files out of `dist`. It
