@@ -1,6 +1,6 @@
 # Recording session
 
-`createRecordingSession` is a headless take controller. It does not render, and it does not know Keel or Thutapi.
+`createRecordingSession` is a headless take controller. It does not render, and it does not know Keel or a product backend.
 
 The phase table lives in `src/lib/audio/session/phase.ts`. A move the phase does not allow leaves the phase alone. The controller turns that into a thrown `RecordingSessionError` for commands, so a click handler can tell a refused pause from a pause that happened.
 
