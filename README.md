@@ -218,9 +218,8 @@ snapshot that omits the counter and the stage is another.
 ## Status
 
 Published on [npm](https://www.npmjs.com/package/@nrynss/chaaya) as
-`@nrynss/chaaya`. The current npm release is `0.2.4`. This tree freezes
-`0.3.0` in `api/0.3.0/`. It is not the published release until this record
-is on `main`, tagged `v0.3.0`, and published.
+`@nrynss/chaaya`. The current npm release is `0.3.0`, matching the frozen
+`api/0.3.0/` record and tag `v0.3.0`.
 
 ```sh
 npm install @nrynss/chaaya
