@@ -37,7 +37,7 @@ const silentClip =
 
 /** Read the buffered spans of an element into plain numbers, so a consumer
  * can render them and a test can read them back. */
-function readSpans(element: HTMLAudioElement): BufferedSpan[] {
+function readSpans(element: HTMLMediaElement): BufferedSpan[] {
 	const spans: BufferedSpan[] = []
 	const ranges = element.buffered
 	for (let index = 0; index < ranges.length; index += 1) {
@@ -56,10 +56,22 @@ function toRefusal(error: unknown): PlayRefusal {
 	return { name: "UnknownError", message: String(error) }
 }
 
-/** One audio element per app, unlocked by the first gesture and reused for
+/** The element a player drives when the caller owns it. A video element in
+ * the caller's markup is the common case. Without one the player creates its
+ * own audio element. */
+export interface AudioPlayerOptions {
+	/** The element the caller owns. The player attaches its listeners to it
+	 * and drives its source through load and play, so the caller hands
+	 * sources to the player and not to the element. The element stays the
+	 * caller's to render and to size. */
+	readonly element: HTMLMediaElement
+}
+
+/** One media element per app, unlocked by the first gesture and reused for
  * every clip. A browser blocks playback that no gesture started, so the first
  * user gesture primes the element with a silent clip. Every later clip reuses
- * that element, which keeps the unlocked state alive. */
+ * that element, which keeps the unlocked state alive. The element is one the
+ * caller owns, such as a `<video>` element, or one the player creates. */
 export class AudioPlayer {
 	/** True while the element is playing. */
 	playing = $state(false)
@@ -77,11 +89,18 @@ export class AudioPlayer {
 	/** The source the consumer asked for. */
 	source = $state<string | null>(null)
 
-	#element: HTMLAudioElement | null = null
+	#element: HTMLMediaElement | null = null
+	#supplied: HTMLMediaElement | null
 	#rate = $state(1)
 	#unlocked = false
 	#unlocking: Promise<boolean> | null = null
 	#loaded: string | null = null
+
+	/** Build a player. Pass an element the caller owns to drive it, or
+	 * nothing to let the player create its own audio element. */
+	constructor(options?: AudioPlayerOptions) {
+		this.#supplied = options?.element ?? null
+	}
 
 	/** The playback speed. Setting it drives the element when it exists. */
 	get rate(): number {
@@ -158,13 +177,31 @@ export class AudioPlayer {
 		return this.#unlocking
 	}
 
-	/** Build the element on first use, so no import touches the DOM. */
-	#ensureElement(): HTMLAudioElement {
+	/** Build or adopt the element on first use, so no import touches the
+	 * DOM. A caller-supplied element keeps the settings its markup gave it,
+	 * and the player only applies its own rate and listeners. */
+	#ensureElement(): HTMLMediaElement {
 		if (this.#element) return this.#element
+		if (this.#supplied) {
+			const adopted = this.#supplied
+			adopted.playbackRate = this.#rate
+			this.#listen(adopted)
+			this.#element = adopted
+			return adopted
+		}
 		const element = new Audio()
 		element.setAttribute("playsinline", "")
 		element.preload = "metadata"
 		element.playbackRate = this.#rate
+		this.#listen(element)
+		this.#element = element
+		return element
+	}
+
+	/** Read an element's clock, timeline, buffer, and failures into the
+	 * published state. The same set of listeners serves an element the
+	 * caller owns and one the player created. */
+	#listen(element: HTMLMediaElement): void {
 		element.addEventListener("timeupdate", this.#readClock)
 		element.addEventListener("seeked", this.#readClock)
 		element.addEventListener("durationchange", this.#readTimeline)
@@ -175,14 +212,12 @@ export class AudioPlayer {
 		element.addEventListener("ended", this.#onPause)
 		element.addEventListener("ratechange", this.#onRateChange)
 		element.addEventListener("error", this.#onError)
-		this.#element = element
-		return element
 	}
 
 	/** Play a silent clip inside the gesture, then rewind and unmute. A muted
 	 * clip unlocks a mobile browser, and the rewind hides it from the user.
 	 * A refusal sets lastPlayError, and a success clears it. */
-	async #prime(element: HTMLAudioElement): Promise<boolean> {
+	async #prime(element: HTMLMediaElement): Promise<boolean> {
 		this.#loaded = silentClip
 		element.muted = true
 		element.src = silentClip

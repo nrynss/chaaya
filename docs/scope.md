@@ -37,7 +37,7 @@ One typed client failure: `ApiError`. Envelope parsing is the adapter's job thro
 
 - Microphone capture in compressed and PCM modes, started from a user gesture. Rate conversion and a WAV writer sit beside it.
 - A recording session that moves one take from idle through recording, pause, and upload to done. See [recording-session.md](recording-session.md).
-- Playback through one element, unlocked by the first gesture, with seeking and buffered spans. The element is an `HTMLAudioElement` today.
+- Playback through one element, unlocked by the first gesture, with seeking and buffered spans. The element is any media element: a caller-owned `<video>` element, or an audio element the player creates.
 - `PcmStreamPlayer`, which schedules arriving PCM blocks gaplessly and flushes cleanly.
 - Live levels, and waveform peaks computed directly or in a worker.
 
@@ -65,7 +65,7 @@ Svelte 5 only, for now. The published modules use runes. There is no Svelte 4 bu
 
 These are in scope and tracked as open issues. Until each one lands, an app builds it itself.
 
-- Video through the media player, and timed words bound to a video's clock ([#38](https://github.com/nrynss/chaaya/issues/38), [#39](https://github.com/nrynss/chaaya/issues/39))
+- Timed words bound to a video's clock ([#39](https://github.com/nrynss/chaaya/issues/39))
 - Timed audio clips scheduled against a media element's clock, for a browser preview of a mix ([#45](https://github.com/nrynss/chaaya/issues/45))
 - Timeline geometry and keyboard-operable edit handles ([#40](https://github.com/nrynss/chaaya/issues/40))
 - A keyboard shortcut registry that a help view reads ([#41](https://github.com/nrynss/chaaya/issues/41))
