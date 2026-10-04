@@ -101,11 +101,11 @@ test("done is recognised even when the events list would hide it", () => {
 test("a custom parser can name fields the default reader does not", () => {
 	const bridge = createTranscriptBridge({
 		parse: (data) => {
-			const value = JSON.parse(data) as { t0: number; t1: number; w: string }
-			return { start: value.t0, end: value.t1, text: value.w }
+			const value = JSON.parse(data) as { tStart: number; tEnd: number; w: string }
+			return { start: value.tStart, end: value.tEnd, text: value.w }
 		}
 	})
-	bridge.apply(frame("word", { t0: 0, t1: 0.2, w: "custom" }))
+	bridge.apply(frame("word", { tStart: 0, tEnd: 0.2, w: "custom" }))
 	expect(bridge.words).toEqual([{ start: 0, end: 0.2, text: "custom" }])
 })
 
@@ -113,13 +113,16 @@ test("a parser that throws or returns null does not clear the list", () => {
 	const bridge = createTranscriptBridge({
 		parse: (data) => {
 			if (data === "no") return null
+			if (data === "ok") return { start: 0, end: 1, text: "kept" }
 			throw new Error("bad")
 		}
 	})
-	bridge.apply(frame("word", hello))
-	expect(bridge.words).toHaveLength(0)
+	bridge.apply(frame("word", "ok"))
+	expect(bridge.words).toHaveLength(1)
 	expect(bridge.apply(frame("word", "no")).type).toBe("ignore")
+	expect(bridge.words).toHaveLength(1)
 	expect(bridge.apply(frame("word", "x"))).toEqual({ type: "invalid", reason: "parse" })
+	expect(bridge.words).toHaveLength(1)
 })
 
 test("ordered sorts a copy and leaves arrival order stored", () => {

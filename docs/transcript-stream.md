@@ -34,7 +34,9 @@ const bridge = createTranscriptBridge({
   doneEvent: "done",
 })
 
-const stream = createEventStream({
+let editor: TranscriptEditor | undefined
+
+const stream = createEventStream("/transcript/events", {
   events: ["word", "done"],
   terminal: ["done"],
   onFrame(event) {
