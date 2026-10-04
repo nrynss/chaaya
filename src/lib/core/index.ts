@@ -4,6 +4,9 @@
  *
  * `decodeJson`, `isRecord`, `ok`, and `fail` are decoder primitives for
  * adapter authors. They are not a utility belt for app code.
+ *
+ * Writing an adapter is covered in the package README under Adapters.
+ * Supply `frameMap` and `parseError`.
  */
 export { ApiError, api, createApi } from "./api.js"
 export type { ApiClient, ApiClientOptions, ApiErrorParser, ApiFailureBody, ApiRequestInit } from "./api.js"

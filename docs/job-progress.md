@@ -116,55 +116,27 @@ A name that is not in the map is ignored. `frameMap` is a plain object's own key
 
 The first request sends no `Last-Event-ID`. A reconnect sends it when the last accepted id is not 0. An accepted frame with no id line leaves that id alone. An empty id line (`id:`) on an accepted frame resets it, and the next reconnect omits the header. An explicit `id: 0` does the same. An ignored frame does not move that id. Comment frames, including Keel heartbeats, never reach `onFrame` or `frameMap`. `onComment` receives the comment text, a string. `FrameLoop` and `createEventStream` use that same argument. An `id:` on a comment does not move the cursor. That is a deliberate deviation from WHATWG. `EventSource` sets last-event-ID from the `id:` field before it checks whether the data buffer is empty, so a comment that carries `id:` still advances the cursor. This loop does not. Only a kept event frame moves it.
 
-Ids are assumed to strictly climb. A backend whose ids restart or repeat must send an empty `id:` line, or an explicit `id: 0`, on a frame the client keeps. That is the reset. If the ids restart without it, the client treats the new frames as replays and drops them with no error. The failure mode is a silent drop. The fix is that empty `id:` line (or `id: 0`) before the ids climb again.
+A repeated id is not dropped on a job stream. `JobStream` applies it again. `createEventStream` drops a positive id at or below its cursor, which is the silent-drop case. On either path, an empty `id:` line, or `id: 0`, on a kept event resets `Last-Event-ID`, so the next reconnect does not resume from a stale cursor. A restart that forgets that reset leaves the cursor high. The job stream still renders the new frames. The named-event stream drops them.
 
 The error on a terminal action uses the shape in [errors.md](errors.md).
 
 ### Another backend
 
-A Rust server, or any other server that speaks `text/event-stream`, does not get its own client loop. The page imports `JobStream` or `createJobStream` and supplies a map for that server's event names. Reconnect and abort stay options on the same call.
+A server that is not Keel does not get its own client loop. The page imports `JobStream` or `createJobStream` and supplies a map for that server's event names. Reconnect and abort stay options on the same call. The complete adapter, including `parseError`, `fetchState`, `shouldAccept`, and a `formatNamedFrame` writer, is [adapters.md](adapters.md). Do not parse the payload with `JSON.parse`. A throw is dropped with the frame, and the cursor does not move. `decodeJson` returns a failure instead.
 
 ```ts
-import { createJobStream, type JobFrameAction, type NamedEvent } from "@nrynss/chaaya/core"
-
-function onFrame(frame: NamedEvent): JobFrameAction {
-  const data = JSON.parse(frame.data) as {
-    stage?: string
-    current?: number
-    total?: number
-  }
-  if (frame.name === "done") return { kind: "terminal", reading: { status: "done" } }
-  if (frame.name === "error") {
-    return {
-      kind: "terminal",
-      reading: { status: "error" },
-      error: { code: "failed", message: "stopped" },
-    }
-  }
-  return {
-    kind: "progress",
-    reading: {
-      stage: data.stage,
-      current: data.current,
-      total: data.total,
-      status: "running",
-    },
-  }
-}
+import { createJobStream } from "@nrynss/chaaya/core"
+import { plainFrameMap } from "./plain-adapter" // copy docs/examples/plain-adapter.ts
 
 const stream = createJobStream({
   url: "/jobs/1/events",
   reconnect: { baseMs: 500, maxMs: 8000, attempts: 6 },
-  frameMap: {
-    progress: onFrame,
-    done: onFrame,
-    error: onFrame,
-  },
+  frameMap: plainFrameMap(),
 })
 stream.attach()
 ```
 
-`new JobStream({ url, frameMap, reconnect })` is the same call. The example names `progress`, `done`, and `error` only. It does not reimplement fetch, frame splitting, or backoff.
+`new JobStream({ url, frameMap, reconnect })` is the same call. The names inside `plainFrameMap` are the caller's. Copy the full adapter from [adapters.md](adapters.md) rather than inventing handlers here. This call does not reimplement fetch, frame splitting, or backoff.
 
 ## When not to use this shape
 
