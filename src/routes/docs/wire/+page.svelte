@@ -47,5 +47,6 @@
 		<dt>Done status</dt>
 		<dd data-testid="done-status">{doneStatus}</dd>
 	</dl>
+	<p>Where this wire sits in the kit is <a href={resolve("/docs/scope")}>scope</a>.</p>
 	<nav aria-label="Pieces"><a href={resolve("/docs")}>back</a></nav>
 </main>

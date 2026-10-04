@@ -66,5 +66,6 @@
 		<dt>Catch up</dt>
 		<dd data-testid="catch-up">{caughtUp}</dd>
 	</dl>
+	<p>The transport contract for this stream is <a href={resolve("/docs/scope")}>scope</a>.</p>
 	<nav aria-label="Pieces"><a href={resolve("/docs")}>back</a></nav>
 </main>

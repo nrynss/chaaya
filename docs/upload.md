@@ -1,5 +1,7 @@
 # Upload
 
+What this kit covers for upload, and what it does not, is [scope.md](scope.md).
+
 Two helpers, two jobs. Neither one names a backend.
 
 ## Chunked
