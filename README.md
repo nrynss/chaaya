@@ -163,6 +163,7 @@ suggesting a look.
   Core does not parse an envelope.
 - [wire](/docs/wire): the Keel adapter's error envelope and job event parsers.
 - [job](/docs/job): the Keel job stream.
+- [recording session](/docs/recording-session): headless capture-to-upload session state.
 - [audio capture](/docs/audio-capture): microphone capture in compressed and
   PCM modes, recorded from a generated signal.
 - [audio upload](/docs/audio-upload): Keel's chunked upload, streamed to the
