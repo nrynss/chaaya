@@ -32,13 +32,13 @@ The page opens a `JobStream` with a `frameMap` for those event names. The comple
 
 ## Abort
 
-When `signal` aborts, the stream closes and no further frames are written. Pass `request.signal` from the load so a cancelled navigation stops the work. A signal that is already aborted yields an empty body.
+When `signal` aborts, the stream closes and no further frames are written. Pass `request.signal` from the request handler so a dropped connection stops the work. A signal that is already aborted yields an empty body. A client that cancels the body also stops further writes, even when no signal was passed. The iterable itself stops only at its next frame unless it watches that signal.
 
 ## What this is not
 
 - Not a WebSocket server
 - Not an `EventSource` polyfill
 - Not a Keel job runner
-- Not a replacement for `formatNamedFrame` on a non-SvelteKit host — call the writer and set the headers yourself there
+- Not a replacement for `formatNamedFrame` on a non-SvelteKit host. Call the writer and set the headers yourself there
 
 Protocol limits are [scope.md](scope.md).

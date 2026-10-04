@@ -68,4 +68,29 @@ describe("createJobStreamResponse", () => {
 		const response = createJobStreamResponse([{ event: "done", data: "{}" }], { signal })
 		expect(await readText(response)).toBe("")
 	})
+
+	test("a client cancel stops later frames without a signal", async () => {
+		let release: () => void = () => {}
+		const gate = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		async function* frames() {
+			yield { id: 1, event: "progress", data: "{}" }
+			await gate
+			yield { id: 2, event: "done", data: "{}" }
+		}
+		const response = createJobStreamResponse(frames())
+		const reader = response.body?.getReader()
+		if (!reader) throw new Error("missing body")
+		const first = await reader.read()
+		expect(first.done).toBe(false)
+		const pending = reader.cancel()
+		release()
+		await pending
+		const rest = await reader.read()
+		expect(rest.done).toBe(true)
+		const text = new TextDecoder().decode(first.value)
+		expect(text).toContain("event: progress")
+		expect(text).not.toContain("event: done")
+	})
 })

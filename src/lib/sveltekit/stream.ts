@@ -7,7 +7,7 @@ export type SseFrameInput = NamedFrameFields | string
 export interface JobStreamResponseOptions {
 	/** Extra response headers. `content-type` is always `text/event-stream`. */
 	headers?: HeadersInit
-	/** Stop writing when this aborts. Pass `request.signal` from a `+server.ts` load. */
+	/** Stop writing when this aborts. Pass `request.signal` from the `+server.ts` request handler. */
 	signal?: AbortSignal
 }
 
@@ -24,6 +24,9 @@ function frameText(frame: SseFrameInput): string {
  * Frames are `NamedFrameFields`, or strings already written by `formatNamedFrame`.
  * No Keel event names. No UI. This module does not import `@sveltejs/kit`; a
  * SvelteKit `+server.ts` returns the `Response` as-is.
+ *
+ * A client cancel stops further writes even when `signal` is omitted. The
+ * iterable itself pauses only at its next frame unless it watches that signal.
  */
 export function createJobStreamResponse(
 	frames: AsyncIterable<SseFrameInput> | Iterable<SseFrameInput>,
@@ -31,27 +34,27 @@ export function createJobStreamResponse(
 ): Response {
 	const encoder = new TextEncoder()
 	const signal = options.signal
+	let stopped = false
 	const body = new ReadableStream<Uint8Array>({
 		async start(controller) {
-			if (signal?.aborted) {
-				controller.close()
-				return
-			}
-			let closed = false
-			const close = () => {
-				if (closed) return
-				closed = true
+			const stop = (): void => {
+				if (stopped) return
+				stopped = true
 				try {
 					controller.close()
 				} catch {
 					/* already closed by cancel */
 				}
 			}
-			const onAbort = () => close()
+			if (signal?.aborted || stopped) {
+				stop()
+				return
+			}
+			const onAbort = () => stop()
 			signal?.addEventListener("abort", onAbort, { once: true })
 			try {
 				const write = (chunk: string): boolean => {
-					if (signal?.aborted || closed) return false
+					if (signal?.aborted || stopped) return false
 					controller.enqueue(encoder.encode(chunk))
 					return true
 				}
@@ -64,15 +67,17 @@ export function createJobStreamResponse(
 						if (!write(frameText(frame))) break
 					}
 				}
-				close()
+				stop()
 			} catch (cause) {
-				if (!closed) controller.error(cause)
+				if (stopped) return
+				stopped = true
+				controller.error(cause)
 			} finally {
 				signal?.removeEventListener("abort", onAbort)
 			}
 		},
 		cancel() {
-			/* the client dropped the stream */
+			stopped = true
 		},
 	})
 
