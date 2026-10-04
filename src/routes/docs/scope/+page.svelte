@@ -25,8 +25,8 @@
 		<code>Uploader</code>, and one-shot <code>uploadBlob</code>. It does not
 		cover WebSocket, native <code>EventSource</code>, or resumable
 		direct-to-storage multipart. <code>Last-Event-ID</code> is sent on
-		reconnect; a server may still start from now. Errors are one typed
-		<code>ApiError</code>; the envelope parser is the adapter's. Framework
+		reconnect. A server may still start from now. Errors are one typed
+		<code>ApiError</code>. The envelope parser is the adapter's. Framework
 		scope is Svelte 5 only, for now.
 	</p>
 	<p>

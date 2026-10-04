@@ -36,7 +36,7 @@ What the kit covers, and what it does not:
 
 - **Streaming:** named SSE over `fetch`. Reader/writer in core. No WebSocket.
   No native `EventSource`.
-- **Job loop:** `JobStream` for a job-shaped stream; `createEventStream` for
+- **Job loop:** `JobStream` for a job-shaped stream. `createEventStream` for
   arbitrary named events. Both sit on `FrameLoop`.
 - **Last-Event-ID:** sent on reconnect when the cursor is not 0. A server may
   ignore it and start from now.
@@ -47,7 +47,6 @@ What the kit covers, and what it does not:
 - **Framework:** Svelte 5 only, for now.
 
 The written page is [docs/scope.md](docs/scope.md).
-
 
 Published as `@nrynss/chaaya`.
 
