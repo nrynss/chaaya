@@ -52,9 +52,8 @@ What the kit covers, and what it does not:
 - **Errors:** one typed `ApiError`. Envelope parsing is the adapter's
   (`ApiErrorParser`).
 - **Framework:** Svelte 5 only, for now.
-- **Not covered yet:** video playback, a timeline, shortcuts, undo and
-  redo, polling, and priced actions. Each is an open issue, listed in the
-  written page.
+- **Not covered yet:** a timeline, shortcuts, undo and redo, polling, and
+  priced actions. Each is an open issue, listed in the written page.
 
 The written page is [docs/scope.md](docs/scope.md).
 
@@ -114,10 +113,10 @@ Published as `@nrynss/chaaya`.
   presigned PUT. `maxBytes` applies to a blob. On `FormData` it throws unless
   you pass `size`. This is not `Uploader` and it is not audio-specific.
 - `@nrynss/chaaya/audio`: microphone capture in compressed and PCM modes,
-  playback through one element unlocked by the first gesture, the
-  PcmStreamPlayer for arriving blocks, and live levels and waveform peaks.
-  Capture adds the resampleLinear and resampleChunks rate conversion and the
-  encodeWav file writer.
+  playback through one media element, audio or video, unlocked by the first
+  gesture, the PcmStreamPlayer for arriving blocks, and live levels and
+  waveform peaks. Capture adds the resampleLinear and resampleChunks rate
+  conversion and the encodeWav file writer.
 - `@nrynss/chaaya/guard`: the SessionGuard that closes one live session
   exactly once when its page goes away.
 - `@nrynss/chaaya/transcript`: timed words, the TranscriptEditor that cuts and
@@ -180,6 +179,8 @@ suggesting a look.
   route beside the page.
 - [audio playback](/docs/audio-playback): playback through one element
   unlocked by the first gesture, with seeking.
+- [video playback](/docs/video-playback): video through the same player,
+  driven through an element the caller owns.
 - [audio stream](/docs/audio-stream): the PcmStreamPlayer that schedules
   arriving blocks gaplessly on a supplied context, with a flush that cuts
   cleanly.

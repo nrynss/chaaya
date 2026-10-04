@@ -22,7 +22,13 @@ export type {
 	CaptureState
 } from "./capture/index.js"
 export { AudioPlayer } from "./playback/player.svelte.js"
-export type { BufferedSpan, PlaybackError, PlaybackFailure, PlayRefusal } from "./playback/player.svelte.js"
+export type {
+	AudioPlayerOptions,
+	BufferedSpan,
+	PlaybackError,
+	PlaybackFailure,
+	PlayRefusal
+} from "./playback/player.svelte.js"
 export { PcmStreamPlayer } from "./playback/stream.svelte.js"
 export type { ScheduledBlock, StreamPlayerOptions } from "./playback/stream.svelte.js"
 export { LiveLevel } from "./levels/live-level.svelte.js"
