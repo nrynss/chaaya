@@ -54,6 +54,11 @@
       "svelte": "./dist/auth/index.js",
       "default": "./dist/auth/index.js"
     },
+    "./sveltekit": {
+      "types": "./dist/sveltekit/index.d.ts",
+      "svelte": "./dist/sveltekit/index.js",
+      "default": "./dist/sveltekit/index.js"
+    },
     "./sse": {
       "types": "./dist/core/sse/index.d.ts",
       "svelte": "./dist/core/sse/index.js",
@@ -96,9 +101,15 @@
     "!dist/**/*.spec.*"
   ],
   "peerDependencies": {
+    "@sveltejs/kit": "^2.0.0",
     "axe-core": "^4.13.0",
     "bits-ui": "^2.0.0",
     "svelte": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@sveltejs/kit": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

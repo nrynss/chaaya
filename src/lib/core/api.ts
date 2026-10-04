@@ -96,8 +96,13 @@ function joinSignals(
 
 /** Turn a failed response into the one error a caller branches on. A parser
  * that recognises the body supplies the code. A throw or anything else keeps
- * http_error, so a bad body never becomes a network failure. */
-function failure(response: Response, text: string, parseError: ApiErrorParser | undefined): ApiError {
+ * http_error, so a bad body never becomes a network failure. Form actions
+ * share this, so a response read outside api() still lands on the same codes. */
+export function readApiError(
+	response: Response,
+	text: string,
+	parseError?: ApiErrorParser,
+): ApiError {
 	const retryAfterSeconds = readRetryAfter(response)
 	let parsed: ApiFailureBody | undefined
 	try {
@@ -135,7 +140,7 @@ export function createApi(options: ApiClientOptions = {}): ApiClient {
 		try {
 			const response = await fetch(path, { ...rest, signal: joinSignals(caller, deadline) })
 			const text = await response.text()
-			if (!response.ok) throw failure(response, text, parser)
+			if (!response.ok) throw readApiError(response, text, parser)
 			return decodeBody(text) as T
 		} catch (cause) {
 			if (cause instanceof ApiError) throw cause
