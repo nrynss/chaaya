@@ -23,11 +23,22 @@
 		Chaaya covers named SSE over <code>fetch</code>, a job-shaped
 		<code>JobStream</code>, arbitrary <code>createEventStream</code>, chunked
 		<code>Uploader</code>, and one-shot <code>uploadBlob</code>. It does not
-		cover WebSocket, native <code>EventSource</code>, or resumable
-		direct-to-storage multipart. <code>Last-Event-ID</code> is sent on
-		reconnect. A server may still start from now. Errors are one typed
-		<code>ApiError</code>. The envelope parser is the adapter's. Framework
-		scope is Svelte 5 only, for now.
+		cover WebSocket or native <code>EventSource</code>.
+		<code>Last-Event-ID</code> is sent on reconnect. A server may still
+		start from now. Errors are one typed <code>ApiError</code>. The
+		envelope parser is the adapter's. Framework scope is Svelte 5 only,
+		for now.
+	</p>
+	<p>
+		Audio capture, playback, levels and peaks, the recording session,
+		transcript editing, the session guard, theme tokens, and the contrast
+		and accessibility gates are covered too.
+	</p>
+	<p>
+		Not covered yet: video playback, timed clips against a media clock,
+		timeline edit handles, a shortcut registry, undo and redo, a polling
+		follower, priced actions, and resumable direct-to-storage multipart.
+		Each is an open issue.
 	</p>
 	<p>
 		The written contract is <code>docs/scope.md</code>. Job details are

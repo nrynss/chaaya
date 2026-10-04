@@ -26,6 +26,13 @@ is not Keel does not import it. Nothing in this package names a consumer app.
 - **API client.** One fetch wrapper. A failed response is a typed error. The
   caller supplies a parser when a backend has an error envelope. Timeout and
   network failures are generic.
+- **Upload.** Chunked and resumable through an adapter's `Uploader`, or one
+  shot with socket progress. A presigned PUT is a one-shot upload.
+- **Recording and transcript.** A headless recording session, timed words
+  with cuts, and a follower that binds words to playback.
+- **SvelteKit.** Form-action mappers for typed errors, and an event-stream
+  response for `+server.ts`.
+- **Gates.** A contrast gate and an accessibility gate an app runs on itself.
 
 Accessible primitives such as dialogs and tooltips come from
 [Bits UI](https://bits-ui.com), not from this package.
@@ -40,11 +47,14 @@ What the kit covers, and what it does not:
   arbitrary named events. Both sit on `FrameLoop`.
 - **Last-Event-ID:** sent on reconnect when the cursor is not 0. A server may
   ignore it and start from now.
-- **Upload:** chunked `Uploader` (adapter) and one-shot `uploadBlob`. No
-  resumable direct-to-storage multipart yet.
+- **Upload:** chunked `Uploader` (adapter) and one-shot `uploadBlob`.
+  Resumable direct-to-storage multipart is not covered yet.
 - **Errors:** one typed `ApiError`. Envelope parsing is the adapter's
   (`ApiErrorParser`).
 - **Framework:** Svelte 5 only, for now.
+- **Not covered yet:** video playback, a timeline, shortcuts, undo and
+  redo, polling, and priced actions. Each is an open issue, listed in the
+  written page.
 
 The written page is [docs/scope.md](docs/scope.md).
 
