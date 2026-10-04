@@ -30,6 +30,7 @@
 			<li><a href={resolve("/docs/auth")}>auth</a></li>
 			<li><a href={resolve("/docs/adapters")}>adapters</a></li>
 			<li><a href={resolve("/docs/form-actions")}>form actions</a></li>
+			<li><a href={resolve("/docs/job-stream-response")}>job stream response</a></li>
 			<li><a href={resolve("/docs/upload")}>upload</a></li>
 			<li><a href={resolve("/docs/job-progress")}>job progress</a></li>
 			<li><a href={resolve("/docs/job")}>keel job</a></li>
