@@ -2,7 +2,7 @@
 
 `createTranscriptBridge` turns a generic timed-word stream into the
 `TranscriptWord` array `TranscriptEditor` is constructed with. It does not
-import Keel, Thutapi, or the editor. Event names are the caller's.
+import Keel or the editor. Event names are the caller's.
 
 A frame this bridge understands is one of:
 
@@ -10,6 +10,8 @@ A frame this bridge understands is one of:
 - the `doneEvent` name, which marks the list finished and ignores the payload
 - one JSON word: `{ "start", "end", "text", "speaker"? , "index"? }`
 - a JSON array of those words, or `{ "words": [ ... ] }`, which replaces the list
+
+An empty snapshot (`[]` or `{ "words": [] }`) is still a snapshot. It replaces the list with nothing, which clears words already applied.
 
 `start` and `end` are finite source seconds with `end >= start`. `text` is a
 string. An `index` replaces that word, or appends when it equals the length.
