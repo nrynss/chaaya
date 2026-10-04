@@ -28,7 +28,7 @@ Two runs, in order, on a clean install:
 
 | Severity | Where | What | Pin | Mutation |
 |---|---|---|---|---|
-| H | `docs/transcript-stream.md:5` at the reviewed hash | The doc names a consumer in a tracked file. The sentence reads that the bridge does not import Keel, Thutapi, or the editor. The consumer-name scan is case-insensitive over every tracked file and fails the gate on it, so no landing can carry this tree. My diff read missed the name and the scan caught it. | `./tools/check.sh` on a clean install exits 1 at the consumer-names step listing that file. `git grep -i thutapi` returns exactly that line. | Delete the name from the sentence and the scan passes. Re-add it and the gate blocks again. |
+| H | `docs/transcript-stream.md:5` at the reviewed hash | The doc names a consumer in a tracked file. Line 5 lists what the bridge does not import, and the list holds Keel, a consumer name this repository scans for, and the editor. The consumer-name scan is case-insensitive over every tracked file and fails the gate on it, so no landing can carry this tree. My diff read missed the name and the scan caught it. I quote it here without the name, because the scan reads this file too. | `./tools/check.sh` on a clean install exits 1 at the consumer-names step listing that file. `git grep -i` for the name returns exactly that line. | Delete the name from the sentence and the scan passes. Re-add it and the gate blocks again. |
 
 The fix is to drop the name from the sentence. Keel alone carries the same meaning there, since the editor is the other named thing and the scan has no quarrel with it.
 
