@@ -26,12 +26,13 @@ const recorder = new AudioRecorder({ mode: "compressed" })
 const session = createRecordingSession({
   capture: captureFromRecorder(recorder),
   upload: {
-    send: (result, signal) =>
-      uploadBlob("/takes", result.blob, {
+    send: async (result, signal) => {
+      await uploadBlob("/takes", result.blob, {
         signal,
         filename: "take.webm",
         headers: { authorization: `Bearer ${token}` },
-      }),
+      })
+    },
   },
 })
 
@@ -59,4 +60,4 @@ The phase stays `idle` while `start` waits on the microphone. Another `start` in
 
 A stop that produces no `CaptureResult` (a PCM take with `retain: false` is the usual case) fails with `empty_take` and does not call upload. Stream those blocks with `onChunk` if there is no file to send. A failed upload keeps `session.result` so the caller can retry after `reset` without recording again only if they still hold the blob. `reset` clears it.
 
-`stop` rejects with `RecordingCancelled` when `cancel` or `reset` wins. Upload must honour the `AbortSignal`. A send that resolves after the abort is ignored, and the phase stays on the winner.
+`stop` publishes `uploading` before the recorder finishes, then publishes again once `result` holds the blob and before `send`. A listener can see `uploading` twice. The second call is the retained take, not a new phase. `stop` rejects with `RecordingCancelled` when `cancel` or `reset` wins. Upload must honour the `AbortSignal`. A send that resolves after the abort is ignored, and the phase stays on the winner.

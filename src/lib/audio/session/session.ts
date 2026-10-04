@@ -144,6 +144,12 @@ export function createRecordingSession(options: RecordingSessionOptions): Record
 		notify()
 	}
 
+	// settle writes phase, but a method has already narrowed the binding to the
+	// phase at entry. Reading it back here keeps the failure rethrow type-true.
+	function storedPhase(): RecordingPhase {
+		return phase
+	}
+
 	function stale(op: number): boolean {
 		return op !== generation
 	}
@@ -176,7 +182,7 @@ export function createRecordingSession(options: RecordingSessionOptions): Record
 				if (stale(op)) capture.reset()
 				throw cause instanceof RecordingCancelled ? cause : new RecordingCancelled()
 			}
-			if (phase === "failed") throw cause
+			if (storedPhase() === "failed") throw cause
 			error = cause
 			settle(nextRecordingPhase(phase, "fail"))
 			throw cause
@@ -252,7 +258,7 @@ export function createRecordingSession(options: RecordingSessionOptions): Record
 			if (stale(op) || abort.signal.aborted) {
 				throw cause instanceof RecordingCancelled ? cause : new RecordingCancelled()
 			}
-			if (phase === "failed") throw cause
+			if (storedPhase() === "failed") throw cause
 			error = cause
 			settle(nextRecordingPhase(phase, "fail"))
 			throw cause
