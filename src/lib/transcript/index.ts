@@ -19,6 +19,7 @@ export {
 	toEditedTime,
 	toSourceTime
 } from "./transcript.js"
+export type { CutSpan, TranscriptCut, TranscriptWord, WordRange } from "./transcript.js"
 export {
 	bucketAtTime,
 	bucketEndTime,
