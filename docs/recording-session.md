@@ -22,22 +22,24 @@ The phase table lives in `src/lib/audio/session/phase.ts`. A move the phase does
 import { AudioRecorder, captureFromRecorder, createRecordingSession } from "@nrynss/chaaya/audio"
 import { uploadBlob } from "@nrynss/chaaya/upload"
 
-const recorder = new AudioRecorder({ mode: "compressed" })
-const session = createRecordingSession({
-  capture: captureFromRecorder(recorder),
-  upload: {
-    send: async (result, signal) => {
-      await uploadBlob("/takes", result.blob, {
-        signal,
-        filename: "take.webm",
-        headers: { authorization: `Bearer ${token}` },
-      })
+async function recordTake(token: string) {
+  const recorder = new AudioRecorder({ mode: "compressed" })
+  const session = createRecordingSession({
+    capture: captureFromRecorder(recorder),
+    upload: {
+      send: async (result, signal) => {
+        await uploadBlob("/takes", result.blob, {
+          signal,
+          filename: "take.webm",
+          headers: { authorization: `Bearer ${token}` },
+        })
+      },
     },
-  },
-})
+  })
 
-await session.start()
-await session.stop()
+  await session.start()
+  await session.stop()
+}
 ```
 
 Call `start` from a user gesture. The recorder opens the microphone, and the browser grants capture from that gesture. The session does not.
