@@ -103,7 +103,9 @@ step "playwright"
 # adopt a server another engine is shutting down. WebKit cannot launch on every
 # workstation, so a bare launch failure re-runs that one project inside the
 # pinned image, where it builds and serves on its own. Chromium and Firefox
-# never fall back, and a genuine test failure never does either.
+# never fall back, and a genuine test failure never does either. The
+# fallback keeps the sink leg bare beside them, so the sink-loss
+# classification is measured wherever the gate runs.
 launches() {
 	node --input-type=module -e "import { webkit } from 'playwright-core'; const browser = await webkit.launch(); await browser.close();" 2>/dev/null
 }
@@ -111,8 +113,8 @@ if launches; then
 	npm run test:browser
 else
 	image="mcr.microsoft.com/playwright:v$(node -p "require('@playwright/test/package.json').version")-noble"
-	echo "webkit cannot launch on this host. chromium and firefox run bare, webkit runs inside $image."
-	npm run test:browser -- --project=chromium --project=firefox
+	echo "webkit cannot launch on this host. chromium, firefox, and the sink leg run bare, webkit runs inside $image."
+	npm run test:browser -- --project=chromium --project=firefox --project=firefox-sink
 	# The marker reader measures a take with ffprobe, and the pinned image
 	# carries no ffmpeg. The static pair the workflow installs comes from
 	# the same image here, extracted to the work directory, so the container
