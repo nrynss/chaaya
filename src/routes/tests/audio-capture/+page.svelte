@@ -70,7 +70,14 @@
 		startElapsed = 0
 		stopElapsed = 0
 		const owned = mode === "pcm" && page.url.searchParams.get("context") === "owned"
-		const inputReady = Promise.withResolvers<void>()
+		// The owned flow starts the signal only after the product's own path
+		// has carried three sounding chunks, so the pipeline is stably
+		// recording before the first marker can play. Chunks arrive only
+		// while the product records, so the wait tracks its readiness and no
+		// wall clock decides the order. One sounding chunk proves the path
+		// opened, three prove it holds.
+		let soundingChunks = 0
+		const inputSteady = Promise.withResolvers<void>()
 		// Share the source clock in PCM mode. Worklet setup finishes before the signal starts.
 		if (mode === "pcm") sharedContext = new AudioContext({ sampleRate: 48000 })
 		microphone?.restore()
@@ -90,7 +97,10 @@
 		const next = new AudioRecorder({
 			mode,
 			onChunk: owned ? (chunk) => {
-				if (chunk.samples.some((sample) => Math.abs(sample) > 0.001)) inputReady.resolve()
+				if (chunk.samples.some((sample) => Math.abs(sample) > 0.001)) {
+					soundingChunks += 1
+					if (soundingChunks === 3) inputSteady.resolve()
+				}
 			} : undefined,
 			context: mode === "pcm" && !owned
 				? sharedContext ?? undefined : undefined,
@@ -118,8 +128,10 @@
 		}
 		if (next.state === "recording") {
 			// The generated transport can initially deliver silence while its graph connects.
-			// Start markers only after the saved PCM path receives the pilot tone.
-			if (owned) await inputReady.promise
+			// Start markers only after the saved PCM path has carried three
+			// sounding chunks, so the bytes already stream when the first
+			// marker plays.
+			if (owned) await inputSteady.promise
 			microphone?.start()
 		}
 	}

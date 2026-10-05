@@ -41,6 +41,11 @@ const maxBytes = Number(argument("max-bytes", String(defaultMaxBytes)))
 /** How many uploads this fixture has opened, so an id is unique. */
 let opened = 0
 
+/** The chunk index a spec holds back, or null when nothing is held. A held
+ * write answers with a retryable shortage and stays out of the refusal log,
+ * because the hold is a deliberate control and not a protocol refusal. */
+let heldIndex = null
+
 /** Every upload this fixture knows, by id. */
 const uploads = new Map()
 
@@ -211,6 +216,11 @@ function store(request, response, upload, index, body) {
 		})
 		return
 	}
+	if (heldIndex === index) {
+		return json(response, {
+			error: { code: "unavailable", message: "The fixture holds this chunk for its spec." }
+		}, 503)
+	}
 	if (body.length === 0) {
 		refuse(response, 400, "invalid_request", "The chunk carries no bytes.", {
 			field: "body",
@@ -325,6 +335,22 @@ async function handle(request, response) {
 		return json(response, { reset: true })
 	}
 	if (path === "/log") return json(response, log)
+	if (path === "/__hold" && request.method === "POST") {
+		const body = await readBody(request)
+		let index = null
+		try {
+			const decoded = JSON.parse(body.toString("utf8"))
+			if (isCount(decoded.index)) index = decoded.index
+		} catch {
+			// A malformed hold body holds nothing back.
+		}
+		heldIndex = index
+		return json(response, { held: heldIndex })
+	}
+	if (path === "/__release" && request.method === "POST") {
+		heldIndex = null
+		return json(response, { held: null })
+	}
 	if (path === collectionPath && request.method === "POST") {
 		return open(request, response, await readBody(request))
 	}

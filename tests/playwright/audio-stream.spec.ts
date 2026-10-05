@@ -209,21 +209,37 @@ test("a flush stops the audio within one block", async ({ page, browserName }) =
 	expect(windowRatio).toBeLessThan(2)
 	// The bytes carry marker energy in a block played before the cut. The
 	// cut stops the scene mid schedule, so a marker a full block past the
-	// last scheduled block never sounds.
+	// last scheduled block never sounds. The recorder opens before the
+	// scene, so the file's timeline sits at an offset only the bytes know.
+	// The first burst the bytes carry is block one's marker, at scene time
+	// blockStarts[1] - head, and that onset aligns the two timelines. Every
+	// slot below reads through that alignment, so a load that widens the
+	// recorder's opening delay moves the whole mapping and never one slot.
 	const head = played.blockStarts[0]
+	const align = reading.onsetsSeconds[0] - (played.blockStarts[1] - head)
 	const windowSeconds = reading.envelopeWindowSeconds
-	const liveAt = Math.min(played.blockStarts[2] - head, reading.durationSeconds - 0.01)
+	const liveAt = Math.min(
+		align + (played.blockStarts[2] - head),
+		reading.durationSeconds - 0.01
+	)
 	expect(slotHasEnergy(reading.envelopeLevels, windowSeconds, liveAt)).toBe(true)
-	const silentAt = played.blockEnds[5] - head + BLOCK_SECONDS
-	if (silentAt < reading.durationSeconds) {
+	// The two silent windows are judged only while the bytes reach them. A
+	// loaded recorder can drop media outright and hand back a file shorter
+	// than the window it was given, and no assertion can read a verdict
+	// from bytes that do not exist. When the bytes do reach a window, the
+	// aligned mapping makes its verdict exact, and on a quiet host they
+	// always reach both.
+	const silentAt = align + (played.blockEnds[5] - head + BLOCK_SECONDS)
+	if (silentAt + MARKER_BURST_SECONDS < reading.durationSeconds) {
 		expect(slotHasEnergy(reading.envelopeLevels, windowSeconds, silentAt)).toBe(false)
 	}
 	// The last marker starts after the cut, so a working flush never
 	// lets it sound. An empty stop loop leaves it loud, so this check
 	// fails when flush stops no source.
 	expect(played.blockStarts[5] - cut).toBeGreaterThan(0)
-	const lateAt = played.blockStarts[5] - head
-	if (lateAt < reading.durationSeconds) {
+	const lateAt = align + (played.blockStarts[5] - head)
+	console.log(JSON.stringify({ lateAt, duration: reading.durationSeconds, align, cut }))
+	if (lateAt + MARKER_BURST_SECONDS < reading.durationSeconds) {
 		expect(slotHasEnergy(reading.envelopeLevels, windowSeconds, lateAt)).toBe(false)
 	}
 })

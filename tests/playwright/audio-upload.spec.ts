@@ -57,6 +57,12 @@ interface FixtureBytes {
 interface FixtureServer {
 	/** The collection path the harness uploads to. */
 	url: string
+	/** Hold one chunk index back, so its writes answer with a retryable
+	 * shortage until the release. The hold is the fixture's own control and
+	 * stays out of the refusal log. */
+	hold(index: number): Promise<void>
+	/** Release every held chunk, so its writes arrive again. */
+	release(): Promise<void>
 	/** Read the fixture's own record of the client. */
 	log(): Promise<FixtureLog>
 	/** Read what the fixture holds for one upload. */
@@ -86,6 +92,16 @@ async function startServer(): Promise<FixtureServer> {
 	const root = `http://127.0.0.1:${port}`
 	return {
 		url: `${root}/uploads`,
+		async hold(index: number) {
+			await fetch(`${root}/__hold`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ index })
+			})
+		},
+		async release() {
+			await fetch(`${root}/__release`, { method: "POST" })
+		},
 		async log() {
 			return (await (await fetch(`${root}/log`)).json()) as FixtureLog
 		},
@@ -222,26 +238,39 @@ test("a take streams in chunks through a brief network drop and arrives whole", 
 	}
 })
 
-test("a reloaded page finishes the upload it left behind", async ({ page, context }) => {
+test("a reloaded page finishes the upload it left behind", async ({ page }) => {
 	test.setTimeout(90_000)
 	const server = await startServer()
 	try {
+		/* The fixture holds chunk one back from the start, so the original
+		 * page can never send it, however the load schedules its retries.
+		 * The old shape cut the network and restored it before the reload,
+		 * and a loaded host let the original page's own retry flush the
+		 * held chunk out, which is correct client behaviour that broke the
+		 * record's bookkeeping. A hold the fixture owns removes the race:
+		 * the chunk arrives exactly once, from the page that finishes the
+		 * upload. */
+		await server.hold(1)
 		await open(page, server)
 		await page.getByTestId("record").click()
 		await expect(page.getByTestId("acknowledged")).not.toHaveText("0")
-		const id = await text(page, "id")
-
-		/* Hold one chunk in flight, so the reload lands with a chunk the
-		 * fixture never received. */
-		await context.setOffline(true)
 		await expect(page.getByTestId("retries")).not.toHaveText("0")
+		const id = await text(page, "id")
 		const held = await server.state(id)
 		const beforeReload = await server.log()
+
+		/* The held chunk never arrived, so the take cannot be done, and the
+		 * chunks before it did. */
+		expect(held.received).not.toContain(1)
 		expect(held.received.length).toBeGreaterThan(0)
 		expect(await text(page, "phase")).not.toBe("done")
-		await context.setOffline(false)
 
 		await page.reload()
+		/* The resumed page finds every stored chunk in its own session, so
+		 * it sends only what the fixture lacks, and chunk one is the first
+		 * of those. The release lands inside its retry budget, so the hold
+		 * orders the sends without deciding the outcome. */
+		await server.release()
 		await expect(page.getByTestId("phase")).toHaveText("done", { timeout: 60_000 })
 		expect(await text(page, "failure")).toBe("")
 		expect(await text(page, "resumed")).toBe("yes")
@@ -266,11 +295,12 @@ test("a reloaded page finishes the upload it left behind", async ({ page, contex
 		expect(afterReload.refusals).toEqual([])
 		expect(afterReload.completes).toBe(1)
 
-		/* The resumed page sent the chunks the fixture lacked and left the ones
-		 * it held alone. */
+		/* The chunks the fixture held before the reload left exactly the
+		 * writes they had, and the resumed page sent the held chunk once. */
 		for (const index of held.received) {
 			expect(afterReload.writes[String(index)]).toBe(beforeReload.writes[String(index)])
 		}
+		expect(afterReload.writes["1"]).toBe(1)
 		expect(assembled.received.length).toBeGreaterThan(held.received.length)
 		expect(assembled.size).toBeGreaterThan(held.stored_bytes)
 		/* Nothing appended a tail after the reload, so every stored chunk is a
