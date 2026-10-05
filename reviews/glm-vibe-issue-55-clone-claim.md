@@ -57,8 +57,8 @@ Run `37266329887` on head `8198229`: the gate job passed in 5m25s. CodeRabbit re
 
 The diff carries one hunk in the one file. I read the whole file at the reviewed hash. The
 verdict, the severity counts, finding 1, both OUT_OF_SCOPE rows, and the clone commands keep
-their exact bytes. `reviews/glm-vibe-issue-50-sink-fallback-round2.md` carries no copy of the
-refuted claim, so the narrowed passage stands alone in the tracked record.
+their exact bytes. The issue 50 round-two review file carries no copy of the refuted claim,
+so the narrowed passage stands alone in the tracked record.
 
 ## Findings
 
