@@ -60,7 +60,9 @@ locally, by the author or by me. The signal is carried by the CI run instead.** 
 below reproduce the author's picture. Every failure sits in the pre-existing load-marginal
 audio-timing family or in one test of the same shape inside the firefox-sink leg. None touches
 the diff, which is `tools/check.sh` only. The change adds no build or import surface, so the
-clean-checkout risk the clone rule guards is not reachable from this diff.
+build and import risks a fresh clone carries are not reachable from it. The diff reaches a
+fresh checkout another way: it decides which tests that checkout runs, and this change adds
+one. The record below measures that side.
 
 The author's nine logs exist at `/tmp/clone-run-1.log` through `/tmp/clone-run-9.log`. I read
 all nine. Corroboration, run by run:
