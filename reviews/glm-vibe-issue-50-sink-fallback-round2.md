@@ -48,7 +48,7 @@ family. Issue #53 owns the sink leg's truncated-transfer race. Both are open.
 
 I mutated `media.message.includes(SINK_FAULT)` at
 `src/lib/audio/playback/player.svelte.ts:302` to
-`media.message.includes("__reviewer_round2_never_matches__")`. Then:
+a never matching literal of my own naming, one whose text names this round. Then:
 
 ```
 npx playwright test --project=firefox-sink tests/playwright/audio-playback.spec.ts
