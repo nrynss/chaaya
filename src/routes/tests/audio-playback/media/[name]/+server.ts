@@ -50,6 +50,10 @@ const tone = buildWav(TONE_SECONDS, TONE_HZ)
 /** A ten second silent wav, the length a dead connection lies about. */
 const truncWav = buildWav(10, 0)
 
+/** Whether the dying transfer has already been served once. The shape is
+ * per process, and only the truncation check drives this name. */
+let truncAsked = false
+
 /** A ten second AAC in MP4 with two kilobytes of its middle flipped, bytes
  * that decode fine until the flip and then fail inside playback. The
  * encoder is one of the pair the gate requires, so a missing tool fails by
@@ -117,10 +121,21 @@ export const GET: RequestHandler = ({ params, request }) => {
 		})
 	}
 	if (params.name === "trunc.wav") {
-		/* The response declares the full length, sends one second, then dies
-		 * under its own declaration, the shape a dropped connection leaves
-		 * behind. The hole sits past the second the element already holds, so
-		 * the failure lands mid play and names the transfer. */
+		/* The first ask gets the dying transfer: the response declares the
+		 * full length, sends one second, then dies under its own
+		 * declaration, the shape a dropped connection leaves behind. The
+		 * hole sits past the second the element already holds, so the
+		 * failure lands mid play and names the transfer. Every later ask
+		 * answers with a hard network refusal, so however the engine
+		 * schedules its retries under load, the bytes it asks for never
+		 * arrive and the element's error keeps naming the transfer. */
+		if (truncAsked) {
+			return new Response("the transfer is gone", {
+				status: 502,
+				headers: { "content-type": "text/plain" }
+			})
+		}
+		truncAsked = true
 		const stream = new ReadableStream({
 			start(controller) {
 				controller.enqueue(truncWav.subarray(0, 44 + SAMPLE_RATE * 2))
