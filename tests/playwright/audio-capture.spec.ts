@@ -303,16 +303,16 @@ function checkMarkers(take: Take): void {
 test.describe("a granted microphone", () => {
 	for (const mode of ["compressed", "pcm"] as const) {
 		test(`a ${mode} take carries the generated markers`, async ({ page, browserName }) => {
-				// WebKitGTK's headless build defines no MediaRecorder, so the
-				// recorder cannot encode the compressed take there and it would
-				// fail there for an engine reason, not a capture defect. The PCM
-				// take, the refused grant and the stopped track run and pass on
-				// WebKit, so only this case skips there.
-				test.skip(browserName === "webkit" && mode === "compressed", "WebKitGTK headless defines no MediaRecorder, so the compressed take records nothing there.")
-				// Three full recording attempts have to fit, and a loaded host
-				// slows every one of them, so the budget is the long one the
-				// other recording checks carry.
-				test.setTimeout(90_000)
+			// WebKitGTK's headless build defines no MediaRecorder, so the
+			// recorder cannot encode the compressed take there and it would
+			// fail there for an engine reason, not a capture defect. The PCM
+			// take, the refused grant and the stopped track run and pass on
+			// WebKit, so only this case skips there.
+			test.skip(browserName === "webkit" && mode === "compressed", "WebKitGTK headless defines no MediaRecorder, so the compressed take records nothing there.")
+			// Three full recording attempts have to fit, and a loaded host
+			// slows every one of them, so the budget is the long one the
+			// other recording checks carry.
+			test.setTimeout(90_000)
 			/** The whole-take judgement, so a retry replays it unchanged. */
 			const judge = (take: Take): void => {
 				checkMarkers(take)
@@ -345,119 +345,126 @@ test.describe("a granted microphone", () => {
 		})
 	}
 
-test("compressed startup preserves the full signal after native readiness", async ({ page, browserName }) => {
-	test.skip(browserName === "webkit", "WebKitGTK headless defines no MediaRecorder.")
-	// Model asynchronous encoder setup. The source must wait for the native start event.
-	await page.addInitScript(() => {
-		const original = MediaRecorder.prototype.start
-		MediaRecorder.prototype.start = function (...args) {
-			const parts: Blob[] = []
-			;(window as Window & { __compressedParts?: Blob[] }).__compressedParts = parts
-			this.addEventListener("dataavailable", (event) => parts.push(event.data))
-			setTimeout(() => original.apply(this, args), 1100)
-		}
-	})
-	// A loaded host can make the encoder drop or crop one burst from an
-	// otherwise whole take, exactly as it can for the takes above. The
-	// record runs again from scratch on such a take, up to three attempts,
-	// and every attempt is judged by the same assertions, so retries never
-	// pass a defect.
-	async function judgeStartup(current: Take): Promise<void> {
-		const collectedEveryNativeByte = await page.evaluate(async () => {
-			const scope = window as Window & { __compressedParts?: Blob[], __capture?: { blob: Blob } }
-			const native = new Uint8Array(await new Blob(scope.__compressedParts).arrayBuffer())
-			const saved = new Uint8Array(await scope.__capture!.blob.arrayBuffer())
-			return native.length === saved.length && native.every((byte, index) => byte === saved[index])
+	test("compressed startup preserves the full signal after native readiness", async ({ page, browserName }) => {
+		test.skip(browserName === "webkit", "WebKitGTK headless defines no MediaRecorder.")
+		// Three full recording attempts have to fit, and a loaded host slows
+		// every one of them, so the budget is the long one the other recording
+		// checks carry.
+		test.setTimeout(90_000)
+		// Model asynchronous encoder setup. The source must wait for the native start event.
+		await page.addInitScript(() => {
+			const original = MediaRecorder.prototype.start
+			MediaRecorder.prototype.start = function (...args) {
+				const parts: Blob[] = []
+				;(window as Window & { __compressedParts?: Blob[] }).__compressedParts = parts
+				this.addEventListener("dataavailable", (event) => parts.push(event.data))
+				setTimeout(() => original.apply(this, args), 1100)
+			}
 		})
-		expect(collectedEveryNativeByte).toBe(true)
-		expect(mergedOnsets(current.reading.onsetsSeconds)).toHaveLength(14)
-		checkMarkers(current)
-		expect(Math.abs(current.reading.durationSeconds - (current.stopElapsed - current.startElapsed)))
-			.toBeLessThanOrEqual(current.blockSeconds)
-	}
-	let take = await record(page, "compressed", 0)
-	let judged = false
-	for (let attempt = 1; attempt < 3 && !judged; attempt += 1) {
-		try {
-			await judgeStartup(take)
-			judged = true
-		} catch {
-			take = await record(page, "compressed", attempt)
+		// A loaded host can make the encoder drop or crop one burst from an
+		// otherwise whole take, exactly as it can for the takes above. The
+		// record runs again from scratch on such a take, up to three attempts,
+		// and every attempt is judged by the same assertions, so retries never
+		// pass a defect.
+		async function judgeStartup(current: Take): Promise<void> {
+			const collectedEveryNativeByte = await page.evaluate(async () => {
+				const scope = window as Window & { __compressedParts?: Blob[], __capture?: { blob: Blob } }
+				const native = new Uint8Array(await new Blob(scope.__compressedParts).arrayBuffer())
+				const saved = new Uint8Array(await scope.__capture!.blob.arrayBuffer())
+				return native.length === saved.length && native.every((byte, index) => byte === saved[index])
+			})
+			expect(collectedEveryNativeByte).toBe(true)
+			expect(mergedOnsets(current.reading.onsetsSeconds)).toHaveLength(14)
+			checkMarkers(current)
+			expect(Math.abs(current.reading.durationSeconds - (current.stopElapsed - current.startElapsed)))
+				.toBeLessThanOrEqual(current.blockSeconds)
 		}
-	}
-	await judgeStartup(take)
-})
-
-test("PCM startup preserves the full signal on an owned context", async ({ page }) => {
-	// Delay node setup before capture connects. The source must wait for readiness.
-	await page.addInitScript(() => {
-		const original = AudioWorklet.prototype.addModule
-		AudioWorklet.prototype.addModule = async function (...args) {
-			await new Promise((resolve) => setTimeout(resolve, 300))
-			return original.apply(this, args)
+		let take = await record(page, "compressed", 0)
+		let judged = false
+		for (let attempt = 1; attempt < 3 && !judged; attempt += 1) {
+			try {
+				await judgeStartup(take)
+				judged = true
+			} catch {
+				take = await record(page, "compressed", attempt)
+			}
 		}
+		await judgeStartup(take)
 	})
-	// Hold the capture transport silent until readiness, independently of setup.
-	await page.addInitScript(() => {
-		const original = AudioContext.prototype.createMediaStreamSource
-		AudioContext.prototype.createMediaStreamSource = function (stream) {
-			const source = original.call(this, stream)
-			const gate = this.createGain()
-			gate.gain.setValueAtTime(0, this.currentTime)
-			gate.gain.setValueAtTime(1, this.currentTime + 0.25)
-			source.connect(gate)
-			return gate as unknown as MediaStreamAudioSourceNode
+
+	test("PCM startup preserves the full signal on an owned context", async ({ page }) => {
+		// Three full recording attempts have to fit, so the budget matches
+		// the compressed startup above.
+		test.setTimeout(90_000)
+		// Delay node setup before capture connects. The source must wait for readiness.
+		await page.addInitScript(() => {
+			const original = AudioWorklet.prototype.addModule
+			AudioWorklet.prototype.addModule = async function (...args) {
+				await new Promise((resolve) => setTimeout(resolve, 300))
+				return original.apply(this, args)
+			}
+		})
+		// Hold the capture transport silent until readiness, independently of setup.
+		await page.addInitScript(() => {
+			const original = AudioContext.prototype.createMediaStreamSource
+			AudioContext.prototype.createMediaStreamSource = function (stream) {
+				const source = original.call(this, stream)
+				const gate = this.createGain()
+				gate.gain.setValueAtTime(0, this.currentTime)
+				gate.gain.setValueAtTime(1, this.currentTime + 0.25)
+				source.connect(gate)
+				return gate as unknown as MediaStreamAudioSourceNode
+			}
+		})
+		// A loaded host can stall the capture path right after the signal
+		// starts, the way it can make an encoder drop a burst, and the take
+		// then opens part way into the signal. The record runs again from
+		// scratch on such a take, up to three attempts, and every attempt is
+		// judged by the same assertions, so retries never pass a defect.
+		async function judgeStartup(current: Take): Promise<void> {
+			expect(mergedOnsets(current.reading.onsetsSeconds)).toHaveLength(14)
+			expect(current.reading.sampleRate).toBe(current.reportedRate)
+			expect(current.mimeType).toBe("audio/wav")
+			await expect(page.getByTestId("owned-context-state")).toHaveText("closed")
 		}
+		let take = await record(page, "pcm", 0, true)
+		let judged = false
+		for (let attempt = 1; attempt < 3 && !judged; attempt += 1) {
+			try {
+				await judgeStartup(take)
+				judged = true
+			} catch {
+				take = await record(page, "pcm", attempt, true)
+			}
+		}
+		await judgeStartup(take)
 	})
-	// A loaded host can stall the capture path right after the signal
-	// starts, the way it can make an encoder drop a burst, and the take
-	// then opens part way into the signal. The record runs again from
-	// scratch on such a take, up to three attempts, and every attempt is
-	// judged by the same assertions, so retries never pass a defect.
-	async function judgeStartup(current: Take): Promise<void> {
-		expect(mergedOnsets(current.reading.onsetsSeconds)).toHaveLength(14)
-		expect(current.reading.sampleRate).toBe(current.reportedRate)
-		expect(current.mimeType).toBe("audio/wav")
-		await expect(page.getByTestId("owned-context-state")).toHaveText("closed")
-	}
-	let take = await record(page, "pcm", 0, true)
-	let judged = false
-	for (let attempt = 1; attempt < 3 && !judged; attempt += 1) {
-		try {
-			await judgeStartup(take)
-			judged = true
-		} catch {
-			take = await record(page, "pcm", attempt, true)
-		}
-	}
-	await judgeStartup(take)
-})
 
-test("a shared context records the generated markers and stays usable", async ({ page }) => {
-	await page.goto("/tests/audio-capture")
-	await page.getByTestId("start-shared").click()
-	await expect(page.getByTestId("state")).toHaveText("recording")
-	await expect(page.getByTestId("render-rate")).not.toHaveText("0")
-	const renderRate = await number(page, "render-rate")
-	expect(renderRate).toBeGreaterThan(0)
-	await page.getByTestId("stop").click()
-	await expect(page.getByTestId("state")).toHaveText("stopped", { timeout: 20_000 })
-	expect(await number(page, "size")).toBeGreaterThan(0)
-	// A recorder that closed the supplied context would leave it
-	// unusable, so scheduling a buffer on the same context proves the
-	// recorder left it open.
-	await page.getByTestId("probe-shared").click()
-	await expect(page.getByTestId("probe-tone")).toHaveText("sounded", { timeout: 10_000 })
-	await expect(page.getByTestId("probe-failure")).toHaveText("")
-})
+	test("a shared context records the generated markers and stays usable", async ({ page }) => {
+		await page.goto("/tests/audio-capture")
+		await page.getByTestId("start-shared").click()
+		await expect(page.getByTestId("state")).toHaveText("recording")
+		await expect(page.getByTestId("render-rate")).not.toHaveText("0")
+		const renderRate = await number(page, "render-rate")
+		expect(renderRate).toBeGreaterThan(0)
+		await page.getByTestId("stop").click()
+		await expect(page.getByTestId("state")).toHaveText("stopped", { timeout: 20_000 })
+		expect(await number(page, "size")).toBeGreaterThan(0)
+		// A recorder that closed the supplied context would leave it
+		// unusable, so scheduling a buffer on the same context proves the
+		// recorder left it open.
+		await page.getByTestId("probe-shared").click()
+		await expect(page.getByTestId("probe-tone")).toHaveText("sounded", { timeout: 10_000 })
+		await expect(page.getByTestId("probe-failure")).toHaveText("")
+	})
 
-test("the capture docs name the trio and pass the gates", async ({ page }) => {
-	await page.goto("/docs/audio-capture")
-	await expect(page.getByText("noise suppression and gain control")).toBeVisible()
-	await page.getByTestId("run-checks").click()
-	await expect(page.getByTestId("checks")).toHaveText("pass", { timeout: 30_000 })
-	await expect(page.getByTestId("check-failure")).toHaveText("")
-})
+	test("the capture docs name the trio and pass the gates", async ({ page }) => {
+		await page.goto("/docs/audio-capture")
+		await expect(page.getByText("noise suppression and gain control")).toBeVisible()
+		await page.getByTestId("run-checks").click()
+		await expect(page.getByTestId("checks")).toHaveText("pass", { timeout: 30_000 })
+		await expect(page.getByTestId("check-failure")).toHaveText("")
+	})
 })
 
 test.describe("a microphone that is not there", () => {
