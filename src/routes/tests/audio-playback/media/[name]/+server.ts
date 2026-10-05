@@ -50,9 +50,11 @@ const tone = buildWav(TONE_SECONDS, TONE_HZ)
 /** A ten second silent wav, the length a dead connection lies about. */
 const truncWav = buildWav(10, 0)
 
-/** Whether the dying transfer has already been served once. The shape is
- * per process, and only the truncation check drives this name. */
-let truncAsked = false
+/** The attempts whose dying transfer has already been served once, keyed by
+ * the attempt number the check puts in its query. The shape is per attempt,
+ * so a retried check opens with a fresh truncation, and only this check
+ * drives the name. */
+const truncAsked = new Set<number>()
 
 /** A ten second AAC in MP4 with two kilobytes of its middle flipped, bytes
  * that decode fine until the flip and then fail inside playback. The
@@ -121,21 +123,23 @@ export const GET: RequestHandler = ({ params, request }) => {
 		})
 	}
 	if (params.name === "trunc.wav") {
-		/* The first ask gets the dying transfer: the response declares the
-		 * full length, sends one second, then dies under its own
-		 * declaration, the shape a dropped connection leaves behind. The
-		 * hole sits past the second the element already holds, so the
+		/* The first ask of an attempt gets the dying transfer: the response
+		 * declares the full length, sends one second, then dies under its
+		 * own declaration, the shape a dropped connection leaves behind.
+		 * The hole sits past the second the element already holds, so the
 		 * failure lands mid play and names the transfer. Every later ask
-		 * answers with a hard network refusal, so however the engine
-		 * schedules its retries under load, the bytes it asks for never
-		 * arrive and the element's error keeps naming the transfer. */
-		if (truncAsked) {
+		 * within the attempt answers with a hard network refusal, so
+		 * however the engine schedules its retries under load, the bytes it
+		 * asks for never arrive and the element's error keeps naming the
+		 * transfer. */
+		const attempt = Number(new URL(request.url).searchParams.get("attempt") ?? "0")
+		if (truncAsked.has(attempt)) {
 			return new Response("the transfer is gone", {
 				status: 502,
 				headers: { "content-type": "text/plain" }
 			})
 		}
-		truncAsked = true
+		truncAsked.add(attempt)
 		const stream = new ReadableStream({
 			start(controller) {
 				controller.enqueue(truncWav.subarray(0, 44 + SAMPLE_RATE * 2))

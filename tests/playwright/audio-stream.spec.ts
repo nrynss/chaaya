@@ -223,6 +223,12 @@ test("a flush stops the audio within one block", async ({ page, browserName }) =
 		reading.durationSeconds - 0.01
 	)
 	expect(slotHasEnergy(reading.envelopeLevels, windowSeconds, liveAt)).toBe(true)
+	// The two silent windows are judged only while the bytes reach them. A
+	// loaded recorder can drop media outright and hand back a file shorter
+	// than the window it was given, and no assertion can read a verdict
+	// from bytes that do not exist. When the bytes do reach a window, the
+	// aligned mapping makes its verdict exact, and on a quiet host they
+	// always reach both.
 	const silentAt = align + (played.blockEnds[5] - head + BLOCK_SECONDS)
 	if (silentAt + MARKER_BURST_SECONDS < reading.durationSeconds) {
 		expect(slotHasEnergy(reading.envelopeLevels, windowSeconds, silentAt)).toBe(false)
@@ -232,6 +238,7 @@ test("a flush stops the audio within one block", async ({ page, browserName }) =
 	// fails when flush stops no source.
 	expect(played.blockStarts[5] - cut).toBeGreaterThan(0)
 	const lateAt = align + (played.blockStarts[5] - head)
+	console.log(JSON.stringify({ lateAt, duration: reading.durationSeconds, align, cut }))
 	if (lateAt + MARKER_BURST_SECONDS < reading.durationSeconds) {
 		expect(slotHasEnergy(reading.envelopeLevels, windowSeconds, lateAt)).toBe(false)
 	}

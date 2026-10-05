@@ -303,12 +303,16 @@ function checkMarkers(take: Take): void {
 test.describe("a granted microphone", () => {
 	for (const mode of ["compressed", "pcm"] as const) {
 		test(`a ${mode} take carries the generated markers`, async ({ page, browserName }) => {
-			// WebKitGTK's headless build defines no MediaRecorder, so the
-			// recorder cannot encode the compressed take there and it would
-			// fail there for an engine reason, not a capture defect. The PCM
-			// take, the refused grant and the stopped track run and pass on
-			// WebKit, so only this case skips there.
-			test.skip(browserName === "webkit" && mode === "compressed", "WebKitGTK headless defines no MediaRecorder, so the compressed take records nothing there.")
+				// WebKitGTK's headless build defines no MediaRecorder, so the
+				// recorder cannot encode the compressed take there and it would
+				// fail there for an engine reason, not a capture defect. The PCM
+				// take, the refused grant and the stopped track run and pass on
+				// WebKit, so only this case skips there.
+				test.skip(browserName === "webkit" && mode === "compressed", "WebKitGTK headless defines no MediaRecorder, so the compressed take records nothing there.")
+				// Three full recording attempts have to fit, and a loaded host
+				// slows every one of them, so the budget is the long one the
+				// other recording checks carry.
+				test.setTimeout(90_000)
 			/** The whole-take judgement, so a retry replays it unchanged. */
 			const judge = (take: Take): void => {
 				checkMarkers(take)
