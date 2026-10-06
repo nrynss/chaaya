@@ -4,9 +4,10 @@ import type { ReconnectOptions } from "../sse/reconnect.js"
 import type { NamedEvent } from "../sse/frame.js"
 
 /** Where one stream stands. Connecting covers the first attempt, live covers
- * an open stream, reconnecting covers a retry, failed covers a stream that
+ * an open stream, reconnecting covers a retry, paused covers a page that
+ * cannot hold a stream while hidden or offline, failed covers a stream that
  * gave up, and closed covers a watch that ended. */
-export type JobConnection = "connecting" | "live" | "reconnecting" | "failed" | "closed"
+export type JobConnection = "connecting" | "live" | "reconnecting" | "paused" | "failed" | "closed"
 
 /** What one named frame does to the published reading. */
 export type JobFrameAction =
@@ -59,6 +60,9 @@ export interface JobStreamOptions {
 	onReconnect?: (count: number) => void
 	/** The reconnect schedule. Omit for the shared default of 500 ms, 8000 ms, and 6 attempts. */
 	reconnect?: ReconnectOptions
+	/** Pause while the page is hidden or offline instead of spending
+	 * reconnect attempts it cannot use. Defaults to true. */
+	pauseWhenHidden?: boolean
 	/** Extra fetch fields. An adapter passes `headers` and `credentials` here
 	 * for auth and does not fork the loop. `accept` is always
 	 * `text/event-stream`. `signal` is ignored. The stream owns the abort. */

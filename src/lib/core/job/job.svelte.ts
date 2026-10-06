@@ -6,7 +6,7 @@ import type { EventFrame, NamedEvent } from "../sse/frame.js"
 import type { JobCatchUp, JobConnection, JobFrameAction, JobStreamOptions } from "./types.js"
 
 /** Copy defined fields onto the published reading. An omitted field stays. */
-function mergeProgress(base: JobProgress, reading: JobProgress): JobProgress {
+export function mergeProgress(base: JobProgress, reading: JobProgress): JobProgress {
 	const next: JobProgress = { ...base }
 	if (reading.id !== undefined) next.id = reading.id
 	if (reading.stage !== undefined) next.stage = reading.stage
@@ -65,6 +65,7 @@ export class JobStream {
 			url: options.url,
 			requestInit: options.requestInit,
 			reconnect: options.reconnect,
+			pauseWhenHidden: options.pauseWhenHidden,
 			onReconnect: options.onReconnect,
 			onFrame: (frame) => this.#accept(frame),
 			catchUp: () => this.#catchUp(),

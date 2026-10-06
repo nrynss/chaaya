@@ -174,6 +174,38 @@ stream.attach()
 
 `FrameBuffer` is only a list of frames captured before the page exists. The name is not a product topic.
 
+## Polling for progress
+
+A backend that serves a state read and no stream gets the same reading through `JobPoller` / `createJobPoller` from `@nrynss/chaaya/core`. The reading merges the same way a stream reading does, so a view cannot tell polling from streaming.
+
+```ts
+import { createJobPoller } from "@nrynss/chaaya/core"
+
+const poller = createJobPoller({
+  fetchState: async (signal) => {
+    const response = await fetch("/jobs/1", { signal })
+    if (!response.ok) throw new Error(`the poll answered ${response.status}`)
+    return (await response.json()) as { step?: string; done?: number; of?: number; finished?: boolean }
+  },
+  toProgress: (answer) => ({
+    stage: answer.step,
+    current: answer.done,
+    total: answer.of,
+    status: answer.finished ? "done" : "running"
+  }),
+  isTerminal: (reading) => reading.status === "done",
+  intervalMs: 1000,
+  maxIntervalMs: 8000,
+  errorBudget: 3,
+  timeoutMs: 300_000
+})
+poller.attach()
+```
+
+`fetchState` reads the work once and takes an abort signal. A rejection counts toward the error budget. `toProgress` maps the answer onto a reading. A throw counts like a failed read, so an unreadable answer is transient rather than terminal. `isTerminal` ends the watch on the mapped reading. The interval doubles while the reading stays unchanged, up to the ceiling, and resets on any change. A failed read keeps the interval and counts toward the budget, which tallies consecutive failures. One success clears it. Past the budget the watch fails with `poll_failed`. Past the timeout it fails with `poll_timeout`. An outside `AbortSignal` stops the watch, and `close()` does the same.
+
+The pause rule matches the stream loop through the same watcher. No request goes out while the page is hidden or offline, and the watch reads at once on return. Hidden time never counts toward the timeout. Pass `pauseWhenHidden: false` to keep polling while hidden.
+
 ## Where the code lives
 
 - Import the type: `import type { JobProgress } from "@nrynss/chaaya/core"`.

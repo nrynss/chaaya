@@ -21,10 +21,12 @@
 	<p data-testid="hydrated">{hydrated ? "ready" : ""}</p>
 	<p>
 		Chaaya covers named SSE over <code>fetch</code>, a job-shaped
-		<code>JobStream</code>, arbitrary <code>createEventStream</code>, chunked
+		<code>JobStream</code>, a polling <code>JobPoller</code> with the same
+		reading, arbitrary <code>createEventStream</code>, chunked
 		<code>Uploader</code>, and one-shot <code>uploadBlob</code>. It does not
 		cover WebSocket or native <code>EventSource</code>.
-		<code>Last-Event-ID</code> is sent on reconnect. A server may still
+		<code>Last-Event-ID</code> is sent on reconnect. A hidden or offline page
+		pauses instead of polling or reconnecting. A server may still
 		start from now. Errors are one typed <code>ApiError</code>. The
 		envelope parser is the adapter's. Framework scope is Svelte 5 only,
 		for now.
@@ -37,7 +39,7 @@
 	</p>
 	<p>
 		Not covered yet: timed clips against a media clock, timeline edit
-		handles, a shortcut registry, undo and redo, a polling follower, priced
+		handles, a shortcut registry, undo and redo, priced
 		actions, and resumable direct-to-storage multipart. Each is an open
 		issue.
 	</p>

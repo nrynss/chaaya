@@ -8,6 +8,8 @@ Named SSE over `fetch`. Core splits frames with `takeFrames`, parses them with `
 
 `JobStream` / `createJobStream` map that loop onto a job-shaped stream through a required `frameMap`. `createEventStream` maps the same loop onto arbitrary named events. Neither one builds an HTTP response. On the server, `createJobStreamResponse` on `@nrynss/chaaya/sveltekit` builds the `text/event-stream` response. See [job-stream-response.md](job-stream-response.md).
 
+While the page is hidden or offline the loop pauses instead of reconnecting. It aborts the open stream, waits as `paused` without spending an attempt, and connects at once on return with `Last-Event-ID` as usual. Pass `pauseWhenHidden: false` to keep retrying while hidden.
+
 ## Last-Event-ID
 
 The client sends `Last-Event-ID` on reconnect when the last accepted id is not 0. The first connect never sends it. A server may legitimately ignore the header and start from now. That is allowed. The client still sends it so a resume-capable server can pick up.
@@ -15,6 +17,10 @@ The client sends `Last-Event-ID` on reconnect when the last accepted id is not 0
 A kept event frame that carried an id line moves the cursor. An empty `id:` line, or `id: 0`, on a kept event resets it. A comment, including one with an `id:` line, does not move it. That comment rule is a deliberate deviation from WHATWG `EventSource`.
 
 `JobStream` does not drop a repeated id. `createEventStream` drops a positive id at or below its cursor. A backend whose ids restart without an empty `id:` (or `id: 0`) on a kept event loses those frames on the named-event path. Details live in [job-progress.md](job-progress.md).
+
+## Polling
+
+`JobPoller` / `createJobPoller` on `@nrynss/chaaya/core` publish the same `JobProgress` shape `JobStream` does, for a backend that serves a state read and no stream. The caller supplies the read, the map from answer to progress, and the `isTerminal` hook. The interval backs off while the reading stays unchanged and resets on any change. Consecutive failures count toward an error budget before the watch fails. An overall timeout may bound the watch. The pause rule matches the stream loop through the same watcher. No request goes out while hidden or offline, hidden time never counts toward the timeout, and the watch reads at once on return.
 
 ## Upload
 
@@ -70,7 +76,6 @@ These are in scope and tracked as open issues. Until each one lands, an app buil
 - Timeline geometry and keyboard-operable edit handles ([#40](https://github.com/nrynss/chaaya/issues/40))
 - A keyboard shortcut registry that a help view reads ([#41](https://github.com/nrynss/chaaya/issues/41))
 - An edit history with undo, redo, and commit reconciliation ([#42](https://github.com/nrynss/chaaya/issues/42))
-- A polling job follower that publishes `JobProgress` ([#43](https://github.com/nrynss/chaaya/issues/43))
 - A priced action that quotes, confirms, and runs once ([#44](https://github.com/nrynss/chaaya/issues/44))
 - Resumable direct-to-storage multipart upload ([#31](https://github.com/nrynss/chaaya/issues/31))
 

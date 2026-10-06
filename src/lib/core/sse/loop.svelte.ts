@@ -2,13 +2,15 @@ import { runInEffect } from "./effect.svelte.js"
 import { parseNamedFrame } from "./frame.js"
 import type { EventFrame, NamedEvent } from "./frame.js"
 import { takeFrames } from "./frame.js"
+import { isPaused, watchPause } from "./pause.js"
 import { reconnectDelay, reconnectSettings } from "./reconnect.js"
 import type { ReconnectOptions } from "./reconnect.js"
 
 /** Where one stream stands. Connecting covers the first attempt, live covers
- * an open stream, reconnecting covers a retry, failed covers a stream that
+ * an open stream, reconnecting covers a retry, paused covers a page that
+ * cannot hold a stream while hidden or offline, failed covers a stream that
  * gave up, and closed covers a watch that ended. */
-export type StreamConnection = "connecting" | "live" | "reconnecting" | "failed" | "closed"
+export type StreamConnection = "connecting" | "live" | "reconnecting" | "paused" | "failed" | "closed"
 
 /** What the caller does with one parsed frame.
  *
@@ -32,6 +34,11 @@ export interface FrameLoopOptions {
 	requestInit?: RequestInit
 	/** The reconnect schedule. Omit for the shared default. */
 	reconnect?: ReconnectOptions
+	/** Pause while the page is hidden or offline instead of spending
+	 * reconnect attempts it cannot use. The loop resumes at once when the
+	 * page returns. Defaults to true. Pass false when the page must keep
+	 * retrying while hidden. */
+	pauseWhenHidden?: boolean
 	/** One event frame (`kind: "event"`). Comment frames never arrive here.
 	 * They set `lastComment` and call `onComment`, and there is nothing to
 	 * return for them. A thrown error is a dropped frame, not a dropped stream. */
@@ -96,6 +103,11 @@ function fetchInit(options: FrameLoopOptions, signal: AbortSignal, lastEventId: 
  *
  * The transport is fetch, not `EventSource`, because fetch reports a refused
  * status and this loop bounds its own delay. There is no WebSocket path.
+ * A hidden or offline page cannot hold a stream, so the loop pauses instead
+ * of reconnecting. It aborts the open stream, drops any pending retry, and
+ * waits as `paused` without counting an attempt. The first visible or online
+ * event resets the attempt count and connects at once. Pass
+ * `pauseWhenHidden: false` to keep retrying while hidden.
  * Construction touches nothing, so importing this module on a server is safe.
  */
 export class FrameLoop {
@@ -113,6 +125,8 @@ export class FrameLoop {
 	#attempts = 0
 	#opened = false
 	#stopped = false
+	#paused = false
+	#unwatch: (() => void) | undefined = undefined
 
 	constructor(options: FrameLoopOptions) {
 		this.#options = options
@@ -131,7 +145,14 @@ export class FrameLoop {
 
 	/** Follow the stream. Call it once during component initialisation. A test passes its own cleanup runner. */
 	attach(registerCleanup: (task: () => () => void) => void = runInEffect): void {
-		void this.#connect()
+		if (this.#options.pauseWhenHidden !== false) {
+			this.#unwatch = watchPause(
+				() => this.#pause(),
+				() => this.#resume(),
+			)
+			if (isPaused()) this.#pause()
+		}
+		if (!this.#paused) void this.#connect()
 		registerCleanup(() => () => this.close())
 	}
 
@@ -143,6 +164,8 @@ export class FrameLoop {
 
 	#stop(state: StreamConnection): void {
 		this.#stopped = true
+		this.#unwatch?.()
+		this.#unwatch = undefined
 		if (this.#timer !== undefined) {
 			clearTimeout(this.#timer)
 			this.#timer = undefined
@@ -152,8 +175,37 @@ export class FrameLoop {
 		this.connection = state
 	}
 
+	/** Park the loop while the page cannot hold a stream. It aborts the open
+	 * stream and drops any pending retry without counting an attempt. A
+	 * repeat call changes nothing. */
+	#pause(): void {
+		if (this.#stopped || this.#paused) return
+		this.#paused = true
+		if (this.#timer !== undefined) {
+			clearTimeout(this.#timer)
+			this.#timer = undefined
+		}
+		this.#controller?.abort()
+		this.#controller = undefined
+		this.connection = "paused"
+	}
+
+	/** Connect at once after a pause. It resets the attempt count, so the
+	 * attempts spent before the pause do not shorten the fresh schedule. A
+	 * call while live changes nothing. */
+	#resume(): void {
+		if (this.#stopped || !this.#paused) return
+		this.#paused = false
+		this.#attempts = 0
+		void this.#connect()
+	}
+
 	#reconnect(): void {
 		if (this.#stopped) return
+		if (this.#paused || (this.#options.pauseWhenHidden !== false && isPaused())) {
+			this.#pause()
+			return
+		}
 		if (!this.#opened || this.#attempts >= this.#schedule.attempts) {
 			this.#stop("failed")
 			return
@@ -168,7 +220,7 @@ export class FrameLoop {
 	}
 
 	async #connect(): Promise<void> {
-		if (this.#stopped) return
+		if (this.#stopped || this.#paused) return
 		/** A server has no stream to open, so it runs no part of this. */
 		if (typeof window === "undefined") return
 		const controller = new AbortController()
