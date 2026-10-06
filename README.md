@@ -33,6 +33,8 @@ is not Keel does not import it. Nothing in this package names a consumer app.
 - **SvelteKit.** Form-action mappers for typed errors, and an event-stream
   response for `+server.ts`.
 - **Gates.** A contrast gate and an accessibility gate an app runs on itself.
+- **No widget.** Core imports no stylesheet and no visual component. ESLint
+  fails either import inside `src/lib/core`.
 
 Accessible primitives such as dialogs and tooltips come from
 [Bits UI](https://bits-ui.com), not from this package.
