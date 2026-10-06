@@ -229,9 +229,8 @@ test("a take streams in chunks through a brief network drop and arrives whole", 
 		expect(reading.count).toBe(markerOnsetsSeconds().length)
 		expect(reading.order).toBe("ascending")
 		for (const spacing of reading.spacingsSeconds) {
-			expect(Math.abs(spacing - MARKER_INTERVAL_SECONDS)).toBeLessThanOrEqual(
-				MARKER_TOLERANCE_SECONDS
-			)
+			const off = Number(Math.abs(spacing - MARKER_INTERVAL_SECONDS).toFixed(6))
+			expect(off).toBeLessThanOrEqual(MARKER_TOLERANCE_SECONDS)
 		}
 	} finally {
 		await server.stop()
