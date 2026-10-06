@@ -58,6 +58,14 @@ const scenarios = {
 				: [{ op: "frame", name: "event-progress.txt" }],
 		state: (calls) => (calls === 1 ? running("transcoding", 4) : running("uploading", 9))
 	},
+	"pause-replay": {
+		plan: (connection) =>
+			connection === 1
+				? [{ op: "frame", name: "event-progress.txt" }]
+				: [{ op: "frame", name: "event-progress.txt" }, { op: "frame", name: "event-done.txt" }],
+		state: (calls) =>
+			calls === 1 ? running("transcoding", 4) : { jobId, status: "done", stage: "encode", current: 12, total: 12 }
+	},
 	gate: {
 		stateNeedsOpen: true,
 		plan: [{ op: "frame", name: "event-progress.txt" }],
@@ -89,7 +97,8 @@ const log = {
 	pushed: 0,
 	aborted: false,
 	open: false,
-	errors: []
+	errors: [],
+	lastEventIds: []
 }
 
 /** The readers waiting for the client to close a stream. */
@@ -128,6 +137,7 @@ function json(response, body, status = 200) {
 /** Serve one event stream and play its scenario plan. */
 function events(request, response) {
 	log.connections += 1
+	log.lastEventIds.push(request.headers["last-event-id"] ?? null)
 	const connection = log.connections
 	const steps = typeof scenario.plan === "function" ? scenario.plan(connection) : scenario.plan
 	let closed = false
