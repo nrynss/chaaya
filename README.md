@@ -124,7 +124,8 @@ Published as `@nrynss/chaaya`.
   timelines, the waveform regions derived from the cuts, and the
   TranscriptFollower that binds the words to playback.
 - `@nrynss/chaaya/testing`: a contrast gate and an accessibility gate a
-  consumer points at its own stylesheet and container.
+  consumer points at its own stylesheet and container, plus protocol asserts
+  an adapter author points at its frames, errors, and readings.
 - `@nrynss/chaaya/keel`: the Keel adapter, checked against Keel `v0.4.0`.
   It holds the error envelope, job event parser, `keelFrameMap`, a
   pre-wired `JobStream` wrapping core with `keelFrameMap`, and the chunked
@@ -194,7 +195,7 @@ suggesting a look.
   binds the words to playback.
 - [transcript stream](/docs/transcript-stream): fold timed-word SSE frames into the transcript editor list.
 - [testing](/docs/testing): the contrast gate and the accessibility gate run
-  against the page itself.
+  against the page itself, and the protocol asserts run against sample frames.
 
 ## Migration from 0.2.4 to 0.3.0
 
