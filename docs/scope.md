@@ -73,7 +73,7 @@ One typed client failure: `ApiError`. Envelope parsing is the adapter's job thro
 
 ## Testing
 
-`@nrynss/chaaya/testing` holds a contrast gate and an accessibility gate. A consumer points them at its own stylesheet and container.
+`@nrynss/chaaya/testing` holds a contrast gate, an accessibility gate, and protocol asserts. A consumer points the gates at its own stylesheet and container. An adapter author points the asserts at its frames, errors, and readings.
 
 ## Framework
 

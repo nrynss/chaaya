@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, test, vi } from "vitest"
-import { FrameLoop } from "./loop.svelte"
+import { FrameLoop } from "./loop.svelte.js"
 
 function eventFrame(name: string, id: number): string {
 	return [`event: ${name}`, `id: ${id}`, `data: {}`, "", ""].join("\n")

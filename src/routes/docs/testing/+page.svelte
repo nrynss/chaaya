@@ -2,12 +2,13 @@
 	import { resolve } from "$app/paths";
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
-	import { a11yGate, contrastGate } from "$lib/testing/index.js";
+	import { a11yGate, assertErrorEnvelope, assertJobProgress, assertSseFrame, contrastGate } from "$lib/testing/index.js";
 
 	let hydrated = $state(false);
 	let phase = $state("idle");
 	let a11y = $state("");
 	let contrast = $state("");
+	let protocol = $state("");
 	let failure = $state("");
 
 	onMount(() => {
@@ -32,6 +33,7 @@
 		failure = "";
 		a11y = "";
 		contrast = "";
+		protocol = "";
 		try {
 			const container = document.querySelector<HTMLElement>("[data-testid='docs-testing']");
 			if (!container) throw new Error("the markup is missing");
@@ -39,6 +41,13 @@
 			a11y = "pass";
 			contrastGate(referenceCss, pairs);
 			contrast = "pass";
+			// The protocol asserts check adapter shapes, not this page. Fixed
+			// samples prove they run beside the gates a consumer points at
+			// its own markup.
+			assertSseFrame({ kind: "event", id: 1, name: "progress", data: "{}", idSet: true });
+			assertErrorEnvelope({ code: "failed", message: "the work stopped" });
+			assertJobProgress({ id: "job-1", stage: "encode", current: 1, total: 3, status: "running" });
+			protocol = "pass";
 			phase = "done";
 		} catch (error) {
 			failure = error instanceof Error ? error.message.split("\n")[0] : String(error);
@@ -59,6 +68,7 @@
 	<p data-testid="phase">{phase}</p>
 	<p data-testid="a11y">{a11y}</p>
 	<p data-testid="contrast">{contrast}</p>
+	<p data-testid="protocol">{protocol}</p>
 	<p data-testid="failure">{failure}</p>
 	<section aria-label="Sample">
 		<div data-testid="sample-text" style="background: var(--surface); color: var(--text);">sample text</div>

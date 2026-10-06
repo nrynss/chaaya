@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 import type { JobFrameAction, JobStreamOptions } from "./types"
 import type { NamedEvent } from "../sse/frame"
 import { createJobStream } from "./index"
-import { JobStream } from "./job.svelte"
+import { JobStream } from "./job.svelte.js"
 
 function frame(name: string, id: number, data: string): string {
 	return [`event: ${name}`, `id: ${id}`, `data: ${data}`, "", ""].join("\n")

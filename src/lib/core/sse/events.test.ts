@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, test, vi } from "vitest"
 import type { NamedEvent } from "./frame"
-import { FrameBuffer, createEventStream } from "./events.svelte"
-import { FrameLoop } from "./loop.svelte"
+import { FrameBuffer, createEventStream } from "./events.svelte.js"
+import { FrameLoop } from "./loop.svelte.js"
 
 afterEach(() => {
 	vi.unstubAllGlobals()

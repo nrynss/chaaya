@@ -13,3 +13,4 @@
 
 export { contrastGate, type ContrastPair } from "./contrast.js"
 export { a11yGate } from "./a11y.js"
+export { assertErrorEnvelope, assertJobProgress, assertSseFrame } from "./protocol.js"
