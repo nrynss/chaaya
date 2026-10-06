@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto"
 import type { RequestHandler } from "./$types"
-import { readPart } from "../storage.js"
+import { cleanScope, readPart } from "../storage.js"
 
 /** Close a session over the stored parts. Missing parts refuse with 409. */
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, url }) => {
+	const scope = cleanScope(url.searchParams.get("scope"))
 	let decoded: unknown
 	try {
 		decoded = await request.json()
@@ -22,7 +23,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	)
 	const chunks: Buffer[] = []
 	for (const part of ordered) {
-		const held = readPart(part.partNumber)
+		const held = readPart(scope, part.partNumber)
 		if (held === undefined) {
 			return new Response(JSON.stringify({ code: "incomplete", missing: [part.partNumber] }), {
 				status: 409,

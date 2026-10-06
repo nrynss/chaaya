@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto"
 import type { RequestHandler } from "./$types"
-import { partIndices, readPart } from "../storage.js"
+import { cleanScope, partIndices, readPart } from "../storage.js"
 
 /** Assemble stored parts in number order and report their digest. */
-export const GET: RequestHandler = async () => {
-	const indices = partIndices()
-	const chunks = indices.map((index: number) => readPart(index) ?? Buffer.alloc(0))
+export const GET: RequestHandler = async ({ url }) => {
+	const scope = cleanScope(url.searchParams.get("scope"))
+	const indices = partIndices(scope)
+	const chunks = indices.map((index: number) => readPart(scope, index) ?? Buffer.alloc(0))
 	const assembled = Buffer.concat(chunks)
 	return new Response(
 		JSON.stringify({

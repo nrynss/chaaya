@@ -1,10 +1,29 @@
 <script lang="ts">
+	import { page } from "$app/state";
 	import { onMount } from "svelte";
 	import {
 		uploadDirectBlob,
 		uploadDirectMultipart,
 		type DirectCompletedPart
 	} from "$lib/direct-upload/index.js";
+
+	/** Run token the spec passes in. It scopes the server store per test. */
+	const run = page.url.searchParams.get("run") ?? "default";
+
+	/** Part URL for one part number inside this run. */
+	function partUrl(partNumber: number): string {
+		return `/tests/direct-upload/parts/${encodeURIComponent(run)}/${partNumber}`;
+	}
+
+	/** Complete URL inside this run. */
+	function completeUrl(): string {
+		return `/tests/direct-upload/complete?scope=${encodeURIComponent(run)}`;
+	}
+
+	/** Bytes URL inside this run. */
+	function bytesUrl(): string {
+		return `/tests/direct-upload/bytes?scope=${encodeURIComponent(run)}`;
+	}
 
 	/** Total bytes the harness uploads. Four parts keep progress visible. */
 	const byteLength = 512_000;
@@ -72,9 +91,9 @@
 				blob,
 				{
 					create: async () => ({ uploadId: "harness" }),
-					partUrl: (_uploadId, partNumber) => `/tests/direct-upload/parts/${partNumber}`,
+					partUrl: (_uploadId, partNumber) => partUrl(partNumber),
 					complete: async (_uploadId, parts) => {
-						const response = await fetch("/tests/direct-upload/complete", {
+						const response = await fetch(completeUrl(), {
 							method: "POST",
 							headers: { "content-type": "application/json" },
 							body: JSON.stringify({ parts })
@@ -92,7 +111,7 @@
 				}
 			);
 			receipt = answer.sha256;
-			const reading = await (await fetch("/tests/direct-upload/bytes")).json();
+			const reading = await (await fetch(bytesUrl())).json();
 			assembled = (reading as { sha256: string }).sha256;
 			phase = "done";
 		} catch (error) {
@@ -120,7 +139,7 @@
 			for (const partNumber of [1, 2]) {
 				const start = (partNumber - 1) * partSize;
 				const slice = new Blob([bytes.slice(start, start + partSize)], { type: "video/mp4" });
-				const etag = await uploadDirectBlob(`/tests/direct-upload/parts/${partNumber}`, slice, {
+				const etag = await uploadDirectBlob(partUrl(partNumber), slice, {
 					onProgress: noteProgress
 				});
 				landed.push({ partNumber, etag });
@@ -148,9 +167,9 @@
 				blob,
 				{
 					create: async () => ({ uploadId: "harness" }),
-					partUrl: (_uploadId, partNumber) => `/tests/direct-upload/parts/${partNumber}`,
+					partUrl: (_uploadId, partNumber) => partUrl(partNumber),
 					complete: async (_uploadId, parts) => {
-						const response = await fetch("/tests/direct-upload/complete", {
+						const response = await fetch(completeUrl(), {
 							method: "POST",
 							headers: { "content-type": "application/json" },
 							body: JSON.stringify({ parts })
@@ -171,7 +190,7 @@
 				}
 			);
 			receipt = answer.sha256;
-			const reading = await (await fetch("/tests/direct-upload/bytes")).json();
+			const reading = await (await fetch(bytesUrl())).json();
 			assembled = (reading as { sha256: string }).sha256;
 			completed = [...completed].sort((left, right) => left.partNumber - right.partNumber);
 			void before;

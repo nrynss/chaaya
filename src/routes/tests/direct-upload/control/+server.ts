@@ -1,8 +1,8 @@
 import type { RequestHandler } from "./$types"
-import { setFailures } from "../storage.js"
+import { cleanScope, setFailures } from "../storage.js"
 
 /** Force the next PUTs to one part to answer 503. A spec scripts retries. */
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, url }) => {
 	let decoded: unknown
 	try {
 		decoded = await request.json()
@@ -18,7 +18,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			headers: { "content-type": "application/json" },
 		})
 	}
-	setFailures(index, times)
+	setFailures(cleanScope(url.searchParams.get("scope")), index, times)
 	return new Response(JSON.stringify({ held: index, times }), {
 		headers: { "content-type": "application/json" },
 	})

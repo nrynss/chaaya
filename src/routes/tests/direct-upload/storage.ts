@@ -1,57 +1,73 @@
-/** In memory bytes for the direct upload harness. One server process holds one map. */
-const parts = new Map<number, Buffer>()
-
-/** PUT attempts per part number, keyed by the number as a string. */
-const writes: Record<string, number> = {}
-
-/** Every PUT attempt per part number, including refused ones. */
-const attempts: Record<string, number> = {}
-
-/** Remaining forced failures per part number. */
-const failures = new Map<number, number>()
-
-export function storePart(index: number, bytes: Buffer): void {
-	parts.set(index, Buffer.from(bytes))
-	writes[String(index)] = (writes[String(index)] ?? 0) + 1
+/** One test's bytes, so parallel projects never share a part. */
+interface ScopeStore {
+	parts: Map<number, Buffer>
+	writes: Record<string, number>
+	attempts: Record<string, number>
+	failures: Map<number, number>
 }
 
-export function readPart(index: number): Buffer | undefined {
-	return parts.get(index)
+/** Every live scope, keyed by the run token a spec passes in. */
+const scopes = new Map<string, ScopeStore>()
+
+/** The store for one run token. A fresh token starts empty. */
+function scopeStore(scope: string): ScopeStore {
+	let store = scopes.get(scope)
+	if (store === undefined) {
+		store = { parts: new Map(), writes: {}, attempts: {}, failures: new Map() }
+		scopes.set(scope, store)
+	}
+	return store
 }
 
-export function partIndices(): number[] {
-	return [...parts.keys()].sort((left, right) => left - right)
+/** A usable scope name. Blanks fall back to the shared default. */
+export function cleanScope(scope: string | null): string {
+	if (scope === null || scope === "") return "default"
+	return scope
 }
 
-export function writeCounts(): Record<string, number> {
-	return { ...writes }
+export function storePart(scope: string, index: number, bytes: Buffer): void {
+	const store = scopeStore(scope)
+	store.parts.set(index, Buffer.from(bytes))
+	store.writes[String(index)] = (store.writes[String(index)] ?? 0) + 1
+}
+
+export function readPart(scope: string, index: number): Buffer | undefined {
+	return scopeStore(scope).parts.get(index)
+}
+
+export function partIndices(scope: string): number[] {
+	return [...scopeStore(scope).parts.keys()].sort((left, right) => left - right)
+}
+
+export function writeCounts(scope: string): Record<string, number> {
+	return { ...scopeStore(scope).writes }
 }
 
 /** Every PUT attempt per part number, refused ones included. */
-export function attemptCounts(): Record<string, number> {
-	return { ...attempts }
+export function attemptCounts(scope: string): Record<string, number> {
+	return { ...scopeStore(scope).attempts }
 }
 
 /** Record one PUT attempt before it succeeds or fails. */
-export function noteAttempt(index: number): void {
-	attempts[String(index)] = (attempts[String(index)] ?? 0) + 1
+export function noteAttempt(scope: string, index: number): void {
+	const store = scopeStore(scope)
+	store.attempts[String(index)] = (store.attempts[String(index)] ?? 0) + 1
 }
 
-export function consumeFailure(index: number): boolean {
-	const left = failures.get(index) ?? 0
+export function consumeFailure(scope: string, index: number): boolean {
+	const store = scopeStore(scope)
+	const left = store.failures.get(index) ?? 0
 	if (left <= 0) return false
-	failures.set(index, left - 1)
+	store.failures.set(index, left - 1)
 	return true
 }
 
-export function setFailures(index: number, times: number): void {
-	if (times <= 0) failures.delete(index)
-	else failures.set(index, times)
+export function setFailures(scope: string, index: number, times: number): void {
+	const store = scopeStore(scope)
+	if (times <= 0) store.failures.delete(index)
+	else store.failures.set(index, times)
 }
 
-export function clearAll(): void {
-	parts.clear()
-	failures.clear()
-	for (const key of Object.keys(writes)) delete writes[key]
-	for (const key of Object.keys(attempts)) delete attempts[key]
+export function clearScope(scope: string): void {
+	scopes.delete(scope)
 }
