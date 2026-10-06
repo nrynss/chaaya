@@ -139,7 +139,9 @@ test("a take that drops one marker reads as a gap where the marker stood", async
 		const fullAligned =
 			full.reading.onsetsSeconds[OMITTED_MARKER_INDEX + 1] -
 			full.reading.onsetsSeconds[0]
-		expect(Math.abs(gapAligned - fullAligned)).toBeLessThanOrEqual(MARKER_TOLERANCE_SECONDS)
+		expect(
+			Number(Math.abs(gapAligned - fullAligned).toFixed(6))
+		).toBeLessThanOrEqual(MARKER_TOLERANCE_SECONDS)
 	}
 
 	// A loaded host can make the encoder merge or drop one burst from
