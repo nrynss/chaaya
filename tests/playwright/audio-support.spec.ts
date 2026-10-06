@@ -118,7 +118,9 @@ test("a take that drops one marker reads as a gap where the marker stood", async
 		expect(gap.reading.count).toBe(full.reading.count - 1)
 
 		const wideIndex = gap.reading.spacingsSeconds.findIndex(
-			(spacing) => Math.abs(spacing - 2 * MARKER_INTERVAL_SECONDS) <= MARKER_TOLERANCE_SECONDS
+			(spacing) =>
+				Number(Math.abs(spacing - 2 * MARKER_INTERVAL_SECONDS).toFixed(6)) <=
+				MARKER_TOLERANCE_SECONDS
 		)
 		expect(wideIndex).toBe(OMITTED_MARKER_INDEX - 1)
 		const narrow = gap.reading.spacingsSeconds.filter(
