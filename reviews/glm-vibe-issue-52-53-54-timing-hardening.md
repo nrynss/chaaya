@@ -56,6 +56,14 @@ write count. The reload test's `refusals` assertion still guards the protocol.
 | M | `tests/playwright/audio-capture.spec.ts:392`, with the harness gate at `src/routes/tests/audio-capture/+page.svelte:79` | The owned context startup check still fails intermittently under load. This member belongs to the #52 family, and this change claims its fix. I measured two failures on this hash. In both failed runs the take's attached bytes carry all 14 markers, evenly spaced over a full length take. A re-read of the same bytes finds them. So the reading taken during the run lost markers the bytes themselves hold. The three sounding chunk gate bounds the capture's head, not this loss. The check carries no retry, unlike the three retry loops this change adds. | Failure one: `./tools/check.sh` lost it in the bare leg at load 10 to 14. Received length 10, array 0.525 to 1.425. Log at `/tmp/rev-r1-gate.log`. Failure two: `npx playwright test --project=firefox tests/playwright/audio-capture.spec.ts --grep "owned context" --repeat-each=15` lost 1 of 15 at load 13 to 16. Received length 13. Log at `/tmp/rev-owned-startup2.log`. Both failed takes open their signal about 0.425 seconds in. Re-reading failure two's attachment with the repository reader returns 14 onsets. Re-reading failure one's attachment through a byte equal decode of the same shape returns 14. | No edit reintroduces it, the handed hash carries it. Reverting the fix this change offers the member, `soundingChunks === 3` to `=== 1`, restores the recorded head loss shape and raises the rate. |
 | L | `tests/playwright/audio-capture.spec.ts:303` | The change indents the `a granted microphone` describe one tab deeper than main. Its sibling tests keep their old depth, so they now sit level with the describe itself, and the describe's closing bracket sits shallower than its open. The file misleads a reader about nesting. No behaviour change, and no gate step measures it. | `awk 'NR==303 \|\| NR==344 \|\| NR==423' tests/playwright/audio-capture.spec.ts \| cat -A` shows the open at one tab, the sibling at 344 at one tab, and the close at 423 at none. A child sits level with its parent and the close sits shallower than the open. | Dedent lines 303 and 342 one tab, which restores main, or indent the sibling test lines one tab. |
 
+## Postscript, added after the merge of this pull request
+
+The two findings above were recorded at the reviewed hash, before the
+remediation landed. Commit 07fd670 added the three attempt retry to
+both startup checks and restored the describe's depth, and the round
+two file verifies both fixes. The no retry claim in the M row describes
+the reviewed hash alone.
+
 ## Out of scope
 
 | Severity | Where | What | Pin | Owning path |

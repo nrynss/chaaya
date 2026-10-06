@@ -199,12 +199,14 @@ test("a connection that dies mid play is a network failure and stops the player"
 		"chromium re-requests a truncated transfer instead of raising an element error, so the failure class only exists on firefox"
 	)
 	await open(page)
-	// The attempt number rides in the query, so the route serves the dying
-	// transfer fresh to every attempt and the shape lands mid play each
-	// time.
+	// The repeat and attempt numbers ride in the query, so the route serves
+	// the dying transfer fresh to every attempt of every repeat and the
+	// shape lands mid play each time.
 	await page
 		.getByTestId("source")
-		.fill(`/tests/audio-playback/media/trunc.wav?attempt=${testInfo.retry}`)
+		.fill(
+			`/tests/audio-playback/media/trunc.wav?repeat=${testInfo.repeatEachIndex}&attempt=${testInfo.retry}`
+		)
 	await page.getByTestId("play").click()
 	await expect(page.getByTestId("failure")).toHaveText("network", { timeout: 15_000 })
 	await expect(page.getByTestId("playing")).toHaveText("false")

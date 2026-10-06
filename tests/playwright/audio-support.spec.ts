@@ -69,9 +69,8 @@ test("a generated take carries its markers in order and at the fixed spacing", a
 		expect(recorded.reading.order).toBe("ascending")
 		expect(recorded.reading.spacingsSeconds).toHaveLength(recorded.reading.count - 1)
 		for (const spacing of recorded.reading.spacingsSeconds) {
-			expect(Math.abs(spacing - MARKER_INTERVAL_SECONDS)).toBeLessThanOrEqual(
-				MARKER_TOLERANCE_SECONDS
-			)
+			const off = Number(Math.abs(spacing - MARKER_INTERVAL_SECONDS).toFixed(6))
+			expect(off).toBeLessThanOrEqual(MARKER_TOLERANCE_SECONDS)
 		}
 	}
 
@@ -119,11 +118,15 @@ test("a take that drops one marker reads as a gap where the marker stood", async
 		expect(gap.reading.count).toBe(full.reading.count - 1)
 
 		const wideIndex = gap.reading.spacingsSeconds.findIndex(
-			(spacing) => Math.abs(spacing - 2 * MARKER_INTERVAL_SECONDS) <= MARKER_TOLERANCE_SECONDS
+			(spacing) =>
+				Number(Math.abs(spacing - 2 * MARKER_INTERVAL_SECONDS).toFixed(6)) <=
+				MARKER_TOLERANCE_SECONDS
 		)
 		expect(wideIndex).toBe(OMITTED_MARKER_INDEX - 1)
 		const narrow = gap.reading.spacingsSeconds.filter(
-			(spacing) => Math.abs(spacing - MARKER_INTERVAL_SECONDS) <= MARKER_TOLERANCE_SECONDS
+			(spacing) =>
+				Number(Math.abs(spacing - MARKER_INTERVAL_SECONDS).toFixed(6)) <=
+				MARKER_TOLERANCE_SECONDS
 		)
 		expect(narrow).toHaveLength(gap.reading.spacingsSeconds.length - 1)
 		/* Compare the marker after the gap with that marker in the full take.
@@ -136,7 +139,9 @@ test("a take that drops one marker reads as a gap where the marker stood", async
 		const fullAligned =
 			full.reading.onsetsSeconds[OMITTED_MARKER_INDEX + 1] -
 			full.reading.onsetsSeconds[0]
-		expect(Math.abs(gapAligned - fullAligned)).toBeLessThanOrEqual(MARKER_TOLERANCE_SECONDS)
+		expect(
+			Number(Math.abs(gapAligned - fullAligned).toFixed(6))
+		).toBeLessThanOrEqual(MARKER_TOLERANCE_SECONDS)
 	}
 
 	// A loaded host can make the encoder merge or drop one burst from
