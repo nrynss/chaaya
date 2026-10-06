@@ -24,12 +24,11 @@ A kept event frame that carried an id line moves the cursor. An empty `id:` line
 
 ## Upload
 
-Two HTTP shapes, neither one a storage SDK:
+Three HTTP shapes, neither one a storage SDK:
 
 - Chunked and resumable: `Uploader` on `@nrynss/chaaya/core`. An adapter implements `start` / `append` / `finish`. Keel's chunked protocol is one implementation.
 - One-shot: `uploadBlob` and `uploadBlobWithProgress` on `@nrynss/chaaya/upload`. The whole body goes in one request. They cannot resume. A short file, or a presigned PUT, belongs here.
-
-A resumable multipart upload straight to object storage is not covered. It is listed under "Not covered yet" below.
+- Direct multipart: `uploadDirectBlob` and `uploadDirectMultipart` on `@nrynss/chaaya/direct-upload`. Parts travel as raw bodies straight to caller supplied URLs, with socket progress and per part retry. A large file on foreign URLs belongs here. See [upload.md](upload.md).
 
 ## Errors and auth
 
@@ -88,7 +87,6 @@ These are in scope and tracked as open issues. Until each one lands, an app buil
 - Timeline geometry and keyboard-operable edit handles ([#40](https://github.com/nrynss/chaaya/issues/40))
 - A keyboard shortcut registry that a help view reads ([#41](https://github.com/nrynss/chaaya/issues/41))
 - An edit history with undo, redo, and commit reconciliation ([#42](https://github.com/nrynss/chaaya/issues/42))
-- Resumable direct-to-storage multipart upload ([#31](https://github.com/nrynss/chaaya/issues/31))
 
 ## Out of scope
 

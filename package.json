@@ -69,6 +69,11 @@
       "svelte": "./dist/upload/index.js",
       "default": "./dist/upload/index.js"
     },
+    "./direct-upload": {
+      "types": "./dist/direct-upload/index.d.ts",
+      "svelte": "./dist/direct-upload/index.js",
+      "default": "./dist/direct-upload/index.js"
+    },
     "./audio": {
       "types": "./dist/audio/index.d.ts",
       "svelte": "./dist/audio/index.js",

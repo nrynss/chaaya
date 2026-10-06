@@ -31,6 +31,14 @@
 		not fall back to fetch. Neither function is exported from <code>@nrynss/chaaya/core</code>.
 	</p>
 	<p>
+		<code>uploadDirectBlob</code> and <code>uploadDirectMultipart</code> on
+		<code>@nrynss/chaaya/direct-upload</code> send raw bodies straight to caller supplied URLs. A large
+		file on foreign URLs belongs there. Parts travel in number order, one at a time. Parts listed in
+		<code>completed</code> are skipped, so an interrupted session resumes. Each part retries busy
+		answers. Use chunked <code>Uploader</code> for app routes with an adapter, one-shot for one
+		request with no resume, and direct multipart for many part URLs.
+	</p>
+	<p>
 		<code>credentials</code> is one option. Fetch receives it as-is. XMLHttpRequest sets
 		<code>withCredentials</code> only for <code>"include"</code>, and that flag only affects cross-origin
 		requests. Same-origin XHR always sends cookies.

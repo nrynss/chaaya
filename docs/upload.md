@@ -2,7 +2,15 @@
 
 What this kit covers for upload, and what it does not, is [scope.md](scope.md).
 
-Two helpers, two jobs. Neither one names a backend.
+Three helpers, three jobs. Neither one names a backend.
+
+## Which upload to use
+
+A short file belongs on one-shot. A large file on app routes belongs on chunked `Uploader`. A large file on caller supplied URLs belongs on direct multipart. The table below states each pick once.
+
+- App routes with an adapter: `Uploader` on `@nrynss/chaaya/core`.
+- One request, no resume: `uploadBlob` or `uploadBlobWithProgress` on `@nrynss/chaaya/upload`.
+- Many part URLs, resumable: `uploadDirectBlob` or `uploadDirectMultipart` on `@nrynss/chaaya/direct-upload`.
 
 ## Chunked
 
@@ -26,7 +34,7 @@ Both read one `credentials` option. Fetch receives it as-is. XMLHttpRequest sets
 
 A refusal matches `api()`. Pass `parseError` to read a backend envelope. Without it, a non-2xx stays `http_error`.
 
-Prepare, refusal, and progress reporting are shared. A later direct-to-storage multipart helper should call those, not a second copy of the request.
+Prepare, refusal, and progress reporting are shared. Direct multipart calls those, not a second copy of the request.
 
 ### Presigned PUT
 
@@ -53,3 +61,29 @@ await uploadBlobWithProgress(signedUrl, blob, {
 ### Multipart
 
 The default posts a blob as `FormData` under the field `file`. `fields` adds text parts. A body that is already `FormData` is sent as given. Do not set `Content-Type` yourself. The browser writes the boundary. Pass `size` when `maxBytes` must apply to that form.
+
+## Direct multipart
+
+Both functions live only on `@nrynss/chaaya/direct-upload`. They send raw bodies straight to caller supplied URLs. They name no route and no store.
+
+`uploadDirectBlob` PUTs one blob with socket progress. It resolves with the receipt header the receiver answered with. Use it for a single presigned URL.
+
+`uploadDirectMultipart` splits a blob into parts of `partSize` bytes and PUTs each part in number order, one at a time. The caller opens the session through `create`, names each part URL through `partUrl`, and closes through `complete`. Parts listed in `completed` are skipped, so an interrupted session resumes without resending stored bytes. Each part retries busy answers with backoff. `onProgress` reports stored bytes plus live socket bytes, so the bar stays monotonic.
+
+```ts
+import { uploadDirectMultipart } from "@nrynss/chaaya/direct-upload"
+
+await uploadDirectMultipart(blob, {
+  create: async () => ({ uploadId: await openSession() }),
+  partUrl: async (uploadId, partNumber) => await signPart(uploadId, partNumber),
+  complete: async (uploadId, parts) => await closeSession(uploadId, parts),
+}, {
+  partSize: 8_000_000,
+  credentials: "omit",
+  onProgress: (loaded, total) => {
+    // loaded grows until total across all parts
+  },
+})
+```
+
+A busy part (408, 429, or 5xx) retries. A refused part throws its `ApiError` and runs `abort` when one is supplied. `directPartRanges`, `remainingPartNumbers`, and `aggregateDirectProgress` expose the splitting, resume, and progress maths for tests.
