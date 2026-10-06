@@ -37,6 +37,9 @@
 			<li><a href={resolve("/docs/job")}>keel job</a></li>
 			<li><a href={resolve("/docs/recording-session")}>recording session</a></li>
 			<li><a href={resolve("/docs/audio-capture")}>audio capture</a></li>
+			<li><a href={resolve("/docs/still-capture")}>still capture</a></li>
+			<li><a href={resolve("/docs/share-intake")}>share intake</a></li>
+			<li><a href={resolve("/docs/priced-action")}>priced action</a></li>
 			<li><a href={resolve("/docs/audio-upload")}>keel upload</a></li>
 			<li><a href={resolve("/docs/audio-playback")}>audio playback</a></li>
 			<li><a href={resolve("/docs/video-playback")}>video playback</a></li>

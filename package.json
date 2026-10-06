@@ -89,6 +89,21 @@
       "svelte": "./dist/transcript/index.js",
       "default": "./dist/transcript/index.js"
     },
+    "./capture": {
+      "types": "./dist/capture/index.d.ts",
+      "svelte": "./dist/capture/index.js",
+      "default": "./dist/capture/index.js"
+    },
+    "./share": {
+      "types": "./dist/share/index.d.ts",
+      "svelte": "./dist/share/index.js",
+      "default": "./dist/share/index.js"
+    },
+    "./priced": {
+      "types": "./dist/priced/index.d.ts",
+      "svelte": "./dist/priced/index.js",
+      "default": "./dist/priced/index.js"
+    },
     "./keel": {
       "types": "./dist/adapters/keel/index.d.ts",
       "svelte": "./dist/adapters/keel/index.js",

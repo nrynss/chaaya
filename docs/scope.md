@@ -51,6 +51,18 @@ One typed client failure: `ApiError`. Envelope parsing is the adapter's job thro
 
 `@nrynss/chaaya/transcript` holds timed words. `TranscriptEditor` cuts and reverts ranges. A mapping converts between the source timeline and the edited one. Waveform regions come from the cuts. `TranscriptFollower` binds the words to playback. `createTranscriptBridge` folds a timed-word stream into the editor's input. See [transcript-stream.md](transcript-stream.md).
 
+## Still image capture
+
+`@nrynss/chaaya/capture` opens the camera through `CameraSession`, with permission phases, lens switching, and an unmirrored grab on a caller supplied video element. `prepareImage` applies EXIF orientation so the pixels stand upright, scales the long side to a cap, and re-encodes without EXIF. One capture seam covers a live session, a file picker, and a native backend. The prepared blob enters the one-shot upload path unchanged.
+
+## Share intake
+
+`@nrynss/chaaya/share` normalises a share target launch into one payload. `readSharedPayload` reads title, text, and url params, pulls the first link out of the text when url is missing, and trims tracking params through a caller filter. `consumeShareLaunch` reads the payload once on the share route and replaces history so a reload shares nothing. A native seam emits the same shape, so one handler serves both.
+
+## Priced action
+
+`@nrynss/chaaya/priced` quotes a price, then runs once on confirm. `PricedAction` moves through idle, quoting, quoted, running, done, and failed. A second confirm while a run is in flight does nothing. Every attempt sends the quote id, so the backend dedupes on it. A refusal that carries a new quote returns to quoted at the new price, recognised through the adapter error parser. Money passes as integer minor units with an opaque denomination label. Chaaya validates nothing, computes nothing, and formats nothing.
+
 ## Session guard
 
 `SessionGuard` on `@nrynss/chaaya/guard` closes one live session exactly once when its page goes away.
@@ -76,7 +88,6 @@ These are in scope and tracked as open issues. Until each one lands, an app buil
 - Timeline geometry and keyboard-operable edit handles ([#40](https://github.com/nrynss/chaaya/issues/40))
 - A keyboard shortcut registry that a help view reads ([#41](https://github.com/nrynss/chaaya/issues/41))
 - An edit history with undo, redo, and commit reconciliation ([#42](https://github.com/nrynss/chaaya/issues/42))
-- A priced action that quotes, confirms, and runs once ([#44](https://github.com/nrynss/chaaya/issues/44))
 - Resumable direct-to-storage multipart upload ([#31](https://github.com/nrynss/chaaya/issues/31))
 
 ## Out of scope
