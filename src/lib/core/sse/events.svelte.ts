@@ -28,6 +28,9 @@ export interface EventStreamOptions {
 	onReconnect?: (count: number) => void
 	/** The reconnect schedule. Omit for the shared default. */
 	reconnect?: ReconnectOptions
+	/** Pause while the page is hidden or offline instead of spending
+	 * reconnect attempts it cannot use. Defaults to true. */
+	pauseWhenHidden?: boolean
 }
 
 /** A live named-event stream. */
@@ -115,6 +118,7 @@ class NamedEventStream implements EventStream {
 			url,
 			requestInit: { ...given, headers },
 			reconnect: options.reconnect,
+			pauseWhenHidden: options.pauseWhenHidden,
 			onReconnect: options.onReconnect,
 			onComment: (comment) => {
 				options.onComment?.(comment)
