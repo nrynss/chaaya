@@ -48,7 +48,7 @@ One typed client failure: `ApiError`. Envelope parsing is the adapter's job thro
 
 ## Transcript
 
-`@nrynss/chaaya/transcript` holds timed words. `TranscriptEditor` cuts and reverts ranges. A mapping converts between the source timeline and the edited one. Waveform regions come from the cuts. `TranscriptFollower` binds the words to playback. `createTranscriptBridge` folds a timed-word stream into the editor's input. See [transcript-stream.md](transcript-stream.md).
+`@nrynss/chaaya/transcript` holds timed words. `TranscriptEditor` cuts and reverts ranges. A mapping converts between the source timeline and the edited one. Waveform regions come from the cuts. `TranscriptFollower` binds the words to playback through any `TranscriptClock`. A player driving a caller owned audio or video element meets that contract, and `mediaClock` adapts a bare element. The binding reads the element clock and never starts its own timer. `createTranscriptBridge` folds a timed-word stream into the editor's input. See [transcript-stream.md](transcript-stream.md).
 
 ## Timeline
 
@@ -86,7 +86,6 @@ Svelte 5 only, for now. The published modules use runes. There is no Svelte 4 bu
 
 These are in scope and tracked as open issues. Until each one lands, an app builds it itself.
 
-- Timed words bound to a video's clock ([#39](https://github.com/nrynss/chaaya/issues/39))
 - Timed audio clips scheduled against a media element's clock, for a browser preview of a mix ([#45](https://github.com/nrynss/chaaya/issues/45))
 - A keyboard shortcut registry that a help view reads ([#41](https://github.com/nrynss/chaaya/issues/41))
 - An edit history with undo, redo, and commit reconciliation ([#42](https://github.com/nrynss/chaaya/issues/42))

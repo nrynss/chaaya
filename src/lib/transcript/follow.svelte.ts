@@ -10,6 +10,21 @@ export interface TranscriptClock {
 	seek(seconds: number): void
 }
 
+/** Read a caller owned media element as a transcript clock. The binding
+ * reads the element clock on every access and never starts a wall clock
+ * timer. A player driving the same element meets the contract too, and its
+ * published position stays reactive while the element plays. */
+export function mediaClock(element: HTMLMediaElement): TranscriptClock {
+	return {
+		get currentTime(): number {
+			return element.currentTime
+		},
+		seek(seconds: number): void {
+			element.currentTime = seconds
+		}
+	}
+}
+
 /** Run one cleanup task in the calling component's effect context. */
 function runInEffect(task: () => () => void): void {
 	$effect(() => task())
