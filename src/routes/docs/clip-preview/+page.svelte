@@ -30,6 +30,9 @@
 		const next = new AudioContext()
 		await next.resume()
 		context = next
+		/* The markup carries no source, so the page hands the clip to the
+		 * element it owns, the way the video pages already do. */
+		video.src = "/tests/clip-preview/media/clip.webm"
 		const preview = new ClipScheduler({ context: next, element: video })
 		preview.setClips([
 			{
@@ -78,12 +81,11 @@
 
 <main data-testid="docs-clip-preview">
 	<h1>clip preview</h1>
-	<p>A mix preview schedules timed clips against a video clock through Web Audio. Each clip carries a key, a URL, an offset, an in point, a length, and a gain. Clips decode once per key into a bounded cache. Play and seek stop every source and plan the clips at the playhead, so an overlapping clip starts at the right in point and a later clip waits for its offset. A timeupdate past the drift tolerance reschedules the same way. No wall clock timer runs.</p>
+	<p>A mix preview schedules timed clips against a video clock through Web Audio. Each clip carries a key, a URL, an offset, an in point, a length, and a gain. Clips decode once per key into a bounded cache. Play and seek stop every source. They plan the clips at the playhead. An overlapping clip starts at the right in point, and a later clip waits for its offset. A timeupdate past the drift tolerance reschedules the same way. No wall clock timer runs.</p>
 	<p>A clip that fails to load reports through a callback and lands in the skipped set, and nothing replaces it. This preview is an approximation. The server mix measures the release.</p>
 	<video
 		data-testid="video"
 		bind:this={video}
-		src="/tests/clip-preview/media/clip.webm"
 		playsinline
 		preload="metadata"
 		width="320"

@@ -31,8 +31,8 @@
 	})
 
 	/** Run the preview inside the gesture and capture its mix. The
-	 * scheduler follows the video clock, and a processor node keeps every
-	 * sample it sounds, so the check reads the beep onset by sample count
+	 * scheduler follows the video clock. A processor node keeps every
+	 * sample it sounds. The check reads the beep onset by sample count
 	 * with no encoding or decoding between. */
 	async function run(): Promise<void> {
 		if (!video) return
@@ -79,6 +79,9 @@
 		await preview.prepare()
 		tap.connect(next.destination)
 		const element = video
+		/* The markup carries no source, so the run hands the clip to the
+		 * element it owns, the way the video harness already does. */
+		element.src = "/tests/clip-preview/media/clip.webm"
 		element.currentTime = 0
 		const stopped = new Promise<void>((resolve) => {
 			const onTime = (): void => {
@@ -132,7 +135,6 @@
 	<video
 		data-testid="video"
 		bind:this={video}
-		src="/tests/clip-preview/media/clip.webm"
 		playsinline
 		preload="metadata"
 		width="320"
