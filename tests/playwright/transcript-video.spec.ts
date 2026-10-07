@@ -68,9 +68,9 @@ test("keyboard alone reaches every word and the transport", async ({ page }) => 
 	await open(page)
 
 	// Tab from the address bar until the first word holds focus. Firefox
-	// stops on the video element itself on the way there, while chromium
-	// lands on the word at once, so the run tabs on until the word answers
-	// instead of counting stops. Every step below stays on the keyboard.
+	// stops on the video element itself on the way there. Chromium lands
+	// on the word at once. The run tabs on until the word answers instead
+	// of counting stops. Every step below stays on the keyboard.
 	for (let press = 0; press < 6; press += 1) {
 		await page.keyboard.press("Tab")
 		const there = await page.evaluate(

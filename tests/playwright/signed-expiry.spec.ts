@@ -23,9 +23,9 @@ async function readNumber(page: Page, id: string): Promise<number> {
 	return Number(await page.getByTestId(id).textContent())
 }
 
-/** Open the harness once its buttons answer, play the run's entry source,
- * and expire every signed URL the entry minted, all driven by the test
- * route and never by a sleep. The run id isolates the token, so parallel
+/** Open the harness once its buttons answer. Play the run's entry source
+ * and expire every signed URL the entry minted. The test route drives
+ * expiry, never a sleep. The run id isolates the token, so parallel
  * checks never share an expiry. */
 async function playThenExpire(page: Page, run: string): Promise<void> {
 	await page.goto("/tests/signed")
@@ -50,8 +50,8 @@ test("a seek past expiry recovers at the same position in every engine", async (
 	await page.getByTestId("seek-target").fill(String(SEEK_SECONDS))
 	await page.getByTestId("seek").click()
 
-	// The seek echoes its target at once, and an engine that buffered the
-	// whole file ahead never fetches again, so neither the position nor the
+	// The seek echoes its target at once. An engine that buffered the
+	// whole file ahead never fetches again. Neither the position nor the
 	// request log proves the resume on its own. Playing from the target
 	// does: the clock must advance past it with no failure. On chromium the
 	// seek refuses the expired redirect, recovery swaps in a fresh

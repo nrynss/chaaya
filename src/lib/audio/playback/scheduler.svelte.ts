@@ -28,8 +28,8 @@ const DEFAULT_CACHE_SIZE = 8
 /**
  * Timed audio clips previewed against a media element clock. Clips decode
  * once per key into a bounded cache. A play or seek stops every live
- * source and plans the clips that still have sound at the playhead, so an
- * overlapping clip starts now at the right in point and a later clip waits
+ * source. It plans the clips that still have sound at the playhead. An
+ * overlapping clip starts now at the right in point, and a later clip waits
  * for its offset. A timeupdate past the drift tolerance reschedules the
  * same way. A clip that fails to load reports through the skipped callback
  * and lands in the skipped set, and nothing replaces it.
