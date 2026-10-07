@@ -225,3 +225,12 @@ test("a resize clears the report when the clamp wins", () => {
 	expect(tail.segment).toEqual({ start: 1, end: 4 })
 	expect(tail.snappedTo).toBeNull()
 })
+
+test("a minimum longer than the room keeps the room inside bounds", () => {
+	const head = resizeSegment({ start: 2, end: 5 }, "start", 0, { bounds, minLength: 10 })
+	expect(head.segment).toEqual({ start: 0, end: 5 })
+	expect(head.snappedTo).toBeNull()
+	const tail = resizeSegment({ start: 2, end: 5 }, "end", 0, { bounds, minLength: 10 })
+	expect(tail.segment).toEqual({ start: 2, end: 10 })
+	expect(tail.snappedTo).toBeNull()
+})

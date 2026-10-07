@@ -33,7 +33,8 @@ export interface EditLimits {
 	readonly snapThreshold?: number
 	/** The shortest span a resize keeps. Negative values read as zero, and
 	 * the default is zero. A move keeps its length, so this only binds a
-	 * resize. */
+	 * resize. Bounds and neighbours bind first, so an overlong minimum
+	 * keeps the room. */
 	readonly minLength?: number
 }
 
@@ -168,9 +169,10 @@ export function moveSegment(
 /**
  * Resize one edge of a segment by a delta. Only the moving edge snaps. The
  * edge stays inside the room its neighbours leave, inside bounds, and at
- * least the minimum length from the far edge. A clamp that pulls the edge
- * off its target clears the report, so the report only names a target the
- * edge rests on.
+ * least the minimum length from the far edge. The room binds first, so a
+ * minimum longer than the room keeps the room instead of leaving bounds.
+ * A clamp that pulls the edge off its target clears the report, so the
+ * report only names a target the edge rests on.
  */
 export function resizeSegment(
 	segment: TimelineSegment,
@@ -199,7 +201,7 @@ export function resizeSegment(
 			placed += snap.shift
 			snappedTo = snap.target
 		}
-		const clamped = Math.min(Math.max(placed, low), valid.end - minimum)
+		const clamped = Math.min(Math.max(placed, low), Math.max(valid.end - minimum, low))
 		if (clamped !== placed) snappedTo = null
 		return { segment: { start: clamped, end: valid.end }, snappedTo }
 	}
@@ -211,7 +213,7 @@ export function resizeSegment(
 		placed += snap.shift
 		snappedTo = snap.target
 	}
-	const clamped = Math.max(Math.min(placed, high), valid.start + minimum)
+	const clamped = Math.max(Math.min(placed, high), Math.min(valid.start + minimum, high))
 	if (clamped !== placed) snappedTo = null
 	return { segment: { start: valid.start, end: clamped }, snappedTo }
 }
