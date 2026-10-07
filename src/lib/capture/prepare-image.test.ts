@@ -1,5 +1,11 @@
 import { expect, test } from "vitest"
-import { fitDimensions, hasExifSegment, readExifOrientation, readStoredDimensions } from "./prepare-image.js"
+import {
+	decodeEvidence,
+	fitDimensions,
+	hasExifSegment,
+	readExifOrientation,
+	readStoredDimensions
+} from "./prepare-image.js"
 
 /** Build minimal JPEG bytes with an EXIF orientation entry in an order. */
 function jpegWithOrientation(orientation: number, little: boolean): Uint8Array {
@@ -94,4 +100,26 @@ test("fitDimensions refuses a bad size", () => {
 	expect(() => fitDimensions(100, -2, 100)).toThrow(RangeError)
 	expect(() => fitDimensions(100, 100, 0)).toThrow(RangeError)
 	expect(() => fitDimensions(Number.NaN, 100)).toThrow(RangeError)
+})
+
+test("the size evidence trusts sizes except for a square frame", () => {
+	// Stored 8 by 4 landscape with orientation 6. A raw decode matches the
+	// stored size. A pre-rotated one matches the swapped size.
+	expect(decodeEvidence({ width: 8, height: 4 }, { width: 8, height: 4 }, 6)).toBe("raw")
+	expect(decodeEvidence({ width: 8, height: 4 }, { width: 4, height: 8 }, 6)).toBe("prerotated")
+	expect(decodeEvidence({ width: 8, height: 4 }, { width: 3, height: 3 }, 6)).toBe("none")
+})
+
+test("the size evidence calls a square frame ambiguous", () => {
+	// Stored 8 by 8 with orientation 6. Both a raw and a pre-rotated decode
+	// read 8 by 8, so the sizes alone must never claim either one.
+	expect(decodeEvidence({ width: 8, height: 8 }, { width: 8, height: 8 }, 6)).toBe("ambiguous")
+	expect(decodeEvidence({ width: 8, height: 8 }, { width: 8, height: 8 }, 5)).toBe("ambiguous")
+	expect(decodeEvidence({ width: 8, height: 8 }, { width: 4, height: 4 }, 6)).toBe("none")
+})
+
+test("the size evidence stays silent without a swapping orientation", () => {
+	expect(decodeEvidence({ width: 8, height: 4 }, { width: 8, height: 4 }, 1)).toBe("none")
+	expect(decodeEvidence({ width: 8, height: 8 }, { width: 8, height: 8 }, 3)).toBe("none")
+	expect(decodeEvidence(null, { width: 8, height: 8 }, 6)).toBe("none")
 })

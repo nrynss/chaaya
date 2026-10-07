@@ -218,14 +218,29 @@ function swapped(orientation: number): boolean {
 	return orientation >= 5
 }
 
-/** Whether the decoded bitmap already carries the rotation, so no transform may run again. */
-function alreadyUpright(
-	bitmap: ImageBitmap,
+/**
+ * What the size evidence says about a decoded bitmap for a swapping EXIF
+ * orientation. A bitmap matching the stored frame is raw, so the transform
+ * must run. A bitmap matching the stored frame swapped is pre-rotated, so
+ * the transform must not run again. A square stored frame matches both, so
+ * sizes alone cannot tell the two apart and the caller compares pixels. Any
+ * other case carries no size evidence, so the transform runs as before.
+ */
+export type DecodeEvidence = "raw" | "prerotated" | "ambiguous" | "none"
+
+/** Read the size evidence for a decoded bitmap against the stored frame. */
+export function decodeEvidence(
 	stored: { width: number; height: number } | null,
+	bitmap: { width: number; height: number },
 	orientation: number
-): boolean {
-	if (!swapped(orientation) || stored === null) return false
-	return bitmap.width === stored.height && bitmap.height === stored.width
+): DecodeEvidence {
+	if (!swapped(orientation) || stored === null) return "none"
+	const matchesStored = bitmap.width === stored.width && bitmap.height === stored.height
+	const matchesSwapped = bitmap.width === stored.height && bitmap.height === stored.width
+	if (stored.width === stored.height) return matchesStored ? "ambiguous" : "none"
+	if (matchesSwapped) return "prerotated"
+	if (matchesStored) return "raw"
+	return "none"
 }
 
 /** Paint the bitmap upright onto a context sized to the target. */
@@ -310,7 +325,42 @@ async function encodeOnce(
 
 /** Decode raw bytes with no orientation applied, so one transform owns the pixels. */
 async function decodeRaw(source: Blob): Promise<ImageBitmap> {
-	const options: ImageBitmapOptions = { imageOrientation: "none" }
+	return decodeWith(source, "none")
+}
+
+/** Decode bytes with the engine orientation applied, for the square comparison. */
+async function decodeOriented(source: Blob): Promise<ImageBitmap> {
+	return decodeWith(source, "from-image")
+}
+
+/**
+ * Whether two bitmaps render the same pixels. The comparison runs small, so
+ * a large square frame costs little. Equal orientation handling decodes the
+ * same bytes to the same pixels, while a raw and an upright render of split
+ * colours differ at any size. Matching content that is symmetric under the
+ * rotation prepares the same either way, so a match may skip the transform.
+ */
+async function samePixels(first: ImageBitmap, second: ImageBitmap): Promise<boolean> {
+	const width = Math.max(1, Math.min(first.width, second.width, 32))
+	const height = Math.max(1, Math.min(first.height, second.height, 32))
+	const surface = paintSurface(width, height)
+	surface.context.drawImage(first, 0, 0, width, height)
+	const one = surface.context.getImageData(0, 0, width, height).data
+	surface.context.drawImage(second, 0, 0, width, height)
+	const two = surface.context.getImageData(0, 0, width, height).data
+	if (one.length !== two.length) return false
+	for (let index = 0; index < one.length; index += 1) {
+		if (one[index] !== two[index]) return false
+	}
+	return true
+}
+
+/** Decode bytes with the named orientation handling. */
+async function decodeWith(
+	source: Blob,
+	imageOrientation: ImageBitmapOptions["imageOrientation"]
+): Promise<ImageBitmap> {
+	const options: ImageBitmapOptions = { imageOrientation }
 	const first = (globalThis as unknown as { createImageBitmap?: typeof createImageBitmap }).createImageBitmap
 	if (typeof first !== "undefined") return first(source, options)
 	const documentRef = (globalThis as unknown as { document?: Document }).document
@@ -348,12 +398,28 @@ export async function prepareImage(source: Blob, options: PrepareImageOptions = 
 		}
 		// An engine that ignores the raw request hands back rotated pixels.
 		// The frame header names the stored size, so the sizes tell the two
-		// apart and the rotation runs exactly once either way.
+		// apart and the rotation runs exactly once either way. A square frame
+		// matches both sizes, so a second decode with the engine orientation
+		// applied separates them by pixels instead of by request.
 		const stored = readStoredDimensions(bytes)
-		const rotated = alreadyUpright(bitmap, stored, orientation)
-		const effective = rotated ? 1 : orientation
-		const baseWidth = rotated || !swapped(orientation) ? bitmap.width : bitmap.height
-		const baseHeight = rotated || !swapped(orientation) ? bitmap.height : bitmap.width
+		const evidence = decodeEvidence(
+			stored,
+			{ width: bitmap.width, height: bitmap.height },
+			orientation
+		)
+		let effective = orientation
+		if (evidence === "prerotated") effective = 1
+		else if (evidence === "ambiguous") {
+			const reference = await decodeOriented(source)
+			try {
+				if (await samePixels(bitmap, reference)) effective = 1
+			} finally {
+				reference.close()
+			}
+		}
+		const skip = effective === 1 && swapped(orientation)
+		const baseWidth = skip || !swapped(orientation) ? bitmap.width : bitmap.height
+		const baseHeight = skip || !swapped(orientation) ? bitmap.height : bitmap.width
 		const target = fitDimensions(baseWidth, baseHeight, options.maxLongSide)
 		const mime =
 			options.mime ?? (source.type.startsWith("image/") && source.type !== "" ? source.type : "image/jpeg")

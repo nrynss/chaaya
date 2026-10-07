@@ -9,6 +9,8 @@
 
 	/** The EXIF fixture size before preparation. Stored landscape, upright portrait. */
 	const EXIF_FIXTURE = { width: 8, height: 4 };
+	/** The square EXIF fixture size. Stored square, upright square. */
+	const EXIF_SQUARE = { width: 8, height: 8 };
 
 	let session = $state<CameraSession | null>(null);
 	let element = $state<HTMLVideoElement | null>(null);
@@ -132,54 +134,119 @@
 		}
 	}
 
+	/** Build an EXIF orientation 6 JPEG with split colours, plus its raw canvas. */
+	async function buildExifFixture(
+		width: number,
+		height: number
+	): Promise<{ fixture: Blob; raw: HTMLCanvasElement }> {
+		const canvas = document.createElement("canvas");
+		canvas.width = width;
+		canvas.height = height;
+		const context = canvas.getContext("2d");
+		if (!context) throw new Error("No canvas context.");
+		context.fillStyle = "#ff0000";
+		context.fillRect(0, 0, width / 2, height);
+		context.fillStyle = "#0000ff";
+		context.fillRect(width / 2, 0, width - width / 2, height);
+		const raw = await new Promise<Blob | null>((resolve) => {
+			canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.92);
+		});
+		if (!raw) throw new Error("No JPEG.");
+		const bytes = new Uint8Array(await raw.arrayBuffer());
+		const exif = new Uint8Array([
+			0x45, 0x78, 0x69, 0x66, 0x00, 0x00, 0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00,
+			0x01, 0x00, 0x12, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00
+		]);
+		const head = new Uint8Array(4 + exif.length);
+		head[0] = 0xff;
+		head[1] = 0xe1;
+		head[2] = 0x00;
+		head[3] = 0x22;
+		head.set(exif, 4);
+		const tagged = new Uint8Array(head.length + bytes.length);
+		tagged.set(bytes.slice(0, 2), 0);
+		tagged.set(head, 2);
+		tagged.set(bytes.slice(2), 2 + head.length);
+		return { fixture: new Blob([tagged], { type: "image/jpeg" }), raw: canvas };
+	}
+
+	/** Note the fixture orientation, stored size, and raw decode size for the harness. */
+	async function diagnose(fixture: Blob): Promise<void> {
+		const { readExifOrientation, readStoredDimensions } = await import(
+			"$lib/capture/prepare-image.js"
+		);
+		const fixtureBytes = new Uint8Array(await fixture.arrayBuffer());
+		diagOrientation = readExifOrientation(fixtureBytes);
+		const storedDims = readStoredDimensions(fixtureBytes);
+		diagStored = storedDims ? `${storedDims.width}x${storedDims.height}` : "none";
+		const probe = await createImageBitmap(fixture, { imageOrientation: "none" });
+		diagBitmap = `${probe.width}x${probe.height}`;
+		probe.close();
+	}
+
 	/** Build an EXIF orientation 6 JPEG and prepare it. Stored landscape, upright portrait. */
 	async function prepareExif(): Promise<void> {
 		failure = "";
 		try {
-			const canvas = document.createElement("canvas");
-			canvas.width = EXIF_FIXTURE.width;
-			canvas.height = EXIF_FIXTURE.height;
-			const context = canvas.getContext("2d");
-			if (!context) throw new Error("No canvas context.");
-			context.fillStyle = "#ff0000";
-			context.fillRect(0, 0, 4, 4);
-			context.fillStyle = "#0000ff";
-			context.fillRect(4, 0, 4, 4);
-			const raw = await new Promise<Blob | null>((resolve) => {
-				canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.92);
-			});
-			if (!raw) throw new Error("No JPEG.");
-			const bytes = new Uint8Array(await raw.arrayBuffer());
-			const exif = new Uint8Array([
-				0x45, 0x78, 0x69, 0x66, 0x00, 0x00, 0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00,
-				0x01, 0x00, 0x12, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,
-				0x00, 0x00, 0x00, 0x00
-			]);
-			const head = new Uint8Array(4 + exif.length);
-			head[0] = 0xff;
-			head[1] = 0xe1;
-			head[2] = 0x00;
-			head[3] = 0x22;
-			head.set(exif, 4);
-			const tagged = new Uint8Array(head.length + bytes.length);
-			tagged.set(bytes.slice(0, 2), 0);
-			tagged.set(head, 2);
-			tagged.set(bytes.slice(2), 2 + head.length);
-			const fixture = new Blob([tagged], { type: "image/jpeg" });
+			const { fixture } = await buildExifFixture(EXIF_FIXTURE.width, EXIF_FIXTURE.height);
 			hook().lastCaptured = fixture;
-			const { readExifOrientation, readStoredDimensions } = await import(
-				"$lib/capture/prepare-image.js"
-			);
-			const fixtureBytes = new Uint8Array(await fixture.arrayBuffer());
-			diagOrientation = readExifOrientation(fixtureBytes);
-			const storedDims = readStoredDimensions(fixtureBytes);
-			diagStored = storedDims ? `${storedDims.width}x${storedDims.height}` : "none";
-			const probe = await createImageBitmap(fixture, { imageOrientation: "none" });
-			diagBitmap = `${probe.width}x${probe.height}`;
-			probe.close();
+			await diagnose(fixture);
 			report(await prepareImage(fixture, { maxLongSide: 64 }));
 		} catch (error) {
 			failure = error instanceof Error ? error.message : String(error);
+		}
+	}
+
+	/** Build a square EXIF orientation 6 JPEG and prepare it on this engine. */
+	async function prepareSquareExif(): Promise<void> {
+		failure = "";
+		try {
+			const { fixture } = await buildExifFixture(EXIF_SQUARE.width, EXIF_SQUARE.height);
+			hook().lastCaptured = fixture;
+			await diagnose(fixture);
+			report(await prepareImage(fixture, { maxLongSide: 64 }));
+		} catch (error) {
+			failure = error instanceof Error ? error.message : String(error);
+		}
+	}
+
+	/**
+	 * Prepare a square EXIF orientation 6 JPEG as a raw-honouring engine
+	 * would decode it. The scoped decode wrapper answers the raw canvas to
+	 * a raw request and an upright render otherwise, then steps aside. Every
+	 * gate engine pre-rotates instead, so this path pins the engine class
+	 * the probes cannot reach.
+	 */
+	async function prepareSquareExifRaw(): Promise<void> {
+		failure = "";
+		const real = window.createImageBitmap;
+		try {
+			const { fixture, raw } = await buildExifFixture(EXIF_SQUARE.width, EXIF_SQUARE.height);
+			const upright = document.createElement("canvas");
+			upright.width = raw.width;
+			upright.height = raw.height;
+			const uprightContext = upright.getContext("2d");
+			if (!uprightContext) throw new Error("No canvas context.");
+			uprightContext.translate(raw.width, 0);
+			uprightContext.rotate(Math.PI / 2);
+			uprightContext.drawImage(raw, 0, 0);
+			const wrapper = (async (
+				source: HTMLCanvasElement,
+				options?: { imageOrientation?: string }
+			): Promise<ImageBitmap> => {
+				void source;
+				if (options?.imageOrientation === "none") return real(raw);
+				return real(upright);
+			}) as typeof window.createImageBitmap;
+			window.createImageBitmap = wrapper as typeof window.createImageBitmap;
+			hook().lastCaptured = fixture;
+			await diagnose(fixture);
+			report(await prepareImage(fixture, { maxLongSide: 64 }));
+		} catch (error) {
+			failure = error instanceof Error ? error.message : String(error);
+		} finally {
+			window.createImageBitmap = real;
 		}
 	}
 
@@ -229,4 +296,8 @@
 	<button data-testid="stop" onclick={stop}>Stop</button>
 	<button data-testid="prepare" onclick={() => void prepare()}>Prepare</button>
 	<button data-testid="prepare-exif" onclick={() => void prepareExif()}>Prepare EXIF</button>
+	<button data-testid="prepare-square-exif" onclick={() => void prepareSquareExif()}>Prepare square EXIF</button>
+	<button data-testid="prepare-square-exif-raw" onclick={() => void prepareSquareExifRaw()}>
+		Prepare square EXIF raw
+	</button>
 </main>
