@@ -106,6 +106,46 @@ test("a shifted letter still hits its binding, and an extra modifier misses", ()
 	expect(save.calls()).toBe(1)
 })
 
+test("a shifted glyph fires with hardware Shift held, and without it", () => {
+	const registry = new ShortcutRegistry()
+	const help = countingBinding({ id: "help", key: "?" })
+	registry.register(help.binding)
+	const dispatcher = dispatcherFor(registry)
+	expect(dispatcher.handle(keyEvent({ key: "?", code: "Slash", shiftKey: true }))).toBe(true)
+	expect(dispatcher.handle(keyEvent({ key: "?", code: "Slash", shiftKey: false }))).toBe(true)
+	expect(help.calls()).toBe(2)
+})
+
+test("Shift plus a letter still misses a plain letter binding", () => {
+	const registry = new ShortcutRegistry()
+	const play = countingBinding({ id: "play", key: "k" })
+	registry.register(play.binding)
+	const dispatcher = dispatcherFor(registry)
+	expect(dispatcher.handle(keyEvent({ key: "K", code: "KeyK", shiftKey: true }))).toBe(false)
+	expect(dispatcher.handle(keyEvent({ key: "k", code: "KeyK" }))).toBe(true)
+	expect(play.calls()).toBe(1)
+})
+
+test("a glyph binding that names Shift requires it", () => {
+	const registry = new ShortcutRegistry()
+	const bang = countingBinding({ id: "bang", key: "!", modifiers: { shift: true } })
+	registry.register(bang.binding)
+	const dispatcher = dispatcherFor(registry)
+	expect(dispatcher.handle(keyEvent({ key: "!", code: "Digit1", shiftKey: true }))).toBe(true)
+	expect(dispatcher.handle(keyEvent({ key: "!", code: "Digit1", shiftKey: false }))).toBe(false)
+	expect(bang.calls()).toBe(1)
+})
+
+test("a named key keeps the exact Shift match", () => {
+	const registry = new ShortcutRegistry()
+	const confirm = countingBinding({ id: "confirm", key: "Enter" })
+	registry.register(confirm.binding)
+	const dispatcher = dispatcherFor(registry)
+	expect(dispatcher.handle(keyEvent({ key: "Enter", code: "Enter", shiftKey: true }))).toBe(false)
+	expect(dispatcher.handle(keyEvent({ key: "Enter", code: "Enter" }))).toBe(true)
+	expect(confirm.calls()).toBe(1)
+})
+
 test("a code fallback matches when the key differs by layout", () => {
 	const registry = new ShortcutRegistry()
 	const undo = countingBinding({ id: "undo", key: "z", code: "KeyZ", modifiers: { mod: true } })

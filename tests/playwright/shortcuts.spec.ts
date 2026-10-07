@@ -49,4 +49,26 @@ test.describe("shortcuts", () => {
 		await page.keyboard.press("ArrowRight")
 		await expect(page.getByTestId("demo-step")).toHaveText("1")
 	})
+
+	test("a hardware Shift plus slash fires the help binding", async ({ page }) => {
+		await page.goto("/docs/shortcuts")
+		await expect(page.getByTestId("hydrated")).toHaveText("ready")
+
+		// Real hardware always holds Shift to produce the glyph, which
+		// synthesis may omit, so the pin dispatches the event by hand.
+		await page.evaluate(() => {
+			document.dispatchEvent(
+				new KeyboardEvent("keydown", { key: "?", code: "Slash", shiftKey: true, bubbles: true })
+			)
+		})
+		await expect(page.getByTestId("demo-help")).toHaveText("1")
+
+		// The control without Shift fires too.
+		await page.evaluate(() => {
+			document.dispatchEvent(
+				new KeyboardEvent("keydown", { key: "?", code: "Slash", shiftKey: false, bubbles: true })
+			)
+		})
+		await expect(page.getByTestId("demo-help")).toHaveText("2")
+	})
 })

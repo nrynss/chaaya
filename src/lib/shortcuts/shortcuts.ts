@@ -24,7 +24,8 @@ export interface ShortcutBinding {
 	readonly key?: string
 	/** Matched against event.code when the key differs by layout. */
 	readonly code?: string
-	/** The modifiers the binding needs. An exact match wins. */
+	/** The modifiers the binding needs. An exact match wins, except that a
+	 * glyph binding forgives a held Shift it never named. */
 	readonly modifiers?: ShortcutModifiers
 	/** What the help view shows beside the keys. */
 	readonly description: string
@@ -93,7 +94,10 @@ function matchesKeys(binding: ShortcutBinding, event: KeyboardEvent): boolean {
 }
 
 /** Whether an event carries the modifiers a binding needs. The match is
- * exact, so an extra held modifier misses. Mod reads Meta on Apple platforms
+ * exact, except for one hardware truth: a glyph binding forgives a held
+ * Shift when it names none, because real hardware always holds Shift to
+ * produce the glyph. Letters and named keys keep the exact match, so Shift
+ * plus K never fires a plain K binding. Mod reads Meta on Apple platforms
  * and Control elsewhere. Off Apple, Mod and Control collapse into one flag,
  * so naming either one needs Control and nothing else. Control stays its own
  * flag on Apple platforms. */
@@ -107,8 +111,21 @@ function matchesModifiers(binding: ShortcutBinding, event: KeyboardEvent, apple:
 		if (event.metaKey) return false
 	}
 	if ((want.alt ?? false) !== event.altKey) return false
-	if ((want.shift ?? false) !== event.shiftKey) return false
+	if (!shiftForgiven(binding) && (want.shift ?? false) !== event.shiftKey) return false
 	return true
+}
+
+/**
+ * Whether a held Shift misses nothing. True only for a binding on one glyph
+ * with no case of its own, such as ?, that names no Shift itself. A letter
+ * changes case under Shift, and a named key keeps Shift as a real modifier,
+ * so both stay exact.
+ */
+function shiftForgiven(binding: ShortcutBinding): boolean {
+	const key = binding.key
+	if (key === undefined || key.length !== 1) return false
+	if (key.toLowerCase() !== key.toUpperCase()) return false
+	return (binding.modifiers?.shift ?? false) === false
 }
 
 /** The scope a binding lives in. */
