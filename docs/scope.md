@@ -42,7 +42,7 @@ One typed client failure: `ApiError`. Envelope parsing is the adapter's job thro
 
 - Microphone capture in compressed and PCM modes, started from a user gesture. Rate conversion and a WAV writer sit beside it.
 - A recording session that moves one take from idle through recording, pause, and upload to done. See [recording-session.md](recording-session.md).
-- Playback through one element, unlocked by the first gesture, with seeking and buffered spans. The element is any media element: a caller-owned `<video>` element, or an audio element the player creates.
+- Playback through one element, unlocked by the first gesture, with seeking and buffered spans. The element is any media element: a caller-owned `<video>` element, or an audio element the player creates. A caller supplied `resolveSource` recovers an expired signed URL: the player swaps in a fresh signature and restores the position and the play or pause state, inside a retry budget that reports through the existing failure shapes.
 - `PcmStreamPlayer`, which schedules arriving PCM blocks gaplessly and flushes cleanly.
 - `ClipScheduler`, which previews timed audio clips against a media element clock through Web Audio. Clips decode once per key into a bounded cache, failed loads land in a skipped set nothing replaces, and the preview stays an approximation beside the measured server mix.
 - Live levels, and waveform peaks computed directly or in a worker.
