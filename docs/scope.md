@@ -71,6 +71,10 @@ One typed client failure: `ApiError`. Envelope parsing is the adapter's job thro
 
 `SessionGuard` on `@nrynss/chaaya/guard` closes one live session exactly once when its page goes away.
 
+## Keyboard shortcuts
+
+`ShortcutRegistry` on `@nrynss/chaaya/shortcuts` holds bindings with a stable id, keys, a scope, a description, and a handler. The registry is the one source a help view reads. The dispatcher skips events from editable and interactive targets unless a binding opts in. `Mod` maps to Command on Apple platforms and Control elsewhere. A key matches by `event.key` with a `code` fallback for layout independence. Scopes nest, and a dialog scope shadows the page scope while it stays open. Registering an id twice in one scope throws at registration.
+
 ## Theme and tokens
 
 `@nrynss/chaaya/tokens` fixes the token role names and checks that a theme block defines every role. Each app supplies the values. `@nrynss/chaaya/theme` is the three-state mechanism (system, forced light, forced dark) with a head script that paints the stored mode before first paint.
@@ -87,7 +91,6 @@ Svelte 5 only, for now. The published modules use runes. There is no Svelte 4 bu
 
 These are in scope and tracked as open issues. Until each one lands, an app builds it itself.
 
-- A keyboard shortcut registry that a help view reads ([#41](https://github.com/nrynss/chaaya/issues/41))
 - An edit history with undo, redo, and commit reconciliation ([#42](https://github.com/nrynss/chaaya/issues/42))
 
 ## Out of scope
