@@ -29,6 +29,10 @@ export type {
 	PlaybackFailure,
 	PlayRefusal
 } from "./playback/player.svelte.js"
+export { placementAt, planPlacements } from "./playback/clips.js"
+export type { ClipPlacement, TimedClip } from "./playback/clips.js"
+export { ClipScheduler } from "./playback/scheduler.svelte.js"
+export type { ClipSchedulerOptions } from "./playback/scheduler.svelte.js"
 export { PcmStreamPlayer } from "./playback/stream.svelte.js"
 export type { ScheduledBlock, StreamPlayerOptions } from "./playback/stream.svelte.js"
 export { LiveLevel } from "./levels/live-level.svelte.js"
