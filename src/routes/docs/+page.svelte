@@ -49,6 +49,7 @@
 			<li><a href={resolve("/docs/session-guard")}>session guard</a></li>
 			<li><a href={resolve("/docs/transcript")}>transcript</a></li>
 			<li><a href={resolve("/docs/transcript-stream")}>transcript stream</a></li>
+			<li><a href={resolve("/docs/timeline")}>timeline</a></li>
 			<li><a href={resolve("/docs/testing")}>testing</a></li>
 		</ul>
 	</nav>

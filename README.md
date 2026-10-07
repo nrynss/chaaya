@@ -125,6 +125,9 @@ Published as `@nrynss/chaaya`.
   reverts ranges over them, the mapping between the source and edited
   timelines, the waveform regions derived from the cuts, and the
   TranscriptFollower that binds the words to playback.
+- `@nrynss/chaaya/timeline`: seconds to pixels under zoom and scroll with
+  ruler ticks, segment move and resize against snap targets, and the handle
+  that turns any element into a keyboard operable edge or body control.
 - `@nrynss/chaaya/testing`: a contrast gate and an accessibility gate a
   consumer points at its own stylesheet and container, plus protocol asserts
   an adapter author points at its frames, errors, and readings.
@@ -196,6 +199,8 @@ suggesting a look.
   reverts ranges, the regions drawn from the cuts, and the follower that
   binds the words to playback.
 - [transcript stream](/docs/transcript-stream): fold timed-word SSE frames into the transcript editor list.
+- [timeline](/docs/timeline): geometry under zoom and scroll, segment edits
+  against snap targets, and handles that move by pointer and by keyboard.
 - [testing](/docs/testing): the contrast gate and the accessibility gate run
   against the page itself, and the protocol asserts run against sample frames.
 
