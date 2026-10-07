@@ -2,14 +2,15 @@
 	import { onMount } from "svelte"
 	import { ClipScheduler } from "$lib/audio/playback/scheduler.svelte"
 
-	/* The marker clip starts one second into the video, and its beep starts
-	 * half a second into the clip. The beep lands at 1.5 video seconds, and
-	 * the check reads that onset from the captured samples. */
+	/* The marker clip starts one second into the video, and its two beeps
+	 * start half a second and one and a half seconds into the clip. The
+	 * check reads the gap between the two onsets from the captured
+	 * samples, so the absolute start latency cancels out. */
 	const CLIP_OFFSET = 1
-	const BEEP_IN_CLIP = 0.5
+	const BEEP_GAP = 1
 	/** The video second the capture stops at. */
 	const STOP_AT = 4
-	/** The sample level that names the beep onset. */
+	/** The sample level that names a beep onset. */
 	const ONSET_LEVEL = 0.05
 
 	let video: HTMLVideoElement | undefined
@@ -18,13 +19,12 @@
 	let hydrated = $state(false)
 	let status = $state("idle")
 	let skippedReason = $state("")
-	let beepSample = $state(-1)
+	let beepFirst = $state(-1)
+	let beepSecond = $state(-1)
 	let beepRate = $state(0)
 	let recordedSamples = $state(0)
 
-	const expectedBeep = $derived(
-		beepRate > 0 ? Math.round((CLIP_OFFSET + BEEP_IN_CLIP) * beepRate) : 0
-	)
+	const expectedGap = $derived(beepRate > 0 ? Math.round(BEEP_GAP * beepRate) : 0)
 
 	onMount(() => {
 		hydrated = true
@@ -37,7 +37,8 @@
 	async function run(): Promise<void> {
 		if (!video) return
 		status = "running"
-		beepSample = -1
+		beepFirst = -1
+		beepSecond = -1
 		const next = new AudioContext()
 		await next.resume()
 		context = next
@@ -106,14 +107,17 @@
 		}
 		beepRate = next.sampleRate
 		recordedSamples = channel.length
-		let onset = -1
-		for (let index = 0; index < channel.length; index += 1) {
-			if (Math.abs(channel[index]) > ONSET_LEVEL) {
-				onset = index
-				break
+		const onset = (from: number): number => {
+			for (let index = from; index < channel.length; index += 1) {
+				if (Math.abs(channel[index]) > ONSET_LEVEL) return index
 			}
+			return -1
 		}
-		beepSample = onset
+		beepFirst = onset(0)
+		/* The second search starts three quarters of a second past the
+		 * first onset, well clear of the first beep but short of the
+		 * second, so one beep never counts twice. */
+		beepSecond = beepFirst >= 0 ? onset(beepFirst + Math.round(0.75 * beepRate)) : -1
 		status = "done"
 	}
 
@@ -154,10 +158,12 @@
 		<dd data-testid="skipped">{scheduler ? scheduler.skipped.join(",") : ""}</dd>
 		<dt>Skipped reason</dt>
 		<dd data-testid="skipped-reason">{skippedReason}</dd>
-		<dt>Beep sample</dt>
-		<dd data-testid="beep-sample">{beepSample}</dd>
-		<dt>Expected beep sample</dt>
-		<dd data-testid="beep-expected">{expectedBeep}</dd>
+		<dt>First beep sample</dt>
+		<dd data-testid="beep-first">{beepFirst}</dd>
+		<dt>Second beep sample</dt>
+		<dd data-testid="beep-second">{beepSecond}</dd>
+		<dt>Expected gap samples</dt>
+		<dd data-testid="beep-gap-expected">{expectedGap}</dd>
 		<dt>Sample rate</dt>
 		<dd data-testid="sample-rate">{beepRate}</dd>
 		<dt>Recorded samples</dt>
