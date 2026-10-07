@@ -36,10 +36,10 @@
 		Audio capture, still image capture, share target intake, priced actions, playback through a
 		media element, audio or video, levels and peaks, the recording session, transcript editing,
 		timeline geometry and edit handles,
-		the session guard, theme tokens, and the contrast and accessibility gates are covered too.
+		the session guard, keyboard shortcuts, edit history with undo and redo, theme tokens, and the contrast and accessibility gates are covered too.
 	</p>
 	<p>
-		Not covered yet: timed clips against a media clock, a shortcut registry, and undo and redo. Each is an open issue.
+		Not covered yet: timed clips against a media clock. Each is an open issue.
 	</p>
 	<p>
 		The written contract is <code>docs/scope.md</code>. Job details are
