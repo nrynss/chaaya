@@ -49,6 +49,7 @@
 			<li><a href={resolve("/docs/audio-peaks")}>audio peaks</a></li>
 			<li><a href={resolve("/docs/session-guard")}>session guard</a></li>
 			<li><a href={resolve("/docs/shortcuts")}>shortcuts</a></li>
+			<li><a href={resolve("/docs/history")}>history</a></li>
 			<li><a href={resolve("/docs/transcript")}>transcript</a></li>
 			<li><a href={resolve("/docs/transcript-video")}>transcript video</a></li>
 			<li><a href={resolve("/docs/transcript-stream")}>transcript stream</a></li>

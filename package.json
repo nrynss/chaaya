@@ -119,6 +119,11 @@
       "svelte": "./dist/shortcuts/index.js",
       "default": "./dist/shortcuts/index.js"
     },
+    "./history": {
+      "types": "./dist/history/index.d.ts",
+      "svelte": "./dist/history/index.js",
+      "default": "./dist/history/index.js"
+    },
     "./keel": {
       "types": "./dist/adapters/keel/index.d.ts",
       "svelte": "./dist/adapters/keel/index.js",
