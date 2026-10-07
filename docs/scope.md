@@ -50,6 +50,10 @@ One typed client failure: `ApiError`. Envelope parsing is the adapter's job thro
 
 `@nrynss/chaaya/transcript` holds timed words. `TranscriptEditor` cuts and reverts ranges. A mapping converts between the source timeline and the edited one. Waveform regions come from the cuts. `TranscriptFollower` binds the words to playback. `createTranscriptBridge` folds a timed-word stream into the editor's input. See [transcript-stream.md](transcript-stream.md).
 
+## Timeline
+
+`@nrynss/chaaya/timeline` maps seconds to pixels under zoom and scroll, with ruler ticks for a target spacing. Edit maths moves and resizes a segment against snap targets, inside bounds, above a minimum length, and clear of neighbours. `timelineHandle` turns any element into an edge or body handle with pointer drag, Escape to cancel, and arrow keys with coarse and fine steps. It draws nothing.
+
 ## Still image capture
 
 `@nrynss/chaaya/capture` opens the camera through `CameraSession`, with permission phases, lens switching, and an unmirrored grab on a caller supplied video element. `prepareImage` applies EXIF orientation so the pixels stand upright, scales the long side to a cap, and re-encodes without EXIF. One capture seam covers a live session, a file picker, and a native backend. The prepared blob enters the one-shot upload path unchanged.
@@ -84,7 +88,6 @@ These are in scope and tracked as open issues. Until each one lands, an app buil
 
 - Timed words bound to a video's clock ([#39](https://github.com/nrynss/chaaya/issues/39))
 - Timed audio clips scheduled against a media element's clock, for a browser preview of a mix ([#45](https://github.com/nrynss/chaaya/issues/45))
-- Timeline geometry and keyboard-operable edit handles ([#40](https://github.com/nrynss/chaaya/issues/40))
 - A keyboard shortcut registry that a help view reads ([#41](https://github.com/nrynss/chaaya/issues/41))
 - An edit history with undo, redo, and commit reconciliation ([#42](https://github.com/nrynss/chaaya/issues/42))
 

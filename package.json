@@ -94,6 +94,11 @@
       "svelte": "./dist/transcript/index.js",
       "default": "./dist/transcript/index.js"
     },
+    "./timeline": {
+      "types": "./dist/timeline/index.d.ts",
+      "svelte": "./dist/timeline/index.js",
+      "default": "./dist/timeline/index.js"
+    },
     "./capture": {
       "types": "./dist/capture/index.d.ts",
       "svelte": "./dist/capture/index.js",
