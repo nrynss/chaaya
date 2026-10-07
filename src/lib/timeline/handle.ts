@@ -249,8 +249,11 @@ export function timelineHandle(options: TimelineHandleOptions): TimelineAttachme
 			refresh(pending)
 		}
 
+		/** Reread the live segment on focus, so the handle never announces a
+		 * time a sibling handle moved while this one sat idle. */
 		function onFocusIn(): void {
 			focusStart = options.read()
+			refresh(focusStart)
 		}
 
 		if (!element.hasAttribute("tabindex")) {

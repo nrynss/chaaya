@@ -122,6 +122,19 @@ test("focus order follows the handles and each names its time", async ({ page })
 	await expect(page.getByTestId("handle-move")).toBeFocused()
 })
 
+test("a focused handle announces the live time after a sibling edits", async ({ page }) => {
+	await open(page)
+	await page.getByTestId("handle-move").focus()
+	await page.keyboard.press("Shift+ArrowRight")
+	await expect(page.getByTestId("segment")).toHaveText("2.00 to 4.00")
+
+	await page.getByTestId("handle-start").focus()
+	await expect(page.getByTestId("handle-start")).toHaveAttribute(
+		"aria-valuetext",
+		"2.00 seconds"
+	)
+})
+
 test("the docs page passes the accessibility and contrast gates", async ({ page }) => {
 	await page.goto("/docs/timeline")
 	await expect(page.getByTestId("zoom-in")).toBeEnabled()
