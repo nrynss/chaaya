@@ -42,13 +42,14 @@ One typed client failure: `ApiError`. Envelope parsing is the adapter's job thro
 
 - Microphone capture in compressed and PCM modes, started from a user gesture. Rate conversion and a WAV writer sit beside it.
 - A recording session that moves one take from idle through recording, pause, and upload to done. See [recording-session.md](recording-session.md).
-- Playback through one element, unlocked by the first gesture, with seeking and buffered spans. The element is any media element: a caller-owned `<video>` element, or an audio element the player creates.
+- Playback through one element, unlocked by the first gesture, with seeking and buffered spans. The element is any media element: a caller-owned `<video>` element, or an audio element the player creates. A caller supplied `resolveSource` recovers an expired signed URL. The player swaps in a fresh signature and restores the position and the play or pause state. A retry budget stops refusal loops and reports through the existing failure shapes.
 - `PcmStreamPlayer`, which schedules arriving PCM blocks gaplessly and flushes cleanly.
+- `ClipScheduler`, which previews timed audio clips against a media element clock through Web Audio. Clips decode once per key into a bounded cache, failed loads land in a skipped set nothing replaces, and the preview stays an approximation beside the measured server mix.
 - Live levels, and waveform peaks computed directly or in a worker.
 
 ## Transcript
 
-`@nrynss/chaaya/transcript` holds timed words. `TranscriptEditor` cuts and reverts ranges. A mapping converts between the source timeline and the edited one. Waveform regions come from the cuts. `TranscriptFollower` binds the words to playback. `createTranscriptBridge` folds a timed-word stream into the editor's input. See [transcript-stream.md](transcript-stream.md).
+`@nrynss/chaaya/transcript` holds timed words. `TranscriptEditor` cuts and reverts ranges. A mapping converts between the source timeline and the edited one. Waveform regions come from the cuts. `TranscriptFollower` binds the words to playback through any `TranscriptClock`. A player driving a caller owned audio or video element meets that contract, and `mediaClock` adapts a bare element. The binding reads the element clock and never starts its own timer. `createTranscriptBridge` folds a timed-word stream into the editor's input. See [transcript-stream.md](transcript-stream.md).
 
 ## Timeline
 
@@ -86,8 +87,6 @@ Svelte 5 only, for now. The published modules use runes. There is no Svelte 4 bu
 
 These are in scope and tracked as open issues. Until each one lands, an app builds it itself.
 
-- Timed words bound to a video's clock ([#39](https://github.com/nrynss/chaaya/issues/39))
-- Timed audio clips scheduled against a media element's clock, for a browser preview of a mix ([#45](https://github.com/nrynss/chaaya/issues/45))
 - A keyboard shortcut registry that a help view reads ([#41](https://github.com/nrynss/chaaya/issues/41))
 - An edit history with undo, redo, and commit reconciliation ([#42](https://github.com/nrynss/chaaya/issues/42))
 

@@ -65,7 +65,15 @@ export interface AudioPlayerOptions {
 	 * sources to the player and not to the element. The element stays the
 	 * caller's to render and to size. */
 	readonly element: HTMLMediaElement
+	/** A fresh source for an expired one. The player calls it when a
+	 * network failure lands and budget stays, then swaps to the answer. */
+	readonly resolveSource?: () => string | Promise<string>
+	/** How many recoveries one source may spend. Defaults to 3. */
+	readonly resolveBudget?: number
 }
+
+/** How many recoveries one source may spend when the caller names none. */
+const DEFAULT_RESOLVE_BUDGET = 3
 
 /** One media element per app, unlocked by the first gesture and reused for
  * every clip. A browser blocks playback that no gesture started, so the first
@@ -88,6 +96,12 @@ export class AudioPlayer {
 	lastPlayError = $state<PlayRefusal | null>(null)
 	/** The source the consumer asked for. */
 	source = $state<string | null>(null)
+	/** How many source recoveries ran. A test reads it without listening. */
+	recoveries = $state(0)
+	/** A fresh source for an expired one. Set it to opt into recovery. */
+	resolveSource: (() => string | Promise<string>) | null
+	/** How many recoveries one source may spend. */
+	resolveBudget: number
 
 	#element: HTMLMediaElement | null = null
 	#supplied: HTMLMediaElement | null
@@ -95,11 +109,14 @@ export class AudioPlayer {
 	#unlocked = false
 	#unlocking: Promise<boolean> | null = null
 	#loaded: string | null = null
+	#resolutions = 0
 
 	/** Build a player. Pass an element the caller owns to drive it, or
 	 * nothing to let the player create its own audio element. */
 	constructor(options?: AudioPlayerOptions) {
 		this.#supplied = options?.element ?? null
+		this.resolveSource = options?.resolveSource ?? null
+		this.resolveBudget = options?.resolveBudget ?? DEFAULT_RESOLVE_BUDGET
 	}
 
 	/** The playback speed. Setting it drives the element when it exists. */
@@ -245,6 +262,7 @@ export class AudioPlayer {
 		this.duration = 0
 		this.buffered = []
 		this.error = null
+		this.#resolutions = 0
 	}
 
 	#readClock = (): void => {
@@ -304,15 +322,28 @@ export class AudioPlayer {
 			this.error = { failure: "output", message: media.message }
 			return
 		}
+		const resume = this.playing
 		this.playing = false
-		void this.#publish(media, source)
+		void this.#handle(media, source, resume)
 	}
 
 	/** Classify the failure, then publish it if the source still stands. A
+	 * network failure with a resolver and budget left recovers instead: an
+	 * expired signature refuses the fetch while the bytes stay sound, so a
+	 * fresh source heals it. A decode failure never recovers, because a new
+	 * signature cannot fix bytes the browser already refused to read. A
 	 * source swap during the check makes the result stale. */
-	async #publish(media: MediaError, source: string): Promise<void> {
+	async #handle(media: MediaError, source: string, resume: boolean): Promise<void> {
 		const failure = await this.#classify(media.code, source)
 		if (this.#loaded !== source) return
+		if (
+			failure === "network" &&
+			this.resolveSource &&
+			this.#resolutions < this.resolveBudget
+		) {
+			await this.#recover(source, resume)
+			return
+		}
 		this.error = { failure, message: media.message }
 	}
 
@@ -320,6 +351,53 @@ export class AudioPlayer {
 		if (code === 2) return "network"
 		if (code === 3) return "decode"
 		return (await this.#reached(source)) ? "decode" : "network"
+	}
+
+	/** Swap an expired source for a fresh one and restore the position and
+	 * the play or pause state the error interrupted. A resolver that keeps
+	 * refusing spends the budget, and the last refusal publishes through
+	 * the existing failure shape. A source swap meanwhile makes the answer
+	 * stale, so the run stops there. */
+	async #recover(source: string, resume: boolean): Promise<void> {
+		const element = this.#element
+		const resolve = this.resolveSource
+		if (!element || !resolve) return
+		this.#resolutions += 1
+		this.recoveries += 1
+		const position = element.currentTime
+		let fresh: string
+		try {
+			fresh = await resolve()
+		} catch (error) {
+			if (this.#loaded !== source) return
+			this.playing = false
+			this.error = { failure: "network", message: String(error) }
+			return
+		}
+		if (this.#loaded !== source) return
+		this.source = fresh
+		this.#loaded = fresh
+		this.error = null
+		/* Restore the position at once, and again once the fresh metadata
+		 * lands. An engine that drops a seek without metadata keeps the
+		 * second one, and one that honours the first repeats the same
+		 * value. */
+		const restore = (): void => {
+			element.currentTime = position
+			this.currentTime = element.currentTime
+		}
+		element.src = fresh
+		element.load()
+		restore()
+		element.addEventListener("loadedmetadata", restore, { once: true })
+		if (resume) {
+			try {
+				await element.play()
+				this.lastPlayError = null
+			} catch (error) {
+				this.lastPlayError = toRefusal(error)
+			}
+		}
 	}
 
 	/** A source error covers a file the browser never fetched and bytes it

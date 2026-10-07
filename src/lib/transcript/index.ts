@@ -6,7 +6,7 @@
  */
 
 export { TranscriptEditor, type Anchor, type RevertMiss } from "./editor.svelte.js"
-export { TranscriptFollower, type TranscriptClock } from "./follow.svelte.js"
+export { TranscriptFollower, mediaClock, type TranscriptClock } from "./follow.svelte.js"
 export {
 	activeWordAt,
 	cutSpans,

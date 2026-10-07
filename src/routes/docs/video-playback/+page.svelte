@@ -51,6 +51,16 @@
 		read them. A refused play keeps its reason on lastPlayError, and a successful play
 		clears it.
 	</p>
+	<p>
+		A signed source can expire mid session. The entry route mints a short
+		signature, and a reader who pauses past it seeks into unbuffered media
+		behind an expired URL. Chromium reuses the expired redirect and answers
+		403, while Firefox reasks the entry route and plays on. A caller supplied
+		resolveSource mints a fresh signature, so the player swaps the source and
+		restores the position and the play or pause state on every engine. The
+		budget stops a refusal loop, and the spent budget reports through the
+		existing network failure shape.
+	</p>
 	<video
 		data-testid="video"
 		bind:this={video}
