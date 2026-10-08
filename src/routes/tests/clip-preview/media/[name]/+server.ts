@@ -8,8 +8,11 @@ const SLICE_BYTES = 32 * 1024
 const SAMPLE_RATE = 48000
 /** The marker clip length, in seconds. */
 const MARKER_SECONDS = 2
-/** The silence before the beep, in seconds. */
-const BEEP_AT = 0.5
+/** The first beep starts half a second in, and the second starts one
+ * second later. The check reads the gap between the two onsets, so the
+ * absolute start latency cancels out of the pin. */
+const BEEP_ONE_AT = 0.5
+const BEEP_TWO_AT = 1.5
 /** The beep length, in seconds. */
 const BEEP_SECONDS = 0.5
 const BEEP_HZ = 1000
@@ -24,9 +27,9 @@ function clipBytes(): Uint8Array<ArrayBuffer> {
 	return clip
 }
 
-/** A mono 16 bit marker: silence, then a full scale kilohertz beep, then
- * silence. The beep onset sits one quarter into the clip, so the check
- * reads it by sample count. */
+/** A mono 16 bit marker: silence, a full scale kilohertz beep, silence,
+ * the same beep again, then silence. The two onsets sit one second apart,
+ * so the check reads their gap by sample count. */
 function markerBytes(): Uint8Array<ArrayBuffer> {
 	const frames = SAMPLE_RATE * MARKER_SECONDS
 	const dataBytes = frames * 2
@@ -50,12 +53,16 @@ function markerBytes(): Uint8Array<ArrayBuffer> {
 	view.setUint16(34, 16, true)
 	write(36, "data")
 	view.setUint32(40, dataBytes, true)
-	const beepStart = Math.round(SAMPLE_RATE * BEEP_AT)
+	const oneStart = Math.round(SAMPLE_RATE * BEEP_ONE_AT)
+	const twoStart = Math.round(SAMPLE_RATE * BEEP_TWO_AT)
 	const beepFrames = Math.round(SAMPLE_RATE * BEEP_SECONDS)
 	const step = (BEEP_HZ * 2 * Math.PI) / SAMPLE_RATE
+	const tone = (frame: number, start: number): number =>
+		Math.round(Math.sin((frame - start) * step) * 16000)
 	for (let frame = 0; frame < frames; frame += 1) {
-		const inBeep = frame >= beepStart && frame < beepStart + beepFrames
-		const sample = inBeep ? Math.round(Math.sin((frame - beepStart) * step) * 16000) : 0
+		let sample = 0
+		if (frame >= oneStart && frame < oneStart + beepFrames) sample = tone(frame, oneStart)
+		if (frame >= twoStart && frame < twoStart + beepFrames) sample = tone(frame, twoStart)
 		view.setInt16(44 + frame * 2, sample, true)
 	}
 	return bytes
