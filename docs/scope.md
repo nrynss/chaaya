@@ -91,10 +91,6 @@ One typed client failure: `ApiError`. Envelope parsing is the adapter's job thro
 
 Svelte 5 only, for now. The published modules use runes. There is no Svelte 4 build. The SvelteKit helpers sit on their own export, with `@sveltejs/kit` as an optional peer, so Kit is not pulled into every import.
 
-## Not covered yet
-
-These are in scope and tracked as open issues. Until each one lands, an app builds it itself.
-
 ## Out of scope
 
 - WebSocket, native `EventSource`, and any non-fetch stream transport

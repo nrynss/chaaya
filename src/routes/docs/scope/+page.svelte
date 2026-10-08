@@ -39,9 +39,6 @@
 		the session guard, keyboard shortcuts, edit history with undo and redo, theme tokens, and the contrast and accessibility gates are covered too.
 	</p>
 	<p>
-		Not covered yet: timed clips against a media clock. Each is an open issue.
-	</p>
-	<p>
 		The written contract is <code>docs/scope.md</code>. Job details are
 		<code>docs/job-progress.md</code>. Upload details are
 		<code>docs/upload.md</code>. Adapter writing is
