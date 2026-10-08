@@ -76,7 +76,8 @@
 		preview.attach()
 		scheduler = preview
 		/* Warm the decode cache before the tap runs, so the first sync
-		 * starts at once and the beep lands on its offset sample. */
+		 * starts at once. The pin reads the gap between the two onsets,
+		 * so the absolute start point carries no claim. */
 		await preview.prepare()
 		tap.connect(next.destination)
 		const element = video
