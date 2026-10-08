@@ -227,8 +227,8 @@ snapshot that omits the counter and the stage is another.
 ## Status
 
 Published on [npm](https://www.npmjs.com/package/@nrynss/chaaya) as
-`@nrynss/chaaya`. The current npm release is `0.3.0`, matching the frozen
-`api/0.3.0/` record and tag `v0.3.0`.
+`@nrynss/chaaya`. The current npm release is `0.4.0`, matching the frozen
+`api/0.4.0/` record and tag `v0.4.0`.
 
 ```sh
 npm install @nrynss/chaaya
