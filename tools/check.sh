@@ -122,7 +122,7 @@ else
 	tool_dir=".playwright-image-tools"
 	rm -rf "$tool_dir"
 	mkdir -p "$tool_dir"
-	tool_cid=$(docker create mwader/static-ffmpeg:7.1@sha256:a8090df5f5608daef387e1b2e93b98aaacb4d92153ad904e7d715c725724fca4)
+	tool_cid=$(docker create mwader/static-ffmpeg:9.0@sha256:b90574a4e2ae62b763c39c384526689e7eb435da6398f4fb3f6c3f1c6a14ce33)
 	docker cp "${tool_cid}:/ffmpeg" "$tool_dir/ffmpeg"
 	docker cp "${tool_cid}:/ffprobe" "$tool_dir/ffprobe"
 	docker rm "$tool_cid" >/dev/null
