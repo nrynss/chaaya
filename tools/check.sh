@@ -137,6 +137,15 @@ step "svelte-package"
 rm -rf dist
 npm run package
 
+step "published svelte modules"
+# A consumer compiles every packaged .svelte.js module with the Svelte 5
+# module compiler its own build uses. A build that lowers a rune class below
+# ES2022 turns a rune field into a constructor assignment, and that compile
+# throws on first import. This step runs that compiler over dist and fails
+# naming the first file that throws, so a build below the rune floor cannot
+# ship.
+node tools/guards/published-svelte-modules.mjs
+
 step "publint"
 npm run publint
 

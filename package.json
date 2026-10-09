@@ -16,7 +16,7 @@
     "lint": "eslint --no-warn-ignored $(git ls-files --cached --others --exclude-standard | grep -E '\\.(js|mjs|cjs|ts|svelte)$' | while IFS= read -r f; do [ -f \"$f\" ] && printf '%s\\n' \"$f\"; done)",
     "test": "vitest run",
     "test:browser": "playwright test",
-    "package": "svelte-package -i src/lib -o dist",
+    "package": "svelte-kit sync && svelte-package -i src/lib -o dist",
     "prepare": "npm run package",
     "publint": "publint"
   },
