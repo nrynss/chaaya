@@ -2,7 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+    # A release tag runs CI again, so a publish can confirm the tagged
+    # commit is green.
+    tags:
+      - "v*"
   pull_request:
 
 jobs:

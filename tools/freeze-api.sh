@@ -51,4 +51,4 @@ mkdir -p api
 mv "$staging/record" "api/$pkg"
 trap - EXIT
 rm -rf "$staging"
-printf 'Froze api/%s. Commit that directory, then tag v%s. Run tools/check.sh again before you publish.\n' "$pkg" "$pkg"
+printf 'Froze api/%s. Commit that directory, then tag v%s. Confirm the tag run is green in CI before you publish.\n' "$pkg" "$pkg"

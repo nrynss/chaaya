@@ -266,6 +266,9 @@ git tag -a v<version> -m "<version>"
 does not commit and it does not tag. Tagging before that commit would point
 the tag at a tree with no snapshot.
 
+A tag push runs CI again on the tagged commit. Confirm that run is green
+before you publish.
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
