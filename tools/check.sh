@@ -16,12 +16,18 @@ step "audio tools"
 # The browser audio checks measure a recorded take with ffmpeg and ffprobe.
 # Both tools must be present before the browser leg runs. A missing tool fails
 # here by name, so no audio check turns into a silent skip.
+# CI sets CHAAYA_SKIP_BROWSER and runs no browser leg, so it carries neither
+# tool. A workstation leaves the variable unset and the check stays strict.
+if [ "${CHAAYA_SKIP_BROWSER:-0}" = "1" ]; then
+	echo "CHAAYA_SKIP_BROWSER is set, so the audio tools check is skipped with the browser leg."
+else
 for measurement_tool in ffprobe ffmpeg; do
   if ! command -v "$measurement_tool" >/dev/null; then
     printf 'Blocked. %s is not installed, so the audio checks cannot measure a take.\n' "$measurement_tool" >&2
     exit 1
   fi
 done
+fi
 
 # Fail when any tracked or staged-for-review file matches a forbidden pattern.
 # The listing is git ls-files for tracked work, plus the untracked files git
@@ -98,6 +104,8 @@ step "vitest"
 npm run test
 
 step "playwright"
+# CI sets CHAAYA_SKIP_BROWSER and runs no browser test there. The leg stays
+# part of the gate on every workstation, where the variable is unset.
 # The browser leg runs against a production build, not the dev server. All
 # three engines share one invocation and one server, so no engine can
 # adopt a server another engine is shutting down. WebKit cannot launch on every
@@ -106,6 +114,9 @@ step "playwright"
 # never fall back, and a genuine test failure never does either. The
 # fallback keeps the sink leg bare beside them, so the sink-loss
 # classification is measured wherever the gate runs.
+if [ "${CHAAYA_SKIP_BROWSER:-0}" = "1" ]; then
+	echo "CHAAYA_SKIP_BROWSER is set, so the browser leg is skipped here."
+else
 launches() {
 	node --input-type=module -e "import { webkit } from 'playwright-core'; const browser = await webkit.launch(); await browser.close();" 2>/dev/null
 }
@@ -131,6 +142,7 @@ else
 		-v "$PWD:/work" -w /work "$image" \
 		env PATH="/work/$tool_dir:$PATH" \
 		timeout 900 npx playwright test --project=webkit
+fi
 fi
 
 step "svelte-package"
