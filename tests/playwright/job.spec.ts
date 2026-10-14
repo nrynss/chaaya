@@ -165,3 +165,88 @@ test("the state read waits for the stream to open", async ({ page }) => {
 		await server.stop()
 	}
 })
+
+for (const status of ["done", "error", "cancelled", "interrupted"]) {
+	for (const lower of [false, true]) {
+		test(`a ${status} catch-up with ${lower ? "a lower counter" : "no counter"} closes on reconnect`, async ({ page }) => {
+			const server = await startServer(`catchup-${status}${lower ? "-lower" : ""}`)
+			try {
+				const failed = watchStream(page, server)
+				await open(page, server)
+				await expect(page.getByTestId("read-settled")).toHaveText(`${status}:${status}`)
+				await expect(page.getByTestId("status")).toHaveText(status)
+				await expect(page.getByTestId("connection")).toHaveText("closed")
+				await expect(page.getByTestId("reconnects")).toHaveText("1")
+				await expect(page.getByTestId("current")).toHaveText(lower ? "1" : "4")
+				await expect(page.getByTestId("total")).toHaveText("12")
+				await expect(page.getByTestId("stage")).toHaveText("transcoding")
+				await expect(page.getByTestId("events")).toHaveText("progress")
+				await expect(page.getByTestId("error")).toHaveText(status === "error" ? "budget_exhausted" : "")
+				await expect(page.getByTestId("error-message")).toHaveText(status === "error" ? "The budget is spent." : "")
+				await expect(page.getByTestId("error-detail")).toHaveText(status === "error" ? '{"pool":"tokens"}' : "")
+				// The browser and server independently observe cancellation of the reopened stream.
+				await expect.poll(() => failed.length).toBeGreaterThan(0)
+				await expect.poll(async () => (await server.log()).aborted).toBe(true)
+				const log = await server.log()
+				expect(log.connections).toBe(2)
+				expect(log.stateCalls).toBe(2)
+				expect(log.errors).toEqual([])
+			} finally {
+				await server.stop()
+			}
+		})
+	}
+}
+
+for (const scenario of ["other-job", "stale", "no-counter"]) {
+	test(`a ${scenario} catch-up leaves counted progress live on reconnect`, async ({ page }) => {
+		const server = await startServer(`catchup-${scenario}`)
+		try {
+			await open(page, server)
+			await expect(page.getByTestId("reconnects")).toHaveText("1")
+			await expect(page.getByTestId("read-settled")).toHaveText(`${scenario === "other-job" ? "done" : "running"}:running`)
+			await expect(page.getByTestId("connection")).toHaveText("live")
+			await expect(page.getByTestId("current")).toHaveText("4")
+			await expect(page.getByTestId("stage")).toHaveText("transcoding")
+			await expect(page.getByTestId("events")).toHaveText("progress")
+			await server.push("event-done.txt")
+			await expect(page.getByTestId("status")).toHaveText("done")
+			await expect(page.getByTestId("connection")).toHaveText("closed")
+		} finally {
+			await server.stop()
+		}
+	})
+}
+
+for (const status of ["done", "error"]) {
+	test(`a count-free ${status} catch-up closes the first connection after counted progress`, async ({ page }) => {
+		const server = await startServer("gate")
+		const release = Promise.withResolvers<void>()
+		try {
+			await page.route(`${server.url}/state`, async (route) => {
+				await release.promise
+				await route.fulfill({ json: {
+					jobId: "3f9a1c7e5b2d8046a1c3e5f7092b4d68",
+					status,
+					...(status === "error" ? { error: { code: "budget_exhausted", message: "The budget is spent." } } : {})
+				} })
+			})
+			const failed = watchStream(page, server)
+			await open(page, server)
+			await expect(page.getByTestId("current")).toHaveText("4")
+			await expect(page.getByTestId("status")).toHaveText("running")
+			release.resolve()
+			await expect(page.getByTestId("read-settled")).toHaveText(`${status}:${status}`)
+			await expect(page.getByTestId("connection")).toHaveText("closed")
+			await expect(page.getByTestId("reconnects")).toHaveText("0")
+			await expect(page.getByTestId("current")).toHaveText("4")
+			await expect(page.getByTestId("error")).toHaveText(status === "error" ? "budget_exhausted" : "")
+			await expect.poll(() => failed.length).toBeGreaterThan(0)
+			await expect.poll(async () => (await server.log()).aborted).toBe(true)
+			expect((await server.log()).connections).toBe(1)
+		} finally {
+			release.resolve()
+			await server.stop()
+		}
+	})
+}

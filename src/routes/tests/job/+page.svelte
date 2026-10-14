@@ -53,6 +53,10 @@
 		<dd data-testid="total">{job.total ?? ""}</dd>
 		<dt>Error</dt>
 		<dd data-testid="error">{job.error ? job.error.code : ""}</dd>
+		<dt>Error message</dt>
+		<dd data-testid="error-message">{job.error?.message ?? ""}</dd>
+		<dt>Error detail</dt>
+		<dd data-testid="error-detail">{job.error?.detail ? JSON.stringify(job.error.detail) : ""}</dd>
 		<dt>Connection</dt>
 		<dd data-testid="connection">{job.connection}</dd>
 		<dt>Reconnects</dt>

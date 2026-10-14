@@ -93,13 +93,14 @@ describe("catch-up freshness", () => {
 		stream.close()
 	})
 
-	test("a terminal frame without progress preserves the regression", async () => {
+	test("a terminal snapshot without progress closes after counted progress", async () => {
 		const stream = await follow([progressFrame(2, 3)], {
 			jobId,
 			status: "done"
 		})
 		expect(stream.current).toBe(3)
-		expect(stream.status).toBe("running")
+		expect(stream.status).toBe("done")
+		expect(stream.connection).toBe("closed")
 		stream.close()
 	})
 

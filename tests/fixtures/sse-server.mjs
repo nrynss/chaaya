@@ -73,6 +73,26 @@ const scenarios = {
 	}
 }
 
+/** Reconnect with counted progress already published, then answer with one catch-up state. */
+function reconnectSnapshot(snapshot) {
+	return {
+		plan: (connection) => connection === 1
+			? [{ op: "frame", name: "event-progress.txt" }, { op: "end" }]
+			: [{ op: "frame", name: "event-heartbeat.txt" }],
+		state: (calls) => calls === 1 ? running("transcoding", 4) : snapshot
+	}
+}
+
+for (const status of ["done", "error", "cancelled", "interrupted"]) {
+	const snapshot = { jobId, status }
+	if (status === "error") snapshot.error = { code: "budget_exhausted", message: "The budget is spent.", detail: { pool: "tokens" } }
+	scenarios[`catchup-${status}`] = reconnectSnapshot(snapshot)
+	scenarios[`catchup-${status}-lower`] = reconnectSnapshot({ ...snapshot, current: 1 })
+}
+scenarios["catchup-other-job"] = reconnectSnapshot({ jobId: "9c1d5a3b7e2f40689b0d2c4e6f8a1b35", status: "done" })
+scenarios["catchup-stale"] = reconnectSnapshot({ jobId, status: "running", stage: "older", current: 1 })
+scenarios["catchup-no-counter"] = reconnectSnapshot({ jobId, status: "running", stage: "older" })
+
 const args = process.argv.slice(2)
 
 /** Read one command line argument. */

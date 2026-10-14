@@ -101,8 +101,8 @@ export class JobStream {
 	}
 
 	/** Read state once the stream is open. A failed read leaves the stream
-	 * alone. A state read answers late, so it never overwrites a reading the
-	 * stream already carried past it. */
+	 * alone. Nonterminal reads cannot move counted progress backward. A terminal
+	 * read ends the watch even when its counter is absent or lower. */
 	async #catchUp(): Promise<void> {
 		const fetchState = this.#options.fetchState
 		if (fetchState === undefined) return
@@ -120,12 +120,15 @@ export class JobStream {
 		if (this.#loop.stopped) return
 		const reading = catchUp.reading
 		const latest = this.progress.current
-		if (reading.current !== undefined && latest !== undefined && reading.current < latest) return
-		if (reading.current === undefined && latest !== undefined) return
+		const terminal = this.#options.isTerminal?.(reading) ?? false
+		// Terminal state answers whether the job ended, independently of its progress counter.
+		if (!terminal && latest !== undefined) {
+			if (reading.current === undefined || reading.current < latest) return
+		}
 		this.progress = mergeProgress(this.progress, reading)
 		if (catchUp.error !== undefined) this.error = catchUp.error
 		this.#options.onState?.(reading)
-		if (this.#options.isTerminal?.(reading)) this.close()
+		if (terminal) this.close()
 	}
 
 	/** Apply one event frame. A refusal, a missing name, and an ignore do not move Last-Event-ID. Comments never arrive here. */
