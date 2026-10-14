@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, test, vi } from "vitest"
-import type { JobFrameAction, JobStreamOptions } from "./types"
+import type { JobCatchUp, JobFrameAction, JobStreamOptions } from "./types"
 import type { NamedEvent } from "../sse/frame"
 import { createJobStream } from "./index"
 import { JobStream } from "./job.svelte.js"
@@ -148,11 +148,29 @@ describe("core job stream", () => {
 		)
 		stream.attach(() => () => {})
 		await vi.waitFor(() => expect(stream.progress.current).toBe(5))
-		release.resolve({ reading: { current: 1, stage: "older", status: "done" } })
+		release.resolve({ reading: { current: 1, stage: "older", status: "running" } })
 		await vi.waitFor(() => expect(stream.connection).toBe("live"))
 		expect(stream.progress.current).toBe(5)
 		expect(stream.progress.stage).toBe("encode")
 		expect(stream.connection).not.toBe("closed")
+		stream.close()
+	})
+
+	test.each([undefined, 1])("the caller's terminal predicate accepts a counter of %s", async (current) => {
+		const release = Promise.withResolvers<JobCatchUp>()
+		const isTerminal = vi.fn((reading) => reading.status === "finished")
+		const onState = vi.fn()
+		vi.stubGlobal("fetch", vi.fn(async () => new Response(streamOf([frame("progress", 1, '{"current":5}')], false))))
+		const stream = new JobStream(options({ fetchState: () => release.promise, isTerminal, onState }))
+		stream.attach(() => () => {})
+		await vi.waitFor(() => expect(stream.progress.current).toBe(5))
+		const reading = { status: "finished", ...(current === undefined ? {} : { current }) }
+		release.resolve({ reading, error: { code: "stopped", message: "The job stopped." } })
+		await vi.waitFor(() => expect(stream.connection).toBe("closed"))
+		expect(stream.progress).toMatchObject({ status: "finished", current: current ?? 5 })
+		expect(stream.error).toEqual({ code: "stopped", message: "The job stopped." })
+		expect(isTerminal).toHaveBeenCalledExactlyOnceWith(reading)
+		expect(onState).toHaveBeenCalledExactlyOnceWith(reading)
 		stream.close()
 	})
 
