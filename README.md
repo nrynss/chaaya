@@ -124,9 +124,9 @@ Published as `@nrynss/chaaya`.
   cross-origin requests. `credentials: "omit"` and `formData: false` are the
   presigned PUT. `maxBytes` applies to a blob. On `FormData` it throws unless
   you pass `size`. This is not `Uploader` and it is not audio-specific.
-- `@nrynss/chaaya/direct-upload`: `uploadDirectBlob` and
-  `uploadDirectMultipart`. Parts go as raw bodies straight to caller
-  supplied URLs, with socket progress and per part retry.
+- `@nrynss/chaaya/direct-upload`: `uploadDirectBlob` PUTs one raw body to a
+  caller supplied URL with socket progress. `uploadDirectMultipart` sends
+  the parts of a large file the same way, with per part retry and resume.
 - `@nrynss/chaaya/audio`: microphone capture in compressed and PCM modes,
   playback through one media element, audio or video, unlocked by the first
   gesture, the PcmStreamPlayer for arriving blocks, and live levels and
