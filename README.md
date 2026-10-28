@@ -252,7 +252,7 @@ suggesting a look.
 
 ## Migration from 0.2.4 to 0.3.0
 
-This split is breaking. The package version in this tree is `0.3.0`. Generic paths no longer speak Keel.
+This split was breaking in `0.3.0`. Generic paths no longer speak Keel.
 
 | 0.2.4 | 0.3.0 |
 | --- | --- |
