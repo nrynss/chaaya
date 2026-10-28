@@ -20,7 +20,8 @@ export type WalletPhase = "idle" | "reading" | "ready" | "failed"
  * Where a top-up follow stands. `idle` has none. `following` polls the
  * balance, including while paused on a hidden page. `landed` saw the top-up
  * credited. `timed_out` ran past its timeout first. `failed` spent its error
- * budget. `closed` was stopped by close, by its signal, or by a newer follow.
+ * budget. `closed` was stopped by close or by its signal. A newer follow
+ * replaces the older one, so this reads the newer follow's state.
  */
 export type TopUpPhase = "idle" | "following" | "landed" | "timed_out" | "failed" | "closed"
 
