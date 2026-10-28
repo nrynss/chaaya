@@ -36,3 +36,14 @@ This file records one agent's adversarial read of the change. It is not a mainta
 ## Severity counts and verdict
 
 Round one: C 0, H 0, M 1 (deferred, tracked), L 1 (fixed). Verdict: REMEDIATE. Round two runs after the README lands.
+
+## Round two
+
+Reviewed after main (with #89) merged into the branch with a plain merge and the README lines landed.
+
+- The round-one M is resolved. The README scope summary, the `@nrynss/chaaya/priced` export entry, and the docs list now name the wallet, `insufficient`, `consumeTopUpReturn`, and `followTopUp`. The wording matches `docs/scope.md`.
+- The round-one L fix reads correctly against the `topUp` getter.
+- The diff was read again in full: wallet read ordering, the abort on a newer refresh, `close` restoring the settled phase, the follow answer marking the wallet ready, `action` composing the caller's settle hook before the refresh, the insufficient branch after the price change, `initialQuote` and expiry, and the return URL keeping other params, the hash, and `history.state`. No new defect.
+- `npm run check`, `npm run lint`, and `npx vitest run src/lib/priced` passed again on the merged tree.
+
+C 0, H 0, M 0, L 0. Residue from round one: none. Verdict: APPROVE, pending CodeRabbit.
