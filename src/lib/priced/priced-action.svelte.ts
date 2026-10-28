@@ -22,11 +22,25 @@ export interface PriceQuote {
 }
 
 /**
+ * A run refused for lack of balance, as the adapter read it. Both fields are
+ * optional because a backend may send neither. Chaaya computes no shortfall
+ * from them and formats neither.
+ */
+export interface InsufficientFunds {
+	/** The balance the backend reported with the refusal, when it sent one. */
+	readonly balance?: PriceAmount
+	/** What the run needed, when the backend said. */
+	readonly required?: PriceAmount
+}
+
+/**
  * The lifecycle of a priced action. `quoting` covers the first quote and a
  * re-quote. `quoted` holds a live quote. `running` holds one run attempt. A
  * refusal that carries a new quote returns to `quoted` with the new price.
+ * `insufficient` is a run refused for lack of balance. It keeps the quote,
+ * so a confirm after a top-up runs against the same quote id.
  */
-export type PricedPhase = "idle" | "quoting" | "quoted" | "running" | "done" | "failed"
+export type PricedPhase = "idle" | "quoting" | "quoted" | "running" | "done" | "failed" | "insufficient"
 
 /** What a priced action needs. */
 export interface PricedActionOptions<T> {
@@ -44,6 +58,25 @@ export interface PricedActionOptions<T> {
 	 * core names none.
 	 */
 	readonly parsePriceChange?: (error: unknown) => PriceQuote | undefined
+	/**
+	 * Read a refusal for lack of balance. Return what the backend said when
+	 * the error is that refusal, else undefined. A price change is read
+	 * first. A throw reads as no such refusal. The adapter owns the codes.
+	 */
+	readonly parseInsufficientFunds?: (error: unknown) => InsufficientFunds | undefined
+	/**
+	 * Runs after every run attempt settles, whatever the outcome, including
+	 * an attempt a reset discarded, because a discarded run may still have
+	 * spent. A quote never calls it. A throw is ignored.
+	 */
+	readonly onRunSettled?: () => void
+	/**
+	 * Start at `quoted` with this quote instead of `idle`. A hosted checkout
+	 * leaves the page, so an app that kept the quote across the top-up passes
+	 * it back here and confirms without re-quoting. A lapsed quote still
+	 * re-quotes on confirm.
+	 */
+	readonly initialQuote?: PriceQuote
 	/** The clock in milliseconds since the epoch. Defaults to Date.now. */
 	readonly now?: () => number
 }
@@ -63,10 +96,14 @@ export class PricedAction<T = unknown> {
 	result = $state<T | null>(null)
 	/** The failure behind a failed phase, or null elsewhere. */
 	error = $state<unknown>(null)
+	/** The refusal behind an insufficient phase, or null elsewhere. */
+	insufficient = $state<InsufficientFunds | null>(null)
 
 	#quote: () => Promise<PriceQuote>
 	#run: (quoteId: string) => Promise<T>
 	#parsePriceChange: ((error: unknown) => PriceQuote | undefined) | undefined
+	#parseInsufficientFunds: ((error: unknown) => InsufficientFunds | undefined) | undefined
+	#onRunSettled: (() => void) | undefined
 	#now: () => number
 	#session = 0
 
@@ -74,7 +111,13 @@ export class PricedAction<T = unknown> {
 		this.#quote = options.quote
 		this.#run = options.run
 		this.#parsePriceChange = options.parsePriceChange
+		this.#parseInsufficientFunds = options.parseInsufficientFunds
+		this.#onRunSettled = options.onRunSettled
 		this.#now = options.now ?? Date.now
+		if (options.initialQuote !== undefined) {
+			this.quote = options.initialQuote
+			this.phase = "quoted"
+		}
 	}
 
 	/** Whether the live quote has lapsed. A quote without expiry never lapses. */
@@ -91,6 +134,7 @@ export class PricedAction<T = unknown> {
 		const session = this.#session
 		this.phase = "quoting"
 		this.error = null
+		this.insufficient = null
 		try {
 			const next = await this.#quote()
 			if (session !== this.#session) return
@@ -107,7 +151,9 @@ export class PricedAction<T = unknown> {
 	 * Run once against the live quote. Quotes first when there is none, and
 	 * re-quotes when it lapsed. A second confirm while a run is in flight
 	 * does nothing. A retry after a failure sends the same quote id again,
-	 * so the backend dedupes on it.
+	 * so the backend dedupes on it. A confirm after an insufficient refusal
+	 * does the same, so the backend must not store that refusal as the
+	 * quote's final answer.
 	 */
 	async confirm(): Promise<T | undefined> {
 		if (this.phase === "running" || this.phase === "quoting") return undefined
@@ -121,6 +167,7 @@ export class PricedAction<T = unknown> {
 		const id = this.quote.id
 		this.phase = "running"
 		this.error = null
+		this.insufficient = null
 		try {
 			const value = await this.#run(id)
 			if (session !== this.#session) return undefined
@@ -136,9 +183,18 @@ export class PricedAction<T = unknown> {
 				this.phase = "quoted"
 				return undefined
 			}
+			const refusal = this.#readInsufficientFunds(error)
+			if (refusal !== undefined) {
+				this.error = null
+				this.insufficient = refusal
+				this.phase = "insufficient"
+				return undefined
+			}
 			this.error = error
 			this.phase = "failed"
 			return undefined
+		} finally {
+			this.#settled()
 		}
 	}
 
@@ -148,7 +204,26 @@ export class PricedAction<T = unknown> {
 		this.quote = null
 		this.result = null
 		this.error = null
+		this.insufficient = null
 		this.phase = "idle"
+	}
+
+	#settled(): void {
+		if (this.#onRunSettled === undefined) return
+		try {
+			this.#onRunSettled()
+		} catch {
+			// The settle hook is the app's. Its failure never changes the run.
+		}
+	}
+
+	#readInsufficientFunds(error: unknown): InsufficientFunds | undefined {
+		if (this.#parseInsufficientFunds === undefined) return undefined
+		try {
+			return this.#parseInsufficientFunds(error)
+		} catch {
+			return undefined
+		}
 	}
 
 	#readPriceChange(error: unknown): PriceQuote | undefined {

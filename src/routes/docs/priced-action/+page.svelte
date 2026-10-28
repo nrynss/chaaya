@@ -54,7 +54,8 @@
 	<p>
 		<code>PricedAction</code> on <code>@nrynss/chaaya/priced</code> quotes a price, then runs once
 		on confirm. Phases run <code>idle</code>, <code>quoting</code>, <code>quoted</code>,
-		<code>running</code>, <code>done</code>, and <code>failed</code>. While a run is in flight, a
+		<code>running</code>, <code>done</code>, <code>failed</code>, and <code>insufficient</code>, a run
+		refused for lack of balance that keeps its quote. While a run is in flight, a
 		second confirm does nothing. Every attempt sends the quote id, so the backend dedupes on it.
 	</p>
 	<p>

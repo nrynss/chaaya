@@ -37,7 +37,9 @@ is not Keel does not import it. Nothing in this package names a consumer app.
   against snap targets, and keyboard operable handles.
 - **Still capture and share intake.** A camera session, upright image
   preparation, and one payload from a share target launch.
-- **Priced action.** Quote, confirm, and run once against the quote id.
+- **Priced action and credit wallet.** Quote, confirm, and run once against
+  the quote id. A wallet holds a prepaid balance, reads a refusal for lack
+  of balance, and follows a top-up return until the backend credits it.
 - **Shortcuts and history.** A shortcut registry a help view reads, and an
   edit history with undo, redo, and commit reconciliation.
 - **SvelteKit.** Form-action mappers for typed errors, and an event-stream
@@ -148,7 +150,12 @@ Published as `@nrynss/chaaya`.
   read a share target launch once into one payload and clean the address bar.
 - `@nrynss/chaaya/priced`: `PricedAction`, which quotes, confirms, and runs
   once against the quote id. Money is integer minor units with an opaque
-  label. Chaaya formats nothing.
+  label. Chaaya formats nothing. A refusal for lack of balance ends in
+  `insufficient` and keeps the quote. `CreditWallet` holds the balance and
+  refreshes it after every run of an action it made. `consumeTopUpReturn`
+  reads a checkout return once, and `followTopUp` polls the balance through
+  `JobPoller` until the top-up is credited or a timeout passes. The adapter
+  supplies every backend call, so no header and no route are named.
 - `@nrynss/chaaya/shortcuts`: `ShortcutRegistry` and `ShortcutDispatcher`.
   The registry is the one source a help view reads.
 - `@nrynss/chaaya/history`: `EditHistory`, with undo and redo over apply and
@@ -211,6 +218,8 @@ suggesting a look.
   preparation.
 - [share intake](/docs/share-intake): one payload from a share target launch.
 - [priced action](/docs/priced-action): quote, confirm, and run once.
+- [credit wallet](/docs/credit-wallet): a live balance, a refusal for lack
+  of balance, and a top-up return followed until the credit lands.
 - [audio upload](/docs/audio-upload): Keel's chunked upload, streamed to the
   route beside the page.
 - [audio playback](/docs/audio-playback): playback through one element
