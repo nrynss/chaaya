@@ -67,6 +67,12 @@ One typed client failure: `ApiError`. Envelope parsing is the adapter's job thro
 
 `@nrynss/chaaya/priced` quotes a price, then runs once on confirm. `PricedAction` moves through idle, quoting, quoted, running, done, and failed. A second confirm while a run is in flight does nothing. Every attempt sends the quote id, so the backend dedupes on it. A refusal that carries a new quote returns to quoted at the new price, recognised through the adapter error parser. Money passes as integer minor units with an opaque denomination label. Chaaya validates nothing, computes nothing, and formats nothing.
 
+A run refused for lack of balance ends in `insufficient`, read through the adapter's `parseInsufficientFunds`, not in `failed`. It keeps the quote, so a confirm after a top-up sends the same quote id unless the quote lapsed. `initialQuote` hands a kept quote back after a page left for a checkout.
+
+## Credit wallet
+
+`CreditWallet` on `@nrynss/chaaya/priced` holds a prepaid balance in the same `PriceAmount` shape. The adapter supplies the balance read and its map, so the wallet names no header and no route. An action made through `wallet.action` refreshes the balance after every run attempt, including a refusal. Reads land in the order they began, so a slow read never overwrites a newer balance. A refund the backend makes after the fact reaches `onChange` as a balance change on the next read, which the app starts with `refresh` when it learns of one or on its own cadence. The app decides what to say about it. A hosted checkout returns before the backend credits the payment. `consumeTopUpReturn` reads the reference once from a caller-named param and replaces history, as `consumeShareLaunch` does, so a reload does not wait again. `followTopUp` polls the balance through `JobPoller` until the adapter's `isCredited` sees the reference or a timeout passes, with the poller's backoff, error budget, and pause rule. The checkout itself, any payment provider SDK, what an action costs, and display stay with the app and its backend.
+
 ## Session guard
 
 `SessionGuard` on `@nrynss/chaaya/guard` closes one live session exactly once when its page goes away.

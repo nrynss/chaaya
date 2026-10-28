@@ -33,7 +33,7 @@
 		for now.
 	</p>
 	<p>
-		Audio capture, still image capture, share target intake, priced actions, playback through a
+		Audio capture, still image capture, share target intake, priced actions, a credit wallet with top-up return, playback through a
 		media element, audio or video, levels and peaks, the recording session, transcript editing,
 		timeline geometry and edit handles,
 		the session guard, keyboard shortcuts, edit history with undo and redo, theme tokens, and the contrast and accessibility gates are covered too.
