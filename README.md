@@ -26,10 +26,20 @@ is not Keel does not import it. Nothing in this package names a consumer app.
 - **API client.** One fetch wrapper. A failed response is a typed error. The
   caller supplies a parser when a backend has an error envelope. Timeout and
   network failures are generic.
+- **Polling.** `JobPoller` publishes the same progress reading as
+  `JobStream` for a backend that serves a state read and no stream.
 - **Upload.** Chunked and resumable through an adapter's `Uploader`, or one
-  shot with socket progress. A presigned PUT is a one-shot upload.
+  shot with socket progress. A presigned PUT is a one-shot upload. Direct
+  multipart sends parts straight to caller supplied URLs.
 - **Recording and transcript.** A headless recording session, timed words
   with cuts, and a follower that binds words to playback.
+- **Timeline.** Seconds to pixels under zoom and scroll, segment edits
+  against snap targets, and keyboard operable handles.
+- **Still capture and share intake.** A camera session, upright image
+  preparation, and one payload from a share target launch.
+- **Priced action.** Quote, confirm, and run once against the quote id.
+- **Shortcuts and history.** A shortcut registry a help view reads, and an
+  edit history with undo, redo, and commit reconciliation.
 - **SvelteKit.** Form-action mappers for typed errors, and an event-stream
   response for `+server.ts`.
 - **Gates.** A contrast gate and an accessibility gate an app runs on itself.
@@ -46,16 +56,15 @@ What the kit covers, and what it does not:
 - **Streaming:** named SSE over `fetch`. Reader/writer in core. No WebSocket.
   No native `EventSource`.
 - **Job loop:** `JobStream` for a job-shaped stream. `createEventStream` for
-  arbitrary named events. Both sit on `FrameLoop`.
+  arbitrary named events. Both sit on `FrameLoop`. `JobPoller` publishes the
+  same reading by polling a state read.
 - **Last-Event-ID:** sent on reconnect when the cursor is not 0. A server may
   ignore it and start from now.
-- **Upload:** chunked `Uploader` (adapter) and one-shot `uploadBlob`.
-  Resumable direct-to-storage multipart is not covered yet.
+- **Upload:** chunked `Uploader` (adapter), one-shot `uploadBlob`, and
+  resumable direct multipart `uploadDirectMultipart` on caller supplied URLs.
 - **Errors:** one typed `ApiError`. Envelope parsing is the adapter's
   (`ApiErrorParser`).
 - **Framework:** Svelte 5 only, for now.
-- **Not covered yet:** a timeline, shortcuts, undo and redo, polling, and
-  priced actions. Each is an open issue, listed in the written page.
 
 The written page is [docs/scope.md](docs/scope.md).
 
@@ -72,7 +81,8 @@ Published as `@nrynss/chaaya`.
   not 0. An empty `id:` line resets that id. A frame with no id line
   leaves it. Also the `JobProgress` shape, `ChaayaError`, and the chunked
   `Uploader` interface. No backend envelope, event names, or upload
-  protocol. One-shot upload is not `Uploader`.
+  protocol. One-shot upload is not `Uploader`. `JobPoller` and
+  `createJobPoller` follow a job by polling and publish the same reading.
 - `@nrynss/chaaya/tokens`: the fixed role names and a checker that reports a
   role a theme block leaves out.
 - `@nrynss/chaaya/tokens/reference.css`: the reference stylesheet a new app
@@ -114,6 +124,9 @@ Published as `@nrynss/chaaya`.
   cross-origin requests. `credentials: "omit"` and `formData: false` are the
   presigned PUT. `maxBytes` applies to a blob. On `FormData` it throws unless
   you pass `size`. This is not `Uploader` and it is not audio-specific.
+- `@nrynss/chaaya/direct-upload`: `uploadDirectBlob` and
+  `uploadDirectMultipart`. Parts go as raw bodies straight to caller
+  supplied URLs, with socket progress and per part retry.
 - `@nrynss/chaaya/audio`: microphone capture in compressed and PCM modes,
   playback through one media element, audio or video, unlocked by the first
   gesture, the PcmStreamPlayer for arriving blocks, and live levels and
@@ -128,6 +141,19 @@ Published as `@nrynss/chaaya`.
 - `@nrynss/chaaya/timeline`: seconds to pixels under zoom and scroll with
   ruler ticks, segment move and resize against snap targets, and the handle
   that turns any element into a keyboard operable edge or body control.
+- `@nrynss/chaaya/capture`: `CameraSession` with permission phases and lens
+  switching, `prepareImage` that stands pixels upright and drops EXIF, and
+  one capture seam over a live session, a file picker, and a native backend.
+- `@nrynss/chaaya/share`: `readSharedPayload` and `consumeShareLaunch`, which
+  read a share target launch once into one payload and clean the address bar.
+- `@nrynss/chaaya/priced`: `PricedAction`, which quotes, confirms, and runs
+  once against the quote id. Money is integer minor units with an opaque
+  label. Chaaya formats nothing.
+- `@nrynss/chaaya/shortcuts`: `ShortcutRegistry` and `ShortcutDispatcher`.
+  The registry is the one source a help view reads.
+- `@nrynss/chaaya/history`: `EditHistory`, with undo and redo over apply and
+  invert pairs, proposals, and commit reconciliation through a caller
+  supplied commit function.
 - `@nrynss/chaaya/testing`: a contrast gate and an accessibility gate a
   consumer points at its own stylesheet and container, plus protocol asserts
   an adapter author points at its frames, errors, and readings.
@@ -181,6 +207,10 @@ suggesting a look.
 - [recording session](/docs/recording-session): headless capture-to-upload session state.
 - [audio capture](/docs/audio-capture): microphone capture in compressed and
   PCM modes, recorded from a generated signal.
+- [still capture](/docs/still-capture): a camera session and upright image
+  preparation.
+- [share intake](/docs/share-intake): one payload from a share target launch.
+- [priced action](/docs/priced-action): quote, confirm, and run once.
 - [audio upload](/docs/audio-upload): Keel's chunked upload, streamed to the
   route beside the page.
 - [audio playback](/docs/audio-playback): playback through one element
@@ -190,6 +220,8 @@ suggesting a look.
 - [audio stream](/docs/audio-stream): the PcmStreamPlayer that schedules
   arriving blocks gaplessly on a supplied context, with a flush that cuts
   cleanly.
+- [clip preview](/docs/clip-preview): timed clips previewed against a media
+  element clock.
 - [audio levels](/docs/audio-levels): live levels read from a generated tone.
 - [audio peaks](/docs/audio-peaks): waveform peaks computed directly and in
   a worker, with agreement between the two.
@@ -198,6 +230,11 @@ suggesting a look.
 - [transcript](/docs/transcript): timed words, the editor that cuts and
   reverts ranges, the regions drawn from the cuts, and the follower that
   binds the words to playback.
+- [transcript video](/docs/transcript-video): the follower bound to a video
+  element's clock.
+- [shortcuts](/docs/shortcuts): the registry and the help view it feeds.
+- [history](/docs/history): undo, redo, proposals, and commit
+  reconciliation.
 - [transcript stream](/docs/transcript-stream): fold timed-word SSE frames into the transcript editor list.
 - [timeline](/docs/timeline): geometry under zoom and scroll, segment edits
   against snap targets, and handles that move by pointer and by keyboard.
