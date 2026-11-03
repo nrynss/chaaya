@@ -174,6 +174,11 @@ stream.attach()
 
 `FrameBuffer` is only a list of frames captured before the page exists. The name is not a product topic.
 
+For an authoritative state read after reconnect, see [Snapshot recovery for
+named SSE](sse-recovery.md). It covers one `catchUp` read per open, accepted
+reset frames, buffering live changes, and ignoring late snapshots from an
+older connection.
+
 ## Polling for progress
 
 A backend that serves a state read and no stream gets the same reading through `JobPoller` / `createJobPoller` from `@nrynss/chaaya/core`. The reading merges the same way a stream reading does, so a view cannot tell polling from streaming.
