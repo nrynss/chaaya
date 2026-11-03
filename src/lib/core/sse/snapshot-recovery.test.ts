@@ -247,6 +247,33 @@ describe("snapshot recovery against an equivalent Keel broker", () => {
 		expect(client.readSnapshot).toHaveBeenCalledTimes(1)
 	})
 
+	test("buffered changes from an older application epoch do not corrupt the snapshot", async () => {
+		const broker = new RecoveryBroker()
+		const pending = Promise.withResolvers<Snapshot<number>>()
+		const client = consumer(broker, () => pending.promise)
+		await vi.waitFor(() => expect(client.readSnapshot).toHaveBeenCalledTimes(1))
+		broker.publish(4)
+		await vi.waitFor(() => expect(client.stream.lastEventId).toBe(1))
+		pending.resolve({ epoch: "second", sequence: 0, state: 10 })
+		await vi.waitFor(() => expect(client.value).toBe(10))
+		expect(client.applied).toEqual([])
+		expect(client.errors).toEqual([])
+		expect(client.stream.connection).toBe("live")
+	})
+
+	test("an application epoch change on a live connection fails instead of keeping stale state", async () => {
+		const broker = new RecoveryBroker()
+		const client = consumer(broker)
+		await vi.waitFor(() => expect(client.value).toBe(0))
+		broker.epoch = "second"
+		broker.publish(3)
+		await vi.waitFor(() => expect(client.stream.connection).toBe("closed"))
+		expect(client.value).toBeUndefined()
+		expect(client.errors).toHaveLength(1)
+		expect(client.applied).toEqual([])
+		expect(client.readSnapshot).toHaveBeenCalledTimes(1)
+	})
+
 	test("a stalled snapshot has a bounded event buffer", async () => {
 		const broker = new RecoveryBroker()
 		const pending = Promise.withResolvers<Snapshot<number>>()

@@ -53,13 +53,17 @@ export function createSnapshotRecovery<State, Value>(url: string, options: Snaps
 		options.onError(error)
 	}
 
-	function apply(change: Change<Value>): void {
+	function apply(change: Change<Value>, buffered = false): void {
 		if (position === undefined) {
 			if (pending.length >= 128) throw new Error("snapshot recovery buffer is full")
 			pending.push(change)
 			return
 		}
-		if (change.epoch !== position.epoch || change.sequence <= position.sequence) return
+		if (change.epoch !== position.epoch) {
+			if (buffered) return
+			throw new Error("snapshot recovery found a live change from another epoch")
+		}
+		if (change.sequence <= position.sequence) return
 		if (change.sequence !== position.sequence + 1) {
 			throw new Error("snapshot recovery found an application sequence gap")
 		}
@@ -98,7 +102,7 @@ export function createSnapshotRecovery<State, Value>(url: string, options: Snaps
 				options.replace(snapshot.state)
 				const buffered = pending
 				pending = []
-				for (const change of buffered) apply(change)
+				for (const change of buffered) apply(change, true)
 			} catch (error) {
 				if (current()) fail(error)
 			}

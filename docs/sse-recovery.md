@@ -121,7 +121,9 @@ Changes arriving during the read are buffered. Once the snapshot is
 installed, the helper reconciles the buffer against its application revision
 and then applies new changes directly. The example bounds that buffer and
 closes on overflow, a sequence gap, malformed data, or a current snapshot
-failure. It reports the error through `onError`; recreate the recovery to
+failure. A different-epoch live change after snapshot installation also
+closes recovery, so an application history change cannot silently leave a
+stale view. It reports the error through `onError`; recreate the recovery to
 retry. A stale request's failure is ignored. Apps that retry snapshots
 within a connection should bound those retries and preserve these same
 generation and revision checks.
