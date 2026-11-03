@@ -206,6 +206,8 @@ suggesting a look.
 - [job progress](/docs/job-progress): how any pipeline maps stages and counters
   onto `JobProgress`, and how `JobStream` applies a frame map. The follow
   loop stays in core.
+- [SSE snapshot recovery](docs/sse-recovery.md): recover after a broker restart
+  or replay gap, buffer live changes, and ignore superseded snapshot reads.
 - errors: `ChaayaError` from `@nrynss/chaaya/core` is the shape adapter authors
   can aim at. It has `code`, `message`, and optional `retryable` and `detail`.
   Core does not parse an envelope.
