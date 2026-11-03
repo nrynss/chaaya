@@ -135,6 +135,19 @@ test("a focused handle announces the live time after a sibling edits", async ({ 
 	)
 })
 
+test("the docs scale updates direct and derived readings through its binding", async ({ page }) => {
+	await page.goto("/docs/timeline")
+	await expect(page.getByTestId("zoom-in")).toBeEnabled()
+	await expect(page.getByTestId("density")).toHaveText("50 pixels per second")
+	await expect(page.getByTestId("playhead")).toHaveText("playhead at 125 pixels")
+	await page.getByTestId("zoom-in").click()
+	await expect(page.getByTestId("density")).toHaveText("100 pixels per second")
+	await expect(page.getByTestId("playhead")).toHaveText("playhead at 200 pixels")
+	await page.getByTestId("zoom-out").click()
+	await expect(page.getByTestId("density")).toHaveText("50 pixels per second")
+	await expect(page.getByTestId("playhead")).toHaveText("playhead at 125 pixels")
+})
+
 test("the docs page passes the accessibility and contrast gates", async ({ page }) => {
 	await page.goto("/docs/timeline")
 	await expect(page.getByTestId("zoom-in")).toBeEnabled()

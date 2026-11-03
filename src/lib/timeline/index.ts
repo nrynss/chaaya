@@ -19,4 +19,4 @@ export type {
 export { chooseTicks, createScale, pixelsToSeconds, secondsToPixels, zoomScale } from "./scale.js"
 export { visibleRange } from "./scale.js"
 export type { TimeScale, VisibleRange } from "./scale.js"
-export { TimelineScale } from "./state.svelte.js"
+export { TimelineScale } from "./state.js"

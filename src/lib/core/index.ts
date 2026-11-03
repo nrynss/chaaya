@@ -11,6 +11,8 @@
 export { ApiError, api, createApi } from "./api.js"
 export type { ApiClient, ApiClientOptions, ApiErrorParser, ApiFailureBody, ApiRequestInit } from "./api.js"
 export type { ChaayaError } from "./error.js"
+export { Notifier } from "./observable.js"
+export type { Listener, Observable } from "./observable.js"
 export { JobStream, createJobStream, createJobPoller, JobPoller } from "./job/index.js"
 export type { JobCatchUp, JobConnection, JobFrameAction, JobFrameHandler, JobStreamOptions, JobPollerOptions } from "./job/index.js"
 export { decodeJson, fail, isRecord, ok } from "./result.js"

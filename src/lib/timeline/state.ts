@@ -5,6 +5,7 @@
  * only holds the state the view writes.
  */
 
+import { Notifier } from "../core/observable.js"
 import {
 	chooseTicks,
 	createScale,
@@ -20,16 +21,37 @@ import {
  * One reactive scale. Building one validates the density and the scroll, so
  * a bad value fails at construction and never reaches the view.
  */
-export class TimelineScale {
-	/** How many pixels one second covers. */
-	pixelsPerSecond = $state(100)
-	/** The second pinned to the left edge. */
-	scrollSeconds = $state(0)
+export class TimelineScale extends Notifier {
+	#pixelsPerSecond: number
+	#scrollSeconds: number
 
 	constructor(pixelsPerSecond = 100, scrollSeconds = 0) {
+		super()
 		const scale = createScale(pixelsPerSecond, scrollSeconds)
-		this.pixelsPerSecond = scale.pixelsPerSecond
-		this.scrollSeconds = scale.scrollSeconds
+		this.#pixelsPerSecond = scale.pixelsPerSecond
+		this.#scrollSeconds = scale.scrollSeconds
+	}
+
+	/** How many pixels one second covers. */
+	get pixelsPerSecond(): number {
+		return this.#pixelsPerSecond
+	}
+
+	set pixelsPerSecond(value: number) {
+		if (Object.is(value, this.#pixelsPerSecond)) return
+		this.#pixelsPerSecond = value
+		this.notify()
+	}
+
+	/** The second pinned to the left edge. */
+	get scrollSeconds(): number {
+		return this.#scrollSeconds
+	}
+
+	set scrollSeconds(value: number) {
+		if (Object.is(value, this.#scrollSeconds)) return
+		this.#scrollSeconds = value
+		this.notify()
 	}
 
 	/** The plain scale this state holds. */
@@ -55,8 +77,10 @@ export class TimelineScale {
 	/** Zoom about an anchor second, keeping the anchor on its pixel. */
 	zoom(factor: number, anchorTime: number): void {
 		const next = zoomScale(this.scale, factor, anchorTime)
-		this.pixelsPerSecond = next.pixelsPerSecond
-		this.scrollSeconds = next.scrollSeconds
+		if (Object.is(next.pixelsPerSecond, this.#pixelsPerSecond) && Object.is(next.scrollSeconds, this.#scrollSeconds)) return
+		this.#pixelsPerSecond = next.pixelsPerSecond
+		this.#scrollSeconds = next.scrollSeconds
+		this.notify()
 	}
 
 	/** Choose ruler ticks for a span and a target spacing in pixels. */

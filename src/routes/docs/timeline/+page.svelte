@@ -3,10 +3,11 @@
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
 	import { TimelineScale, timelineHandle } from "$lib/timeline/index.js";
+	import { reactive } from "$lib/svelte/index.js";
 	import type { TimelineSegment } from "$lib/timeline/index.js";
 	import { a11yGate, contrastGate } from "$lib/testing/index.js";
 
-	const scale = new TimelineScale(50, 0);
+	const scale = reactive(new TimelineScale(50, 0));
 	const bounds = { start: 0, end: 10 };
 	const neighbours: TimelineSegment[] = [{ start: 6, end: 7 }];
 	const targets = [2, 5];
