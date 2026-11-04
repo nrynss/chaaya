@@ -327,8 +327,12 @@
 
 	/* The take starts when the recorder enters its running state, so the clock
 	 * reading at that moment bounds the audio the take holds. */
+	/* A wrapped recorder notifies per block and per countdown tick, so an
+	 * effect reading it re-runs on each. The derived state changes only on a
+	 * transition, so the clock is read once per transition, as before. */
+	const recorderState = $derived(recorder?.state)
 	$effect(() => {
-		const state = recorder?.state
+		const state = recorderState
 		if (state === "recording") startElapsed = microphone?.elapsedSeconds() ?? 0
 		if (state === "stopped" || state === "failed") {
 			stopElapsed = microphone?.elapsedSeconds() ?? 0

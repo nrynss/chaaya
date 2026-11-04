@@ -29,3 +29,15 @@ Open items for the owner (not defects):
 - The state fields are read-only getters, and `AudioPlayer.rate` keeps its setter. Lists are typed `readonly`.
 
 Verdict: APPROVE, pending the browser leg and CodeRabbit.
+
+## Round 2
+
+Browser leg on the box (chromium, firefox, firefox-sink). WebKit cannot launch here: its system libraries are missing, and apt cannot reach the Debian mirror (500 errors). It needs a workstation.
+
+Finding:
+
+6. **The capture harness drifted its start mark.** `tests/audio-capture` had an `$effect` that read `recorder.state` and recorded the generated microphone's clock when the take entered `recording`. A rune effect re-ran only when `state` changed. Through `reactive()`, the effect re-ran on every notification, and that includes each block and each countdown tick, so the start mark kept moving later and the ffprobe marker placement failed. That was eight failures on chromium and firefox. A baseline run on main passed all twenty. Fixed: the effect reads `$derived(recorder?.state)`, which passes only changed values. After the fix, `audio-capture` passes 20 of 20 on chromium and firefox.
+
+   This is the binding's coarse-grained notification, the design #95 chose, and not a defect in the audio classes. The CHANGELOG entry now says so, and the #102 migration guide should carry the same pattern.
+
+The other `$effect` in the migrated routes (`tests/audio-stream`) only installs window hooks and reads no audio object, so it is unaffected.
