@@ -2,7 +2,7 @@ import { activeLines, listLibFiles } from "./lib.mjs"
 
 // A Svelte 4 idiom inside a Svelte 5 file compiles clean and then never
 // reacts. No compiler and no linter reports it, so the scan hunts the idioms
-// in the source itself. A store never drives reactivity here, which is why
+// in the binding directories, the only Svelte code the library ships. A store never drives reactivity here, which is why
 // an import from svelte/store counts as leakage too.
 const leaks = [
 	["an export let prop", /\bexport\s+let\b/],
@@ -10,8 +10,12 @@ const leaks = [
 	["an import from svelte/store", /\b(?:from\s*|import\s*\(?\s*)["']svelte\/store["']/]
 ]
 
+/** The directories that may hold Svelte code. The framework-neutral guard
+ * keeps Svelte out of every other directory. */
+const bindingDirs = ["src/lib/svelte/", "src/lib/sveltekit/"]
+
 const hits = []
-for (const file of listLibFiles()) {
+for (const file of listLibFiles().filter((path) => bindingDirs.some((dir) => path.startsWith(dir)))) {
 	for (const line of activeLines(file)) {
 		for (const [what, pattern] of leaks) {
 			if (pattern.test(line.text)) hits.push(`${file}:${line.n}: ${what}`)
@@ -20,7 +24,7 @@ for (const file of listLibFiles()) {
 }
 
 if (hits.length > 0) {
-	console.error("Blocked. Svelte 4 idioms in src/lib:")
+	console.error("Blocked. Svelte 4 idioms in the binding directories:")
 	for (const hit of hits) console.error(`  ${hit}`)
 	process.exit(1)
 }

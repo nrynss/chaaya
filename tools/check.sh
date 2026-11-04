@@ -68,10 +68,18 @@ npm run check
 step "eslint"
 npm run lint
 
+step "framework neutral"
+# Outside src/lib/svelte and src/lib/sveltekit the library imports no
+# framework. ESLint fails a Svelte import there. A rune is not an import, so
+# this scan hunts $state, $derived, $effect and $props in the code lines, and
+# a .svelte.ts, .svelte.js or .svelte file, naming each file it finds.
+node tools/guards/framework-neutral.mjs
+
 step "svelte 4 leakage"
 # A Svelte 4 idiom inside a Svelte 5 file compiles clean and then never
-# reacts. No compiler warns, so this scan hunts the idioms in src/lib: an
-# export let prop, a $: reactive label, an import from svelte/store.
+# reacts. No compiler warns, so this scan hunts the idioms in the binding
+# directories, the only Svelte code the library ships: an export let prop, a
+# $: reactive label, an import from svelte/store.
 node tools/guards/svelte4-leakage.mjs
 
 step "visual values"
@@ -155,7 +163,7 @@ step "published svelte modules"
 # ES2022 turns a rune field into a constructor assignment, and that compile
 # throws on first import. This step runs that compiler over dist and fails
 # naming the first file that throws, so a build below the rune floor cannot
-# ship.
+# ship. Only the binding directories may ship such a module.
 node tools/guards/published-svelte-modules.mjs
 
 step "publint"
@@ -233,6 +241,7 @@ step "server safety"
 # in the exports map with plain node and no DOM. An import-time touch of
 # window, document, navigator or localStorage fails it. The step needs the
 # build above, because the exports map points at dist.
+# The walk includes ./svelte, so the binding imports on the server too.
 node tools/guards/server-safety.mjs
 
 step "consumer names"

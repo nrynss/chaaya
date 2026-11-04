@@ -24,6 +24,11 @@ breaking release. The migration guide lands before the freeze.
 
 ### Changed
 
+- Only `./svelte` and `./sveltekit` carry the `svelte` export condition.
+  Every other entry resolves through `default` alone, under any bundler.
+  `svelte` and `bits-ui` are optional peers, as `@sveltejs/kit` already
+  was, so a project that imports no binding installs no Svelte.
+
 - `TimelineScale` on `@nrynss/chaaya/timeline` is an observable and imports
   no framework. `pixelsPerSecond` and `scrollSeconds` keep their names and
   types as getters and setters. A zoom notifies once. A write of the value
