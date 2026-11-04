@@ -60,3 +60,17 @@ breaking release. The migration guide lands before the freeze.
 - `mediaClock(element)` gains `subscribe(listener)`, which hears the
   element's `timeupdate`, `seeking`, and `seeked` events. `TranscriptClock`
   gains an optional `subscribe`; `AudioPlayer` provides it.
+- `ChunkUploader` on `@nrynss/chaaya/keel`, and
+  `PricedAction` and `CreditWallet` on `@nrynss/chaaya/priced`, are
+  observables and import no framework. A Svelte view wraps each one:
+  `reactive(new PricedAction(...))`, and `reactive(wallet.action(...))` for
+  an action the wallet makes. Their state fields are read-only getters now.
+  Each logical change notifies once: an acknowledgement moves `acknowledged`
+  and `pending` together, a failure lands `error` and `state` together, and
+  a refresh that lands a new balance and `ready` notifies once. A run that
+  settles notifies the wallet only through the refresh it starts.
+- `CreditWallet.followTopUp(reference, options)` takes no cleanup runner and
+  returns the teardown that stops the follow. Call it from `onMount` or an
+  `$effect` and return the teardown, or call it in an event handler and
+  keep the teardown. Each top-up answer notifies once. `Uploader` stays a
+  plain interface.

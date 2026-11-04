@@ -13,15 +13,15 @@
  * literal path and never searches for an extension, so the built barrel needs
  * that name to load.
  */
-export { PricedAction } from "./priced-action.svelte.js"
+export { PricedAction } from "./priced-action.js"
 export type {
 	InsufficientFunds,
 	PricedActionOptions,
 	PricedPhase,
 	PriceAmount,
 	PriceQuote
-} from "./priced-action.svelte.js"
-export { CreditWallet } from "./wallet.svelte.js"
-export type { CreditWalletOptions, TopUpFollowOptions, TopUpPhase, WalletPhase } from "./wallet.svelte.js"
+} from "./priced-action.js"
+export { CreditWallet } from "./wallet.js"
+export type { CreditWalletOptions, TopUpFollowOptions, TopUpPhase, WalletPhase } from "./wallet.js"
 export { consumeTopUpReturn } from "./top-up.js"
 export type { ConsumeTopUpOptions } from "./top-up.js"

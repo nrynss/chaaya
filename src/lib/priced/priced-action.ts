@@ -1,3 +1,4 @@
+import { Notifier } from "../core/observable.js"
 /**
  * Money as integer minor units with an opaque denomination label. The label
  * accepts any value, such as a currency code or a credit label. Chaaya
@@ -81,23 +82,71 @@ export interface PricedActionOptions<T> {
 	readonly now?: () => number
 }
 
+/** The state a priced action publishes. One write may set several fields, and a
+ * view hears it once. */
+interface PricedFields<T> {
+	phase: PricedPhase
+	quote: PriceQuote | null
+	result: T | null
+	error: unknown
+	insufficient: InsufficientFunds | null
+}
+
 /**
  * Quotes, confirms, and runs once. While a run is in flight, a second
  * confirm does nothing. An expired quote re-quotes before it runs. A refusal
  * that carries a new quote moves back to quoted with the new price, so the
  * app asks again instead of spending.
  */
-export class PricedAction<T = unknown> {
+export class PricedAction<T = unknown> extends Notifier {
+	#fields: PricedFields<T> = {
+		phase: "idle",
+		quote: null,
+		result: null,
+		error: null,
+		insufficient: null
+	}
+
 	/** The lifecycle state of the action. */
-	phase = $state<PricedPhase>("idle")
+	get phase(): PricedPhase {
+		return this.#fields.phase
+	}
+
 	/** The live quote, or null before the first quote and after reset. */
-	quote = $state<PriceQuote | null>(null)
+	get quote(): PriceQuote | null {
+		return this.#fields.quote
+	}
+
 	/** The run value, or null before a run succeeds. */
-	result = $state<T | null>(null)
+	get result(): T | null {
+		return this.#fields.result
+	}
+
 	/** The failure behind a failed phase, or null elsewhere. */
-	error = $state<unknown>(null)
+	get error(): unknown {
+		return this.#fields.error
+	}
+
 	/** The refusal behind an insufficient phase, or null elsewhere. */
-	insufficient = $state<InsufficientFunds | null>(null)
+	get insufficient(): InsufficientFunds | null {
+		return this.#fields.insufficient
+	}
+
+	/** Apply one change to the published state and notify once when a value
+	 * moved. Equal values notify nothing, the way a rune skipped them. */
+	#write(patch: Partial<PricedFields<T>>): void {
+		let changed = false
+		const next = { ...this.#fields }
+		for (const key of Object.keys(patch) as (keyof PricedFields<T>)[]) {
+			if (Object.is(next[key], patch[key])) continue
+			;(next as Record<keyof PricedFields<T>, unknown>)[key] = patch[key]
+			changed = true
+		}
+		if (!changed) return
+		this.#fields = next
+		this.notify()
+	}
+
 
 	#quote: () => Promise<PriceQuote>
 	#run: (quoteId: string) => Promise<T>
@@ -108,6 +157,7 @@ export class PricedAction<T = unknown> {
 	#session = 0
 
 	constructor(options: PricedActionOptions<T>) {
+		super()
 		this.#quote = options.quote
 		this.#run = options.run
 		this.#parsePriceChange = options.parsePriceChange
@@ -115,8 +165,7 @@ export class PricedAction<T = unknown> {
 		this.#onRunSettled = options.onRunSettled
 		this.#now = options.now ?? Date.now
 		if (options.initialQuote !== undefined) {
-			this.quote = options.initialQuote
-			this.phase = "quoted"
+			this.#write({ quote: options.initialQuote, phase: "quoted" })
 		}
 	}
 
@@ -132,18 +181,14 @@ export class PricedAction<T = unknown> {
 		if (this.phase === "quoting" || this.phase === "running") return
 		this.#session += 1
 		const session = this.#session
-		this.phase = "quoting"
-		this.error = null
-		this.insufficient = null
+		this.#write({ phase: "quoting", error: null, insufficient: null })
 		try {
 			const next = await this.#quote()
 			if (session !== this.#session) return
-			this.quote = next
-			this.phase = "quoted"
+			this.#write({ quote: next, phase: "quoted" })
 		} catch (error) {
 			if (session !== this.#session) return
-			this.error = error
-			this.phase = "failed"
+			this.#write({ error, phase: "failed" })
 		}
 	}
 
@@ -165,33 +210,25 @@ export class PricedAction<T = unknown> {
 		this.#session += 1
 		const session = this.#session
 		const id = this.quote.id
-		this.phase = "running"
-		this.error = null
-		this.insufficient = null
+		this.#write({ phase: "running", error: null, insufficient: null })
 		try {
 			const value = await this.#run(id)
 			if (session !== this.#session) return undefined
-			this.result = value
-			this.phase = "done"
+			this.#write({ result: value, phase: "done" })
 			return value
 		} catch (error) {
 			if (session !== this.#session) return undefined
 			const next = this.#readPriceChange(error)
 			if (next !== undefined) {
-				this.quote = next
-				this.error = null
-				this.phase = "quoted"
+				this.#write({ quote: next, error: null, phase: "quoted" })
 				return undefined
 			}
 			const refusal = this.#readInsufficientFunds(error)
 			if (refusal !== undefined) {
-				this.error = null
-				this.insufficient = refusal
-				this.phase = "insufficient"
+				this.#write({ error: null, insufficient: refusal, phase: "insufficient" })
 				return undefined
 			}
-			this.error = error
-			this.phase = "failed"
+			this.#write({ error, phase: "failed" })
 			return undefined
 		} finally {
 			this.#settled()
@@ -201,11 +238,7 @@ export class PricedAction<T = unknown> {
 	/** Forget the quote, the result, and the error, and return to idle. */
 	reset(): void {
 		this.#session += 1
-		this.quote = null
-		this.result = null
-		this.error = null
-		this.insufficient = null
-		this.phase = "idle"
+		this.#write({ quote: null, result: null, error: null, insufficient: null, phase: "idle" })
 	}
 
 	#settled(): void {

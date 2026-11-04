@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js";
 	import { resolve } from "$app/paths";
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
@@ -7,13 +8,13 @@
 
 	let quotes = 0;
 
-	const action = new PricedAction<string>({
+	const action = reactive(new PricedAction<string>({
 		quote: async () => {
 			quotes += 1;
 			return { id: `quote-${quotes}`, price: { amount: 40, currency: "credit.label" } };
 		},
 		run: async (quoteId) => `spent once against ${quoteId}`
-	});
+	}));
 
 	let hydrated = $state(false);
 	let checks = $state("");

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js";
 	import { page } from "$app/state";
 	import { PricedAction } from "$lib/priced/index.js";
 	import { onMount } from "svelte";
@@ -8,7 +9,7 @@
 	let runCalls = $state(0);
 	let runKeys = $state<string[]>([]);
 
-	const action = new PricedAction<string>({
+	const action = reactive(new PricedAction<string>({
 		quote: async () => {
 			quotes += 1;
 			await new Promise((resolve) => setTimeout(resolve, 20));
@@ -24,7 +25,7 @@
 			}
 			return `ok ${quoteId}`;
 		}
-	});
+	}));
 
 	type PricedHook = {
 		setFailTimes: (count: number) => void;

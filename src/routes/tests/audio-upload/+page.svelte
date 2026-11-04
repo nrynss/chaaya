@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { page } from "$app/state"
 	import { ChunkUploader } from "$lib/adapters/keel/upload"
 	import { onMount } from "svelte"
@@ -117,7 +118,7 @@
 			microphone = installGeneratedMicrophone({ totalSeconds: signalSeconds })
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
 			const type = pickType()
-			const next = new ChunkUploader({ url: base, owner, contentType: type, chunkSize })
+			const next = reactive(new ChunkUploader({ url: base, owner, contentType: type, chunkSize }))
 			uploader = next
 			/* The recorder starts before the upload opens. The signal begins
 			 * inside getUserMedia, so a recorder that waits for the open
@@ -157,7 +158,7 @@
 		if (base === "") return
 		const next = await ChunkUploader.resume()
 		if (next === undefined) return
-		uploader = next
+		uploader = reactive(next)
 		resumed = true
 		phase = "uploading"
 		await next.finish()
