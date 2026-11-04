@@ -85,6 +85,9 @@ Published as `@nrynss/chaaya`.
   `Uploader` interface. No backend envelope, event names, or upload
   protocol. One-shot upload is not `Uploader`. `JobPoller` and
   `createJobPoller` follow a job by polling and publish the same reading.
+  `Notifier`, `Observable`, and `Listener` are the framework-neutral change
+  signal: `subscribe(listener)` returns the unsubscribe, `version` counts
+  changes, and a stateful class notifies once per logical change.
 - `@nrynss/chaaya/tokens`: the fixed role names and a checker that reports a
   role a theme block leaves out.
 - `@nrynss/chaaya/tokens/reference.css`: the reference stylesheet a new app
@@ -105,6 +108,11 @@ Published as `@nrynss/chaaya`.
   Pass `credentials: "include"` to opt in. Keel's adapter is `keelGate` on
   `@nrynss/chaaya/keel`, and `src/lib/adapters/keel/gate.ts` is the reference
   shape. The adapter guide is [Writing an adapter](#writing-an-adapter).
+- `@nrynss/chaaya/svelte`: the Svelte 5 binding. `reactive(x)` returns a
+  proxy whose reads update a template, an effect, or a `$derived` when `x`
+  notifies. `attach(x)` runs `x.attach()` in the calling component's effect
+  and calls the teardown it returns when the component goes away. A read
+  without `reactive` renders once and never updates. Needs Svelte `^5.7.0`.
 - `@nrynss/chaaya/sveltekit`: form-action mappers for `ApiError`, and
   `createJobStreamResponse` for a `text/event-stream` `+server.ts`. Optional
   `@sveltejs/kit` peer.
@@ -142,7 +150,8 @@ Published as `@nrynss/chaaya`.
   TranscriptFollower that binds the words to playback.
 - `@nrynss/chaaya/timeline`: seconds to pixels under zoom and scroll with
   ruler ticks, segment move and resize against snap targets, and the handle
-  that turns any element into a keyboard operable edge or body control.
+  that turns any element into a keyboard operable edge or body control. `TimelineScale` is an observable with no framework import. A Svelte
+  view reads it through `reactive(new TimelineScale())`.
 - `@nrynss/chaaya/capture`: `CameraSession` with permission phases and lens
   switching, `prepareImage` that stands pixels upright and drops EXIF, and
   one capture seam over a live session, a file picker, and a native backend.

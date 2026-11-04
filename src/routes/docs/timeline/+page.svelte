@@ -2,11 +2,13 @@
 	import { resolve } from "$app/paths";
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
+	import { reactive } from "$lib/svelte/index.js";
 	import { TimelineScale, timelineHandle } from "$lib/timeline/index.js";
 	import type { TimelineSegment } from "$lib/timeline/index.js";
 	import { a11yGate, contrastGate } from "$lib/testing/index.js";
 
-	const scale = new TimelineScale(50, 0);
+	// The scale is framework-neutral. reactive() makes its reads update the view.
+	const scale = reactive(new TimelineScale(50, 0));
 	const bounds = { start: 0, end: 10 };
 	const neighbours: TimelineSegment[] = [{ start: 6, end: 7 }];
 	const targets = [2, 5];
@@ -100,6 +102,7 @@
 	<p>A timeline maps seconds to pixels under zoom and scroll. One scale holds the density and the offset, and pure functions map both ways and choose ruler ticks. A ruler, tracks, and a playhead read that one source.</p>
 	<p>A segment moves and resizes against snap targets. Bounds, a minimum length, and neighbours constrain every edit, and each edit names the target it snapped to.</p>
 	<p>A handle turns any element into an edge or body control. It drags with pointer capture, cancels with Escape, and nudges with arrow keys. Shift steps coarsely and Alt steps finely. It draws nothing, and it carries the role, the value, and the spoken time.</p>
+	<p><code>TimelineScale</code> imports no framework. It notifies once per change, so a Svelte view wraps it in <code>reactive</code> from <code>@nrynss/chaaya/svelte</code>. A scale read without the wrapper renders once and never updates.</p>
 	<p>The demo below wires three handles to one segment. Drag a handle with the pointer, or focus it and press the arrows. Escape restores the start.</p>
 	<section aria-label="Scale">
 		<p data-testid="density">{scale.pixelsPerSecond} pixels per second</p>
