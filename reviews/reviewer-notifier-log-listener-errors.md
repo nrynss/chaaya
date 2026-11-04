@@ -26,3 +26,7 @@ None.
 ## Severity counts and verdict
 
 Round one: C 0, H 0, M 0, L 0. A second full read after the gate found nothing new. Verdict: APPROVE.
+
+## Round 2 (CodeRabbit)
+
+CodeRabbit raised one nitpick: the per-notification test counted calls and never checked which error each call logged. It was valid, so it is applied. The test now holds both errors and checks the ordered list after each notification (`first, second`, then `first, second, first, second`). Re-review of the diff is clean.

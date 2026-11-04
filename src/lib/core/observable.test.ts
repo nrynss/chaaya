@@ -95,15 +95,18 @@ test("a throwing listener does not stop the others, and its error is logged", ()
 test("each throwing listener is logged once per notification", () => {
 	const log = vi.spyOn(console, "error").mockImplementation(() => {})
 	const counter = new Counter()
+	const first = new Error("first")
+	const second = new Error("second")
 	counter.subscribe(() => {
-		throw new Error("first")
+		throw first
 	})
 	counter.subscribe(() => {
-		throw new Error("second")
+		throw second
 	})
 	counter.bump()
+	expect(log.mock.calls.map(([, error]) => error)).toEqual([first, second])
 	counter.bump()
-	expect(log).toHaveBeenCalledTimes(4)
+	expect(log.mock.calls.map(([, error]) => error)).toEqual([first, second, first, second])
 	log.mockRestore()
 })
 
