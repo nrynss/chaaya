@@ -95,7 +95,7 @@ A run refused for lack of balance ends in `insufficient`, read through the adapt
 
 ## Framework
 
-Svelte 5 only, for now. Svelte 5.7 is the floor, because the binding uses `createSubscriber`. The core is moving onto a framework-neutral change signal, `Notifier` on `@nrynss/chaaya/core`, and `@nrynss/chaaya/svelte` turns it into Svelte reactivity with `reactive` and `attach`. `TimelineScale` is the first class on it. The other published modules still use runes until they move. There is no Svelte 4 build. The SvelteKit helpers sit on their own export, with `@sveltejs/kit` as an optional peer, so Kit is not pulled into every import.
+Svelte 5 only, for now. Svelte 5.7 is the floor, because the binding uses `createSubscriber`. The core is moving onto a framework-neutral change signal, `Notifier` on `@nrynss/chaaya/core`, and `@nrynss/chaaya/svelte` turns it into Svelte reactivity with `reactive` and `attach`. `TimelineScale`, `FrameLoop`, `createEventStream`, both `JobStream` classes, and `JobPoller` are on it, and their `attach()` returns the teardown. The other published modules still use runes until they move. There is no Svelte 4 build. The SvelteKit helpers sit on their own export, with `@sveltejs/kit` as an optional peer, so Kit is not pulled into every import.
 
 ## Out of scope
 

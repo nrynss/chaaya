@@ -4,6 +4,7 @@
 	import { page } from "$app/state"
 	import { onMount } from "svelte"
 	import { JobStream, type JobSnapshot } from "$lib/adapters/keel/job/index.js"
+	import { attach, reactive } from "$lib/svelte/index.js"
 
 	/* The fixture server this page follows. A spec starts one and passes its
 	 * address in, so each test owns its own stream. */
@@ -25,8 +26,8 @@
 		return snapshot
 	}
 
-	const job = new JobStream({ url: `${base}/events`, fetchState: readState })
-	job.attach()
+	const job = reactive(new JobStream({ url: `${base}/events`, fetchState: readState }))
+	attach(job)
 
 	const names = $derived(job.events.map((event) => event.name).join(","))
 

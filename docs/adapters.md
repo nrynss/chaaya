@@ -299,22 +299,23 @@ export function writeHeartbeat(): string {
 
 The repo file imports `$lib/core/index.js` and `$lib/auth/index.js`. Replace those two specifiers as in the block above. Nothing else changes.
 
-Wire a page like this. `attach` belongs in component setup, the same way `JobStream` documents it. `plainApi` is the fetch client for the state read and for every other call. `plainJobStream` translates the state document on its own promise. When a caller needs the reading in that same turn, pass a ready `JobCatchUp` into `createJobStream` instead.
+Wire a page like this. In a Svelte component, wrap the stream in `reactive` and pass it to `attach`, both from `@nrynss/chaaya/svelte`, during component setup. `attach` opens the stream and closes it with the component. Outside Svelte, `stream.attach()` opens it and returns the teardown. `plainApi` is the fetch client for the state read and for every other call. `plainJobStream` translates the state document on its own promise. When a caller needs the reading in that same turn, pass a ready `JobCatchUp` into `createJobStream` instead.
 
 ```ts
+import { attach, reactive } from "@nrynss/chaaya/svelte"
 import { plainApi, plainGate, plainJobStream } from "./plain-adapter"
 
 const passcode = plainGate()
 passcode.set("open-sesame")
 const call = plainApi(passcode)
 
-const stream = plainJobStream({
+const stream = reactive(plainJobStream({
   url: "/jobs/1/events",
   watchId: "job-1",
   requestInit: passcode.apply({ credentials: "include" }),
   fetchState: () => call<unknown>("/jobs/1"),
-})
-stream.attach()
+}))
+attach(stream)
 ```
 
 `apply` sets the header and does not set `credentials`. Pass `credentials: "include"` when the cookie must be sent. `Accept` on that init does not stick.

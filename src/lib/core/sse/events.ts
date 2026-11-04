@@ -1,6 +1,8 @@
+import { Notifier } from "../observable.js"
+import type { Observable } from "../observable.js"
 import type { EventFrame, NamedEvent } from "./frame.js"
-import { FrameLoop, isReplayId } from "./loop.svelte.js"
-import type { FrameDecision, StreamConnection } from "./loop.svelte.js"
+import { FrameLoop, isReplayId } from "./loop.js"
+import type { FrameDecision, StreamConnection } from "./loop.js"
 import type { ReconnectOptions } from "./reconnect.js"
 
 /** Where one event stream stands. Same states as the shared loop. */
@@ -33,11 +35,14 @@ export interface EventStreamOptions {
 	pauseWhenHidden?: boolean
 }
 
-/** A live named-event stream. */
-export interface EventStream {
+/** A live named-event stream. It is an observable: one notify per kept
+ * event, per connection change, and per comment. */
+export interface EventStream extends Observable {
 	readonly connection: EventConnection
 	readonly reconnects: number
-	readonly events: NamedEvent[]
+	/** Kept events in arrival order. The list is replaced, never mutated, so
+	 * the same reference holds between notifications. */
+	readonly events: readonly NamedEvent[]
 	readonly lastEventId: number
 	/** Epoch milliseconds of the last comment frame. Undefined until one arrives. */
 	readonly lastComment: number | undefined
@@ -45,8 +50,8 @@ export interface EventStream {
 	 * A terminal event in this list closes the stream before attach(), so
 	 * attach() then connects nothing. */
 	prime(events: readonly NamedEvent[]): void
-	/** Follow the stream. A test passes its own cleanup runner. */
-	attach(registerCleanup?: (task: () => () => void) => void): void
+	/** Follow the stream. It returns the teardown, which closes the stream. */
+	attach(): () => void
 	/** Stop following. A second call changes nothing. */
 	close(): void
 }
@@ -95,8 +100,12 @@ export function createEventStream(url: string, options: EventStreamOptions = {})
 	return new NamedEventStream(url, options)
 }
 
-class NamedEventStream implements EventStream {
-	events = $state<NamedEvent[]>([])
+class NamedEventStream extends Notifier implements EventStream {
+	#events: readonly NamedEvent[] = []
+	/** True while this stream applies a prime or catch-up event, so the
+	 * loop's own notify folds into the one this stream sends. */
+	#applying = false
+	#loopChanged = false
 
 	readonly #options: EventStreamOptions
 	readonly #allowed: readonly string[] | undefined
@@ -104,6 +113,7 @@ class NamedEventStream implements EventStream {
 	readonly #loop: FrameLoop
 
 	constructor(url: string, options: EventStreamOptions) {
+		super()
 		this.#options = options
 		this.#allowed = options.events
 		this.#terminal = options.terminal ?? []
@@ -126,6 +136,14 @@ class NamedEventStream implements EventStream {
 			onFrame: (frame) => this.#onWire(frame),
 			catchUp: () => this.#catchUp(),
 		})
+		this.#loop.subscribe(() => {
+			if (this.#applying) this.#loopChanged = true
+			else this.notify()
+		})
+	}
+
+	get events(): readonly NamedEvent[] {
+		return this.#events
 	}
 
 	get connection(): EventConnection {
@@ -145,11 +163,11 @@ class NamedEventStream implements EventStream {
 	}
 
 	prime(events: readonly NamedEvent[]): void {
-		for (const event of events) this.#acceptEvent(event, false)
+		for (const event of events) this.#applyEvent(event)
 	}
 
-	attach(registerCleanup?: (task: () => () => void) => void): void {
-		this.#loop.attach(registerCleanup)
+	attach(): () => void {
+		return this.#loop.attach()
 	}
 
 	close(): void {
@@ -170,12 +188,27 @@ class NamedEventStream implements EventStream {
 		if (this.#loop.stopped) return { keep: false }
 		if (this.#allowed !== undefined && !this.#allowed.includes(event.name)) return { keep: false }
 		if (isReplayId(this.#loop.lastEventId, event)) return { keep: false }
-		this.events.push(event)
+		this.#events = [...this.#events, event]
 		this.#options.onFrame?.(event)
 		if (!wire) this.#loop.noteId(event)
 		const stop = this.#terminal.includes(event.name)
 		if (!wire && stop) this.#loop.close()
 		return { keep: true, stop: wire && stop }
+	}
+
+	/** Apply one event that is not a wire frame and notify once. A wire
+	 * frame notifies through the loop instead. */
+	#applyEvent(event: NamedEvent): void {
+		const before = this.#events
+		this.#applying = true
+		this.#loopChanged = false
+		try {
+			this.#acceptEvent(event, false)
+		} finally {
+			this.#applying = false
+			/** A throwing `onFrame` still leaves the kept event in the list. */
+			if (this.#events !== before || this.#loopChanged) this.notify()
+		}
 	}
 
 	async #catchUp(): Promise<void> {
@@ -189,7 +222,7 @@ class NamedEventStream implements EventStream {
 		}
 		if (this.#loop.stopped || missed === undefined) return
 		for (const event of missed) {
-			this.#acceptEvent(event, false)
+			this.#applyEvent(event)
 			if (this.#loop.stopped) return
 		}
 	}

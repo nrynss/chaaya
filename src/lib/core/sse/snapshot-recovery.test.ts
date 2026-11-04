@@ -113,7 +113,7 @@ function consumer(broker: RecoveryBroker, load: (signal: AbortSignal) => Promise
 		onError: (error) => { errors.push(error) },
 	})
 	cleanups.push(recovery.close)
-	recovery.stream.attach((setup) => { cleanups.push(setup()) })
+	cleanups.push(recovery.stream.attach())
 	return { ...recovery, readSnapshot, replacements, applied, errors, get value() { return value } }
 }
 

@@ -138,6 +138,8 @@ const stream = createJobStream({
 stream.attach()
 ```
 
+`attach()` opens the stream and returns its teardown, which closes it. The stream is a framework-neutral observable: `subscribe` hears one change per kept frame. In a Svelte component, use `const stream = reactive(createJobStream(...))` and `attach(stream)` from `@nrynss/chaaya/svelte` instead, so reads update the view and the stream closes with the component.
+
 `new JobStream({ url, frameMap, reconnect })` is the same call. The names inside `plainFrameMap` are the caller's. Copy the full adapter from [adapters.md](adapters.md) rather than inventing handlers here. This call does not reimplement fetch, frame splitting, or backoff.
 
 ## When not to use this shape

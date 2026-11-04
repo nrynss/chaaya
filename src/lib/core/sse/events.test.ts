@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, test, vi } from "vitest"
 import type { NamedEvent } from "./frame"
-import { FrameBuffer, createEventStream } from "./events.svelte.js"
-import { FrameLoop } from "./loop.svelte.js"
+import { FrameBuffer, createEventStream } from "./events.js"
+import { FrameLoop } from "./loop.js"
 
 afterEach(() => {
 	vi.unstubAllGlobals()
@@ -54,7 +54,7 @@ describe("named event stream", () => {
 				comments.push(comment)
 			},
 		})
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("closed"))
 		expect(stream.events.map((event) => event.name)).toEqual(["alpha", "ended"])
 		expect(seen).toEqual(["alpha", "ended"])
@@ -80,7 +80,7 @@ describe("named event stream", () => {
 				comments.push(comment)
 			},
 		})
-		loop.attach(() => () => {})
+		loop.attach()
 		await vi.waitFor(() => expect(comments).toEqual(["ping"]))
 		expect(typeof comments[0]).toBe("string")
 		expect(loop.lastEventId).toBe(0)
@@ -98,7 +98,7 @@ describe("named event stream", () => {
 				throw new Error("caller bug")
 			},
 		})
-		loop.attach(() => () => {})
+		loop.attach()
 		await vi.waitFor(() => expect(loop.lastComment).toEqual(expect.any(Number)))
 		await new Promise((resolve) => setTimeout(resolve, 50))
 		expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -110,7 +110,7 @@ describe("named event stream", () => {
 		const fetchMock = vi.fn(async () => new Response("no", { status: 403 }))
 		vi.stubGlobal("fetch", fetchMock)
 		const stream = createEventStream("http://notify.test/events")
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("failed"))
 		expect(fetchMock).toHaveBeenCalledTimes(1)
 		expect(stream.events).toEqual([])
@@ -137,7 +137,7 @@ describe("named event stream", () => {
 				reconnects.push(count)
 			},
 		})
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("closed"))
 		expect(stream.events.map((event) => event.id)).toEqual([4, 5])
 		expect(reconnects).toEqual([1])
@@ -164,7 +164,7 @@ describe("named event stream", () => {
 		const stream = createEventStream("http://notify.test/events", {
 			reconnect: { baseMs: 0, maxMs: 0, attempts: 2 },
 		})
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.reconnects).toBe(1))
 		const second = new Headers(vi.mocked(fetch).mock.calls[1]?.[1]?.headers)
 		expect(second.get("last-event-id")).toBeNull()
@@ -185,7 +185,7 @@ describe("named event stream", () => {
 		const stream = createEventStream("http://notify.test/events", {
 			catchUp: () => release.promise,
 		})
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("live"))
 		release.resolve([{ id: 2, name: "note", data: '{"n":2}' }])
 		await vi.waitFor(() => expect(stream.events.map((event) => event.id)).toEqual([2]))
@@ -211,7 +211,7 @@ describe("named event stream", () => {
 		const stream = createEventStream("http://notify.test/events")
 		stream.prime(buffer.drain())
 		expect(buffer.events).toEqual([])
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.events).toHaveLength(2))
 		expect(stream.events.map((event) => event.name)).toEqual(["alpha", "beta"])
 		expect(stream.lastEventId).toBe(2)
@@ -229,7 +229,7 @@ describe("named event stream", () => {
 			headers: { authorization: "Bearer t" },
 			requestInit: { credentials: "include", headers: { accept: "application/json" } },
 		})
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.events).toHaveLength(1))
 		const init = vi.mocked(fetch).mock.calls[0]?.[1]
 		const headers = new Headers(init?.headers)
