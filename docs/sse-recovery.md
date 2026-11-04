@@ -79,6 +79,7 @@ snapshot reader, event decoder, and state updates.
 
 ```ts
 import { onDestroy } from "svelte"
+import { attach } from "@nrynss/chaaya/svelte"
 import { createSnapshotRecovery } from "./snapshot-recovery"
 import { readSnapshot, decodeChange, applyChange } from "./inbox-contract"
 
@@ -94,7 +95,7 @@ const recovery = createSnapshotRecovery<Inbox, Change>("/inbox/events", {
   onError: (error) => { failure = error },
 })
 
-recovery.stream.attach()
+attach(recovery.stream)
 onDestroy(recovery.close)
 ```
 

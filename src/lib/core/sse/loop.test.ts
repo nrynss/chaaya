@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, test, vi } from "vitest"
-import { FrameLoop } from "./loop.svelte.js"
+import { FrameLoop } from "./loop.js"
 
 function eventFrame(name: string, id: number): string {
 	return [`event: ${name}`, `id: ${id}`, `data: {}`, "", ""].join("\n")
@@ -48,7 +48,7 @@ describe("frame loop pause", () => {
 			reconnect: { baseMs: 500, maxMs: 8000, attempts: 6 },
 			onFrame: () => ({ keep: true }),
 		})
-		loop.attach(() => () => {})
+		loop.attach()
 		await vi.advanceTimersByTimeAsync(0)
 		expect(loop.connection).toBe("reconnecting")
 		setVisibility("hidden")
@@ -75,7 +75,7 @@ describe("frame loop pause", () => {
 			reconnect: { baseMs: 500, maxMs: 8000, attempts: 6 },
 			onFrame: () => ({ keep: true }),
 		})
-		loop.attach(() => () => {})
+		loop.attach()
 		await vi.advanceTimersByTimeAsync(0)
 		setVisibility("hidden")
 		fetchMock.mockResolvedValue(new Response(openStream()))
@@ -94,7 +94,7 @@ describe("frame loop pause", () => {
 			reconnect: { baseMs: 500, maxMs: 8000, attempts: 6 },
 			onFrame: () => ({ keep: true }),
 		})
-		loop.attach(() => () => {})
+		loop.attach()
 		await vi.advanceTimersByTimeAsync(0)
 		expect(loop.connection).toBe("live")
 		setOnline(false)
@@ -114,7 +114,7 @@ describe("frame loop pause", () => {
 		const fetchMock = vi.fn(async () => new Response(openStream()))
 		vi.stubGlobal("fetch", fetchMock)
 		const loop = new FrameLoop({ url: "http://pause.test/events", onFrame: () => ({ keep: true }) })
-		loop.attach(() => () => {})
+		loop.attach()
 		await vi.advanceTimersByTimeAsync(1000)
 		expect(fetchMock).not.toHaveBeenCalled()
 		expect(loop.connection).toBe("paused")
@@ -140,7 +140,7 @@ describe("frame loop pause", () => {
 			pauseWhenHidden: false,
 			onFrame: () => ({ keep: true }),
 		})
-		loop.attach(() => () => {})
+		loop.attach()
 		await vi.advanceTimersByTimeAsync(0)
 		expect(loop.connection).toBe("reconnecting")
 		setVisibility("hidden")
@@ -157,7 +157,7 @@ describe("frame loop pause", () => {
 		const fetchMock = vi.fn(async () => new Response(openStream()))
 		vi.stubGlobal("fetch", fetchMock)
 		const loop = new FrameLoop({ url: "http://pause.test/events", onFrame: () => ({ keep: true }) })
-		loop.attach(() => () => {})
+		loop.attach()
 		await vi.advanceTimersByTimeAsync(0)
 		expect(loop.connection).toBe("live")
 		loop.close()

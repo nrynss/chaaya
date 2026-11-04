@@ -3,6 +3,7 @@
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
 	import { JobStream, type JobSnapshot } from "$lib/adapters/keel/job/index.js";
+	import { attach, reactive } from "$lib/svelte/index.js";
 
 	let hydrated = $state(false);
 	let caughtUp = $state("");
@@ -17,13 +18,14 @@
 		return (await response.json()) as JobSnapshot;
 	}
 
-	const job = new JobStream({ url: "/docs/job/fixture", fetchState: readState });
+	/* The stream is framework-neutral. reactive() makes its reads update the
+	 * view, and attach() opens it in the component's effect. An effect runs in
+	 * the browser alone, so a server render constructs the stream and never
+	 * opens it, and prerender stays safe. */
+	const job = reactive(new JobStream({ url: "/docs/job/fixture", fetchState: readState }));
+	attach(job);
 
-	/* The page starts the stream on mount in the browser alone. A server
-	 * render constructs the stream and never opens it, so prerender stays
-	 * safe while the browser still follows the fixture to done. */
 	onMount(() => {
-		job.attach();
 		const timer = setInterval(() => {
 			if (job.current !== undefined && job.current >= 4 && caughtUp === "") {
 				caughtUp = "caught-up";

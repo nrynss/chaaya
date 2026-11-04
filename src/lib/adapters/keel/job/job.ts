@@ -1,4 +1,5 @@
-import { JobStream as CoreJobStream } from "../../../core/job/job.svelte.js"
+import { JobStream as CoreJobStream } from "../../../core/job/job.js"
+import { Notifier } from "../../../core/observable.js"
 import type { JobCatchUp } from "../../../core/job/types.js"
 import type { JobProgress } from "../../../core/progress.js"
 import { isTerminalStatus, JobFollower } from "./follow.js"
@@ -16,14 +17,20 @@ import type { JobConnection, JobError, JobStatus, JobStreamOptions } from "./typ
  * fields below are the ones a Keel view already reads.
  *
  * Construction touches nothing, so importing this module on a server is safe.
- * attach() opens the stream, and a component calls it during initialisation.
+ * attach() opens the stream and returns its teardown. A Svelte component
+ * passes the stream to `attach` from `@nrynss/chaaya/svelte`.
+ *
+ * The stream is an observable. It re-notifies each change of the core
+ * stream it wraps, so a view sees one observable and one notify per kept
+ * frame. The Keel event list changes inside that same frame.
  */
-export class JobStream {
-	#events = $state<JobEvent[]>([])
+export class JobStream extends Notifier {
+	#events: readonly JobEvent[] = []
 	#follower = new JobFollower()
 	#core: CoreJobStream
 
 	constructor(options: JobStreamOptions) {
+		super()
 		const follower = this.#follower
 		this.#core = new CoreJobStream({
 			url: options.url,
@@ -48,12 +55,13 @@ export class JobStream {
 			shouldAccept: (frame) => keelShouldAccept(follower, frame),
 			onAccept: (frame) => {
 				const event = keelOnAccept(follower, frame)
-				if (event !== undefined) this.#events.push(event)
+				if (event !== undefined) this.#events = [...this.#events, event]
 			},
 			onReconnect: options.onReconnect,
 			reconnect: options.reconnect,
 			requestInit: options.requestInit,
 		})
+		this.#core.subscribe(() => this.notify())
 	}
 
 	/** The status of the job. It starts queued and stops at the first terminal. */
@@ -95,17 +103,15 @@ export class JobStream {
 	/** Every frame the core stream kept, in arrival order, as Keel events.
 	 * Ignored and refused frames are not here. A component that mounts after
 	 * the first frames still reads them here. Core `frames` is the same accept
-	 * set as raw named events. Keel views read this list. */
-	get events(): JobEvent[] {
+	 * set as raw named events. Keel views read this list. It is replaced,
+	 * never mutated, so the same reference holds between notifications. */
+	get events(): readonly JobEvent[] {
 		return this.#events
 	}
 
-	/** Follow the job. Call it once during component initialisation. The
-	 * stream opens before the first render, and it closes when that component
-	 * is destroyed. A test passes its own cleanup runner, because only a
-	 * component owns the effect context the default runner needs. */
-	attach(registerCleanup?: (task: () => () => void) => void): void {
-		this.#core.attach(registerCleanup)
+	/** Follow the job. It returns the teardown, which closes the stream. */
+	attach(): () => void {
+		return this.#core.attach()
 	}
 
 	/** Stop following the job. It cancels the stream and any pending reconnect. A second call changes nothing. */

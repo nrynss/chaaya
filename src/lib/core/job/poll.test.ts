@@ -37,7 +37,7 @@ describe("job poller", () => {
 			}),
 		)
 		expect(poller).toBeInstanceOf(JobPoller)
-		poller.attach(() => () => {})
+		poller.attach()
 		await vi.advanceTimersByTimeAsync(0)
 		expect(poller.progress).toEqual({ status: "running", current: 1 })
 		expect(poller.connection).toBe("live")
@@ -65,7 +65,7 @@ describe("job poller", () => {
 				maxIntervalMs: 3000,
 			}),
 		)
-		poller.attach(() => () => {})
+		poller.attach()
 		await vi.advanceTimersByTimeAsync(0)
 		expect(fetchState).toHaveBeenCalledTimes(1)
 		await vi.advanceTimersByTimeAsync(1000)
@@ -100,7 +100,7 @@ describe("job poller", () => {
 				errorBudget: 2,
 			}),
 		)
-		poller.attach(() => () => {})
+		poller.attach()
 		await vi.advanceTimersByTimeAsync(0)
 		expect(poller.connection).toBe("connecting")
 		await vi.advanceTimersByTimeAsync(1000)
@@ -127,7 +127,7 @@ describe("job poller", () => {
 				errorBudget: 1,
 			}),
 		)
-		poller.attach(() => () => {})
+		poller.attach()
 		await vi.advanceTimersByTimeAsync(0)
 		await vi.advanceTimersByTimeAsync(1000)
 		expect(poller.connection).toBe("failed")
@@ -145,7 +145,7 @@ describe("job poller", () => {
 				timeoutMs: 2500,
 			}),
 		)
-		poller.attach(() => () => {})
+		poller.attach()
 		await vi.advanceTimersByTimeAsync(0)
 		await vi.advanceTimersByTimeAsync(2000)
 		expect(fetchState).toHaveBeenCalledTimes(2)
@@ -166,7 +166,7 @@ describe("job poller", () => {
 				timeoutMs: 2500,
 			}),
 		)
-		poller.attach(() => () => {})
+		poller.attach()
 		await vi.advanceTimersByTimeAsync(0)
 		expect(fetchState).toHaveBeenCalledTimes(1)
 		setVisibility("hidden")
@@ -195,7 +195,7 @@ describe("job poller", () => {
 				signal: caller.signal,
 			}),
 		)
-		poller.attach(() => () => {})
+		poller.attach()
 		await vi.advanceTimersByTimeAsync(0)
 		expect(poller.connection).toBe("live")
 		caller.abort()

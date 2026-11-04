@@ -1,6 +1,6 @@
 import type { ChaayaError } from "../core/error.js"
-import { JobPoller } from "../core/job/poll.svelte.js"
-import { runInEffect } from "../core/sse/effect.svelte.js"
+import { JobPoller } from "../core/job/poll.js"
+import { runInEffect } from "../svelte/run-in-effect.svelte.js"
 import {
 	PricedAction,
 	type InsufficientFunds,
@@ -119,6 +119,10 @@ export class CreditWallet<R = unknown> {
 	#settledPhase: WalletPhase = "idle"
 	#follower = $state<JobPoller<TaggedReading<R>> | undefined>(undefined)
 	#reference = $state<string | null>(null)
+	/** Bumps on every change of the follower. `JobPoller` is a plain
+	 * observable, so this rune carries its changes into the getters below
+	 * until the wallet moves off runes too. */
+	#followerTick = $state(0)
 
 	constructor(options: CreditWalletOptions<R>) {
 		this.#readBalance = options.readBalance
@@ -129,6 +133,7 @@ export class CreditWallet<R = unknown> {
 
 	/** Where the current top-up follow stands. */
 	get topUp(): TopUpPhase {
+		void this.#followerTick
 		const follower = this.#follower
 		if (follower === undefined) return "idle"
 		if (follower.progress.status === "done") return "landed"
@@ -144,6 +149,7 @@ export class CreditWallet<R = unknown> {
 
 	/** The failure that ended the last top-up follow, when it timed out or failed. */
 	get topUpError(): ChaayaError | undefined {
+		void this.#followerTick
 		return this.#follower?.error
 	}
 
@@ -234,7 +240,13 @@ export class CreditWallet<R = unknown> {
 		})
 		this.#reference = reference
 		this.#follower = follower
-		follower.attach(registerCleanup)
+		follower.subscribe(() => {
+			this.#followerTick += 1
+		})
+		/** The poll starts before the runner registers its teardown, as it did
+		 * when the runner went to the poller. */
+		const teardown = follower.attach()
+		registerCleanup(() => teardown)
 	}
 
 	/** Stop the top-up follow and abort a refresh in flight. The wallet keeps

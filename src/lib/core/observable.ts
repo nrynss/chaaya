@@ -24,19 +24,11 @@ interface Subscription {
 	readonly listener: Listener
 }
 
-/** Hand an error a listener threw to the host, after the other listeners
- * have run. A browser reports it through `reportError`, the way an event
- * listener's error is reported. A runtime without `reportError` throws it
- * from a microtask, so it is never swallowed. */
+/** Log an error a listener threw. The change it observed has already
+ * landed, and the other listeners still run, so the error is logged rather
+ * than thrown into the class that changed or into the host. */
 function report(error: unknown): void {
-	const host = globalThis as { reportError?: (error: unknown) => void }
-	if (typeof host.reportError === "function") {
-		host.reportError(error)
-		return
-	}
-	queueMicrotask(() => {
-		throw error
-	})
+	console.error("A Chaaya listener threw. The other listeners still ran.", error)
 }
 
 /**
@@ -44,9 +36,10 @@ function report(error: unknown): void {
  * the instance, so it is safe at import time and on the server.
  *
  * Notification is synchronous. Listeners run in subscription order. One that
- * throws does not stop the others, and its error is reported afterwards. A
- * listener added during a notification first runs on the next one. A
- * listener removed during a notification does not run again, even in the
+ * throws does not stop the others, and its error is logged with
+ * `console.error`. A listener added during a notification first runs on the
+ * next one. A listener removed during a notification does not run again,
+ * even in the
  * notification that removed it.
  */
 export class Notifier implements Observable {
