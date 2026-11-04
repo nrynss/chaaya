@@ -16,8 +16,7 @@ breaking release. The migration guide lands before the freeze.
   unsubscribe, and `version` increments once per change, before listeners
   run. `subscribe` is bound to its instance, so it can be passed unbound. Notification is
   synchronous. A listener that throws does not stop the others, and its
-  error is reported through `reportError`, or rethrown from a microtask
-  where the runtime has none.
+  error is logged with `console.error`. Nothing is rethrown.
 - `@nrynss/chaaya/svelte`, the Svelte 5 binding. `reactive(x)` makes the
   reads of an observable reactive in a template, an effect, or a
   `$derived`. `attach(x)` runs `x.attach()` in the calling effect and calls
