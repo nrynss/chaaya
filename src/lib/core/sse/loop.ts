@@ -1,4 +1,4 @@
-import { runInEffect } from "./effect.svelte.js"
+import { Notifier } from "../observable.js"
 import { parseNamedFrame } from "./frame.js"
 import type { EventFrame, NamedEvent } from "./frame.js"
 import { takeFrames } from "./frame.js"
@@ -109,14 +109,24 @@ function fetchInit(options: FrameLoopOptions, signal: AbortSignal, lastEventId: 
  * event resets the attempt count and connects at once. Pass
  * `pauseWhenHidden: false` to keep retrying while hidden.
  * Construction touches nothing, so importing this module on a server is safe.
+ *
+ * The loop is an observable. It notifies once per logical change: a
+ * connection change, a reconnect that opened, a comment, a kept frame, a
+ * frame that moved the cursor, and a `noteId` that moved it. A kept frame
+ * notifies once even when it also moves the cursor and ends the watch. A
+ * dropped frame that leaves the cursor alone notifies nothing. A frame
+ * whose `onFrame` throws notifies once, because the caller may have changed
+ * its own state before it threw.
+ *
+ * A caller that projects frames (`JobStream`, `createEventStream`) changes
+ * its own state inside `onFrame` and relies on this one notify, so a view
+ * that subscribes to the caller hears one change per frame.
  */
-export class FrameLoop {
-	connection = $state<StreamConnection>("connecting")
-	reconnects = $state(0)
-	/** Id of the last kept frame that carried an id line. Zero means none yet, an explicit zero, or an empty id line. */
-	lastEventId = $state(0)
-	/** Epoch milliseconds of the last comment frame. Undefined until one arrives. */
-	lastComment = $state<number | undefined>(undefined)
+export class FrameLoop extends Notifier {
+	#connection: StreamConnection = "connecting"
+	#reconnects = 0
+	#lastEventId = 0
+	#lastComment: number | undefined = undefined
 
 	#options: FrameLoopOptions
 	#schedule: ReturnType<typeof reconnectSettings>
@@ -129,8 +139,29 @@ export class FrameLoop {
 	#unwatch: (() => void) | undefined = undefined
 
 	constructor(options: FrameLoopOptions) {
+		super()
 		this.#options = options
 		this.#schedule = reconnectSettings(options.reconnect)
+	}
+
+	/** Where the stream stands. */
+	get connection(): StreamConnection {
+		return this.#connection
+	}
+
+	/** The count of dropped streams that opened again. */
+	get reconnects(): number {
+		return this.#reconnects
+	}
+
+	/** Id of the last kept frame that carried an id line. Zero means none yet, an explicit zero, or an empty id line. */
+	get lastEventId(): number {
+		return this.#lastEventId
+	}
+
+	/** Epoch milliseconds of the last comment frame. Undefined until one arrives. */
+	get lastComment(): number | undefined {
+		return this.#lastComment
 	}
 
 	/** True after close() or a terminal decision. */
@@ -140,11 +171,16 @@ export class FrameLoop {
 
 	/** Move the cursor the way a kept frame would. Used by prime() and catch-up, which are not wire frames. */
 	noteId(event: Pick<NamedEvent, "id" | "idSet" | "resetId">): void {
-		this.lastEventId = nextEventId(this.lastEventId, event)
+		const next = nextEventId(this.#lastEventId, event)
+		if (next === this.#lastEventId) return
+		this.#lastEventId = next
+		this.notify()
 	}
 
-	/** Follow the stream. Call it once during component initialisation. A test passes its own cleanup runner. */
-	attach(registerCleanup: (task: () => () => void) => void = runInEffect): void {
+	/** Follow the stream. It returns the teardown, which closes the loop. A
+	 * Svelte component passes the loop to `attach` from
+	 * `@nrynss/chaaya/svelte`, which calls the teardown with the component. */
+	attach(): () => void {
 		if (this.#options.pauseWhenHidden !== false) {
 			this.#unwatch = watchPause(
 				() => this.#pause(),
@@ -153,7 +189,7 @@ export class FrameLoop {
 			if (isPaused()) this.#pause()
 		}
 		if (!this.#paused) void this.#connect()
-		registerCleanup(() => () => this.close())
+		return () => this.close()
 	}
 
 	/** Stop following. It cancels the stream and any pending reconnect. A second call changes nothing. */
@@ -162,7 +198,9 @@ export class FrameLoop {
 		this.#stop("closed")
 	}
 
-	#stop(state: StreamConnection): void {
+	/** End the watch. `quiet` leaves the notify to a caller that reports the
+	 * same change, so one frame that ends the watch still notifies once. */
+	#stop(state: StreamConnection, quiet = false): void {
 		this.#stopped = true
 		this.#unwatch?.()
 		this.#unwatch = undefined
@@ -172,7 +210,8 @@ export class FrameLoop {
 		}
 		this.#controller?.abort()
 		this.#controller = undefined
-		this.connection = state
+		this.#connection = state
+		if (!quiet) this.notify()
 	}
 
 	/** Park the loop while the page cannot hold a stream. It aborts the open
@@ -187,7 +226,8 @@ export class FrameLoop {
 		}
 		this.#controller?.abort()
 		this.#controller = undefined
-		this.connection = "paused"
+		this.#connection = "paused"
+		this.notify()
 	}
 
 	/** Connect at once after a pause. It resets the attempt count, so the
@@ -212,7 +252,10 @@ export class FrameLoop {
 		}
 		const delay = reconnectDelay(this.#attempts, this.#schedule)
 		this.#attempts += 1
-		this.connection = "reconnecting"
+		if (this.#connection !== "reconnecting") {
+			this.#connection = "reconnecting"
+			this.notify()
+		}
 		this.#timer = setTimeout(() => {
 			this.#timer = undefined
 			void this.#connect()
@@ -227,7 +270,7 @@ export class FrameLoop {
 		this.#controller = controller
 		let response: Response
 		try {
-			response = await fetch(this.#options.url, fetchInit(this.#options, controller.signal, this.lastEventId, this.#opened))
+			response = await fetch(this.#options.url, fetchInit(this.#options, controller.signal, this.#lastEventId, this.#opened))
 		} catch {
 			if (this.#stopped) return
 			this.#reconnect()
@@ -241,11 +284,12 @@ export class FrameLoop {
 		}
 		this.#attempts = 0
 		if (this.#opened) {
-			this.reconnects += 1
-			this.#options.onReconnect?.(this.reconnects)
+			this.#reconnects += 1
+			this.#options.onReconnect?.(this.#reconnects)
 		}
 		this.#opened = true
-		this.connection = "live"
+		this.#connection = "live"
+		this.notify()
 		/** Read the frames while the catch-up runs. A stop that arrives first wins. */
 		void this.#read(body)
 		await this.#catchUp()
@@ -291,22 +335,28 @@ export class FrameLoop {
 		if (!parsed.ok) return
 		const frame = parsed.value
 		if (frame.kind === "comment") {
-			this.lastComment = Date.now()
+			this.#lastComment = Date.now()
 			try {
 				this.#options.onComment?.(frame.comment)
 			} catch {
-				return
+				/** A throwing callback costs the callback, not the heartbeat. */
 			}
+			this.notify()
 			return
 		}
 		let decision: FrameDecision
 		try {
 			decision = this.#options.onFrame(frame)
 		} catch {
+			/** The frame is dropped, but the caller may have changed its own
+			 * state before it threw, so a view still hears one change. */
+			this.notify()
 			return
 		}
 		const takeId = decision.takeId ?? decision.keep
-		if (takeId && (frame.idSet || frame.resetId)) this.lastEventId = frame.id
-		if (decision.stop) this.#stop("closed")
+		const before = this.#lastEventId
+		if (takeId && (frame.idSet || frame.resetId)) this.#lastEventId = frame.id
+		if (decision.stop) this.#stop("closed", true)
+		if (decision.keep || decision.stop || this.#lastEventId !== before) this.notify()
 	}
 }

@@ -7,10 +7,10 @@
  * apps may use either. `JobPoller` publishes the same reading by polling
  * where a stream cannot stay open.
  */
-import { JobStream } from "./job.svelte.js"
+import { JobStream } from "./job.js"
 import type { JobCatchUp, JobConnection, JobFrameAction, JobFrameHandler, JobStreamOptions } from "./types.js"
-import { JobPoller } from "./poll.svelte.js"
-import type { JobPollerOptions } from "./poll.svelte.js"
+import { JobPoller } from "./poll.js"
+import type { JobPollerOptions } from "./poll.js"
 
 /** Factory form of the same stream. Adapters and apps may use either. */
 export function createJobStream(options: JobStreamOptions): JobStream {

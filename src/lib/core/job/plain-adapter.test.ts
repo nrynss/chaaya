@@ -147,7 +147,7 @@ describe("plain adapter", () => {
 			watchId: "job-1",
 			requestInit: passcode.apply({ credentials: "include" }),
 		})
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("closed"))
 		expect(stream.progress).toEqual({
 			stage: "encode",
@@ -176,7 +176,7 @@ describe("plain adapter", () => {
 			watchId: "job-1",
 			fetchState: async () => ({ step: "encode", done: 4, of: 10, finished: true, result: "/media/out.bin" }),
 		})
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("closed"))
 		expect(stream.progress).toEqual({
 			stage: "encode",

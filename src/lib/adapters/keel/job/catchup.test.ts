@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /// <reference types="vite/client" />
 import { afterEach, describe, expect, test, vi } from "vitest"
-import { JobStream } from "./job.svelte"
+import { JobStream } from "./job"
 import type { JobSnapshot } from "./types"
 
 const jobId = "3f9a1c7e5b2d8046a1c3e5f7092b4d68"
@@ -70,7 +70,7 @@ async function follow(frames: string[], snapshot: JobSnapshot): Promise<JobStrea
 		url: "http://job.test/events",
 		fetchState: () => release.promise
 	})
-	stream.attach(() => () => {})
+	stream.attach()
 	await vi.waitFor(() => expect(stream.events.length).toBe(frames.length), { timeout: 2000 })
 	release.resolve(snapshot)
 	await vi.waitFor(() => expect(stream.connection).not.toBe("connecting"), { timeout: 2000 })
@@ -202,7 +202,7 @@ describe("catch-up freshness", () => {
 			url: "http://job.test/events",
 			fetchState: () => release.promise
 		})
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.events).toHaveLength(1), { timeout: 2000 })
 		release.resolve({ jobId, status: "running", current: 1, total: 12 })
 		await vi.waitFor(() => expect(stream.connection).toBe("live"), { timeout: 2000 })

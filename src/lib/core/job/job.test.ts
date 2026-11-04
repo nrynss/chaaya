@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 import type { JobCatchUp, JobFrameAction, JobStreamOptions } from "./types"
 import type { NamedEvent } from "../sse/frame"
 import { createJobStream } from "./index"
-import { JobStream } from "./job.svelte.js"
+import { JobStream } from "./job.js"
 
 function frame(name: string, id: number, data: string): string {
 	return [`event: ${name}`, `id: ${id}`, `data: ${data}`, "", ""].join("\n")
@@ -82,7 +82,7 @@ describe("core job stream", () => {
 			),
 		)
 		const stream = new JobStream(options())
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.progress.current).toBe(3))
 		expect(stream.progress).toEqual({ stage: "encode", current: 3, total: 10, status: "running" })
 		expect(stream.progress.id).toBeUndefined()
@@ -114,7 +114,7 @@ describe("core job stream", () => {
 			),
 		)
 		const stream = new JobStream(options())
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("closed"))
 		expect(stream.progress).toMatchObject({ stage: "encode", current: 2, total: 10, status: "done" })
 		expect(stream.frames).toHaveLength(2)
@@ -127,7 +127,7 @@ describe("core job stream", () => {
 			vi.fn(async () => new Response(streamOf([frame("error", 1, "{}")], false))),
 		)
 		const stream = new JobStream(options())
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("closed"))
 		expect(stream.error).toEqual({ code: "failed", message: "stopped" })
 		expect(stream.progress.status).toBe("error")
@@ -146,7 +146,7 @@ describe("core job stream", () => {
 				isTerminal: (reading) => reading.status === "done" || reading.status === "error",
 			}),
 		)
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.progress.current).toBe(5))
 		release.resolve({ reading: { current: 1, stage: "older", status: "running" } })
 		await vi.waitFor(() => expect(stream.connection).toBe("live"))
@@ -162,7 +162,7 @@ describe("core job stream", () => {
 		const onState = vi.fn()
 		vi.stubGlobal("fetch", vi.fn(async () => new Response(streamOf([frame("progress", 1, '{"current":5}')], false))))
 		const stream = new JobStream(options({ fetchState: () => release.promise, isTerminal, onState }))
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.progress.current).toBe(5))
 		const reading = { status: "finished", ...(current === undefined ? {} : { current }) }
 		release.resolve({ reading, error: { code: "stopped", message: "The job stopped." } })
@@ -182,7 +182,7 @@ describe("core job stream", () => {
 				fetchState: () => release.promise,
 			}),
 		)
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("live"))
 		release.resolve({ reading: { status: "finished", current: 4 } })
 		await vi.waitFor(() => expect(stream.progress.status).toBe("finished"))
@@ -199,7 +199,7 @@ describe("core job stream", () => {
 				isTerminal: (reading) => reading.status === "done",
 			}),
 		)
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("closed"))
 		expect(stream.progress).toEqual({ status: "done", current: 1 })
 		stream.close()
@@ -209,7 +209,7 @@ describe("core job stream", () => {
 		const fetchMock = vi.fn(async () => new Response("no", { status: 503 }))
 		vi.stubGlobal("fetch", fetchMock)
 		const stream = new JobStream(options())
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("failed"))
 		expect(fetchMock).toHaveBeenCalledTimes(1)
 		expect(stream.reconnects).toBe(0)
@@ -222,7 +222,7 @@ describe("core job stream", () => {
 		})
 		vi.stubGlobal("fetch", fetchMock)
 		const stream = new JobStream(options({ reconnect: { baseMs: 0, attempts: 4 } }))
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("failed"))
 		expect(fetchMock).toHaveBeenCalledTimes(1)
 		stream.close()
@@ -241,7 +241,7 @@ describe("core job stream", () => {
 				},
 			}),
 		)
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.progress.current).toBe(1))
 		const init = vi.mocked(fetch).mock.calls[0]?.[1]
 		const headers = new Headers(init?.headers)
@@ -267,7 +267,7 @@ describe("core job stream", () => {
 		})
 		vi.stubGlobal("fetch", fetchMock)
 		const stream = new JobStream(options())
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.reconnects).toBe(1))
 		const first = new Headers(vi.mocked(fetch).mock.calls[0]?.[1]?.headers)
 		const second = new Headers(vi.mocked(fetch).mock.calls[1]?.[1]?.headers)
@@ -289,7 +289,7 @@ describe("core job stream", () => {
 		})
 		vi.stubGlobal("fetch", fetchMock)
 		const stream = new JobStream(options())
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.progress.current).toBe(3))
 		const second = new Headers(vi.mocked(fetch).mock.calls[1]?.[1]?.headers)
 		expect(second.get("last-event-id")).toBeNull()
@@ -316,7 +316,7 @@ describe("core job stream", () => {
 				},
 			}),
 		)
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.reconnects).toBe(1))
 		await vi.waitFor(() => expect(stream.progress.current).toBe(2))
 		expect(seen).toEqual([1])
@@ -348,7 +348,7 @@ describe("core job stream", () => {
 				},
 			}),
 		)
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.frames).toHaveLength(1))
 		await new Promise((resolve) => setTimeout(resolve, 20))
 		expect(stream.progress.current).toBe(3)
@@ -366,7 +366,7 @@ describe("core job stream", () => {
 				isTerminal: (reading) => reading.status === "error",
 			}),
 		)
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("closed"))
 		expect(stream.error).toEqual({ code: "upstream_failed", message: "stopped" })
 		expect(stream.progress).toEqual({ status: "error", current: 1 })
@@ -388,7 +388,7 @@ describe("core job stream", () => {
 				prepareState: () => undefined,
 			}),
 		)
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("live"))
 		await new Promise((resolve) => setTimeout(resolve, 20))
 		expect(stream.progress).toEqual({ stage: "encode", current: 2, status: "running" })
@@ -414,7 +414,7 @@ describe("core job stream", () => {
 			),
 		)
 		const stream = new JobStream(options())
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.progress.current).toBe(4))
 		expect(stream.connection).toBe("live")
 		expect(stream.frames.map((item) => item.name)).toEqual(["progress"])
@@ -445,7 +445,7 @@ describe("core job stream", () => {
 				},
 			}),
 		)
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.progress.current).toBe(6))
 		expect(stream.connection).toBe("live")
 		expect(stream.frames.map((item) => item.name)).toEqual(["progress"])
@@ -478,7 +478,7 @@ describe("core job stream", () => {
 				},
 			}),
 		)
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("closed"))
 		expect(accepted).toEqual(["progress", "done"])
 		stream.close()
@@ -503,7 +503,7 @@ describe("core job stream", () => {
 		})
 		vi.stubGlobal("fetch", fetchMock)
 		const stream = new JobStream(options())
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.progress.current).toBe(3))
 		const second = new Headers(vi.mocked(fetch).mock.calls[1]?.[1]?.headers)
 		expect(second.get("last-event-id")).toBe("4")
@@ -529,7 +529,7 @@ describe("core job stream", () => {
 		})
 		vi.stubGlobal("fetch", fetchMock)
 		const stream = new JobStream(options())
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.progress.current).toBe(3))
 		const second = new Headers(vi.mocked(fetch).mock.calls[1]?.[1]?.headers)
 		expect(second.get("last-event-id")).toBeNull()
@@ -548,7 +548,7 @@ describe("core job stream", () => {
 				},
 			}),
 		)
-		stream.attach(() => () => {})
+		stream.attach()
 		await vi.waitFor(() => expect(stream.connection).toBe("live"))
 		expect(stream.progress.current).toBe(2)
 		stream.close()

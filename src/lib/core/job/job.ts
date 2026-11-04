@@ -1,7 +1,8 @@
 import type { ChaayaError } from "../error.js"
+import { Notifier } from "../observable.js"
 import type { JobProgress } from "../progress.js"
-import { FrameLoop } from "../sse/loop.svelte.js"
-import type { FrameDecision } from "../sse/loop.svelte.js"
+import { FrameLoop } from "../sse/loop.js"
+import type { FrameDecision } from "../sse/loop.js"
 import type { EventFrame, NamedEvent } from "../sse/frame.js"
 import type { JobCatchUp, JobConnection, JobFrameAction, JobStreamOptions } from "./types.js"
 
@@ -47,19 +48,25 @@ export function mergeProgress(base: JobProgress, reading: JobProgress): JobProgr
  * Comment frames never reach `onFrame` or `frameMap`, and do not move
  * Last-Event-ID, even when a comment carries an id line. The loop records
  * them on `lastComment` for a view that wants a heartbeat.
+ *
+ * The stream is an observable. It notifies once per kept frame, once per
+ * catch-up that lands, and once per change the loop reports (connection,
+ * reconnects, comments). A kept frame that ends the watch still notifies
+ * once.
  */
-export class JobStream {
-	/** The published reading. Fields stay absent until a frame or a catch-up sets them. */
-	progress = $state<JobProgress>({})
-	/** The failure of a terminal action, when that action carried one. */
-	error = $state<ChaayaError | undefined>(undefined)
-	/** Accepted frames that changed the reading, in arrival order. */
-	frames = $state<NamedEvent[]>([])
+export class JobStream extends Notifier {
+	#progress: JobProgress = {}
+	#error: ChaayaError | undefined = undefined
+	#frames: readonly NamedEvent[] = []
+	/** True while a catch-up lands, so the loop's notify for the close folds
+	 * into the one the catch-up sends. */
+	#applying = false
 
 	#options: JobStreamOptions
 	#loop: FrameLoop
 
 	constructor(options: JobStreamOptions) {
+		super()
 		this.#options = options
 		this.#loop = new FrameLoop({
 			url: options.url,
@@ -70,6 +77,27 @@ export class JobStream {
 			onFrame: (frame) => this.#accept(frame),
 			catchUp: () => this.#catchUp(),
 		})
+		this.#loop.subscribe(() => {
+			if (!this.#applying) this.notify()
+		})
+	}
+
+	/** The published reading. Fields stay absent until a frame or a catch-up
+	 * sets them. A change replaces the object. */
+	get progress(): JobProgress {
+		return this.#progress
+	}
+
+	/** The failure of a terminal action, when that action carried one. */
+	get error(): ChaayaError | undefined {
+		return this.#error
+	}
+
+	/** Accepted frames that changed the reading, in arrival order. The list is
+	 * replaced, never mutated, so the same reference holds between
+	 * notifications. */
+	get frames(): readonly NamedEvent[] {
+		return this.#frames
 	}
 
 	/** Where the stream stands. */
@@ -87,12 +115,12 @@ export class JobStream {
 		return this.#loop.lastComment
 	}
 
-	/** Follow the stream. Call it once during component initialisation. The
-	 * stream opens before the first render, and it closes when that component
-	 * is destroyed. A test passes its own cleanup runner, because only a
-	 * component owns the effect context the default runner needs. */
-	attach(registerCleanup?: (task: () => () => void) => void): void {
-		this.#loop.attach(registerCleanup)
+	/** Follow the stream. It returns the teardown, which closes the stream.
+	 * A Svelte component passes the stream to `attach` from
+	 * `@nrynss/chaaya/svelte`, which opens it with the component and closes
+	 * it when that component is destroyed. */
+	attach(): () => void {
+		return this.#loop.attach()
 	}
 
 	/** Stop following. It cancels the stream and any pending reconnect. A second call changes nothing. */
@@ -119,16 +147,22 @@ export class JobStream {
 		}
 		if (this.#loop.stopped) return
 		const reading = catchUp.reading
-		const latest = this.progress.current
+		const latest = this.#progress.current
 		const terminal = this.#options.isTerminal?.(reading) ?? false
 		// Terminal state answers whether the job ended, independently of its progress counter.
 		if (!terminal && latest !== undefined) {
 			if (reading.current === undefined || reading.current < latest) return
 		}
-		this.progress = mergeProgress(this.progress, reading)
-		if (catchUp.error !== undefined) this.error = catchUp.error
-		this.#options.onState?.(reading)
-		if (terminal) this.close()
+		this.#applying = true
+		try {
+			this.#progress = mergeProgress(this.#progress, reading)
+			if (catchUp.error !== undefined) this.#error = catchUp.error
+			this.#options.onState?.(reading)
+			if (terminal) this.close()
+		} finally {
+			this.#applying = false
+			this.notify()
+		}
 	}
 
 	/** Apply one event frame. A refusal, a missing name, and an ignore do not move Last-Event-ID. Comments never arrive here. */
@@ -143,14 +177,14 @@ export class JobStream {
 		if (typeof own !== "function") return { keep: false }
 		const action = asFrameAction(own(named))
 		if (action.kind === "ignore") return { keep: false }
-		this.frames.push(named)
+		this.#frames = [...this.#frames, named]
 		this.#options.onAccept?.(named)
 		if (action.kind === "progress") {
-			this.progress = mergeProgress(this.progress, action.reading)
+			this.#progress = mergeProgress(this.#progress, action.reading)
 			return { keep: true }
 		}
-		if (action.reading !== undefined) this.progress = mergeProgress(this.progress, action.reading)
-		if (action.error !== undefined) this.error = action.error
+		if (action.reading !== undefined) this.#progress = mergeProgress(this.#progress, action.reading)
+		if (action.error !== undefined) this.#error = action.error
 		return { keep: true, stop: true }
 	}
 }

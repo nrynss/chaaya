@@ -1,8 +1,8 @@
 import type { ChaayaError } from "../error.js"
 import type { JobProgress } from "../progress.js"
-import { runInEffect } from "../sse/effect.svelte.js"
+import { Notifier } from "../observable.js"
 import { isPaused, watchPause } from "../sse/pause.js"
-import { mergeProgress } from "./job.svelte.js"
+import { mergeProgress } from "./job.js"
 import type { JobConnection } from "./types.js"
 
 /** What one poller needs. The fetch and the map are the backend. The loop is not. */
@@ -68,15 +68,15 @@ function sameReading(a: JobProgress, b: JobProgress): boolean {
  * count toward the timeout.
  *
  * Construction touches nothing, so importing this module on a server is safe.
+ *
+ * The poller is an observable. It notifies once per landed reading, and
+ * once per pause, resume, and end of the watch. A failed read that retries
+ * changes nothing a view reads, so it notifies nothing.
  */
-export class JobPoller<T> {
-	/** The published reading. Fields stay absent until a poll sets them. */
-	progress = $state<JobProgress>({})
-	/** The failure that ended the watch, when it ended in failure. */
-	error = $state<ChaayaError | undefined>(undefined)
-	/** Where the watch stands. There is no reconnecting state. A failed read
-	 * retries on the same interval until the budget runs out. */
-	connection = $state<JobConnection>("connecting")
+export class JobPoller<T> extends Notifier {
+	#progress: JobProgress = {}
+	#error: ChaayaError | undefined = undefined
+	#connection: JobConnection = "connecting"
 
 	#options: JobPollerOptions<T>
 	#timer: ReturnType<typeof setTimeout> | undefined = undefined
@@ -93,10 +93,28 @@ export class JobPoller<T> {
 	#onAbort: (() => void) | undefined = undefined
 
 	constructor(options: JobPollerOptions<T>) {
+		super()
 		this.#options = options
 		this.#delay = options.intervalMs ?? 1000
 		this.#maxDelay = options.maxIntervalMs ?? 8000
 		this.#budget = options.errorBudget ?? 3
+	}
+
+	/** The published reading. Fields stay absent until a poll sets them. A
+	 * change replaces the object. */
+	get progress(): JobProgress {
+		return this.#progress
+	}
+
+	/** The failure that ended the watch, when it ended in failure. */
+	get error(): ChaayaError | undefined {
+		return this.#error
+	}
+
+	/** Where the watch stands. There is no reconnecting state. A failed read
+	 * retries on the same interval until the budget runs out. */
+	get connection(): JobConnection {
+		return this.#connection
 	}
 
 	/** True after close, a terminal reading, or a failure. */
@@ -104,15 +122,16 @@ export class JobPoller<T> {
 		return this.#stopped
 	}
 
-	/** Start polling. Call it once during component initialisation. A test passes its own cleanup runner. */
-	attach(registerCleanup: (task: () => () => void) => void = runInEffect): void {
+	/** Start polling. It returns the teardown, which closes the watch. A
+	 * Svelte component passes the poller to `attach` from
+	 * `@nrynss/chaaya/svelte`, which calls the teardown with the component. */
+	attach(): () => void {
 		if (this.#options.timeoutMs !== undefined) this.#deadline = Date.now() + this.#options.timeoutMs
 		const signal = this.#options.signal
 		if (signal !== undefined) {
 			if (signal.aborted) {
 				this.#stop("closed")
-				registerCleanup(() => () => this.close())
-				return
+				return () => this.close()
 			}
 			this.#onAbort = () => this.close()
 			signal.addEventListener("abort", this.#onAbort, { once: true })
@@ -125,7 +144,7 @@ export class JobPoller<T> {
 			if (isPaused()) this.#pause()
 		}
 		if (!this.#paused) void this.#poll()
-		registerCleanup(() => () => this.close())
+		return () => this.close()
 	}
 
 	/** Stop polling. It cancels the in-flight read and any pending poll. A second call changes nothing. */
@@ -148,7 +167,8 @@ export class JobPoller<T> {
 		}
 		this.#controller?.abort()
 		this.#controller = undefined
-		this.connection = state
+		this.#connection = state
+		this.notify()
 	}
 
 	/** Park the watch while the page cannot see the job. It sends no request
@@ -164,7 +184,8 @@ export class JobPoller<T> {
 		}
 		this.#controller?.abort()
 		this.#controller = undefined
-		this.connection = "paused"
+		this.#connection = "paused"
+		this.notify()
 	}
 
 	/** Read at once after a pause. It shifts the deadline past the hidden
@@ -177,7 +198,8 @@ export class JobPoller<T> {
 			if (this.#deadline !== undefined) this.#deadline += Date.now() - this.#pausedAt
 			this.#pausedAt = undefined
 		}
-		this.connection = "connecting"
+		this.#connection = "connecting"
+		this.notify()
 		void this.#poll()
 	}
 
@@ -191,13 +213,14 @@ export class JobPoller<T> {
 	async #poll(): Promise<void> {
 		if (this.#stopped || this.#paused) return
 		if (this.#deadline !== undefined && Date.now() >= this.#deadline) {
-			this.error = { code: "poll_timeout", message: "the watch ran past its timeout" }
+			this.#error = { code: "poll_timeout", message: "the watch ran past its timeout" }
 			this.#stop("failed")
 			return
 		}
 		const controller = new AbortController()
 		this.#controller = controller
 		let response: T
+		const before = this.#progress
 		try {
 			response = await this.#options.fetchState(controller.signal)
 			if (this.#stopped || this.#paused) return
@@ -206,10 +229,13 @@ export class JobPoller<T> {
 			if (this.#stopped || this.#paused) return
 			this.#failures += 1
 			if (this.#failures > this.#budget) {
-				this.error = { code: "poll_failed", message: "the watch could not read the work" }
+				this.#error = { code: "poll_failed", message: "the watch could not read the work" }
 				this.#stop("failed")
 				return
 			}
+			/** A callback that threw after the reading landed still leaves
+			 * that reading published, so a view hears it. */
+			if (this.#progress !== before) this.notify()
 			this.#later(this.#delay)
 		}
 	}
@@ -219,15 +245,16 @@ export class JobPoller<T> {
 	#accept(reading: JobProgress): void {
 		this.#failures = 0
 		const base = this.#options.intervalMs ?? 1000
-		if (sameReading(this.progress, mergeProgress(this.progress, reading))) this.#delay = Math.min(this.#delay * 2, this.#maxDelay)
+		if (sameReading(this.#progress, mergeProgress(this.#progress, reading))) this.#delay = Math.min(this.#delay * 2, this.#maxDelay)
 		else this.#delay = base
-		this.progress = mergeProgress(this.progress, reading)
+		this.#progress = mergeProgress(this.#progress, reading)
 		this.#options.onPoll?.(reading)
 		if (this.#options.isTerminal(reading)) {
 			this.#stop("closed")
 			return
 		}
-		this.connection = "live"
+		this.#connection = "live"
+		this.notify()
 		this.#later(this.#delay)
 	}
 }

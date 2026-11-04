@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from "svelte"
 	import { JobPoller, type JobProgress } from "$lib/core/index.js"
+	import { attach, reactive } from "$lib/svelte/index.js"
 
 	/* The polls the watch has started. The fetch runs even when a response
 	 * fails, so this counts attempts rather than readings. */
@@ -23,13 +24,13 @@
 		return { status: answer.status, current: answer.current, total: 4 }
 	}
 
-	const poller = new JobPoller({
+	const poller = reactive(new JobPoller({
 		fetchState,
 		toProgress,
 		isTerminal: (reading) => reading.status === "done",
 		intervalMs: 500
-	})
-	poller.attach()
+	}))
+	attach(poller)
 
 	/* A click on a server rendered button does nothing until hydration
 	 * attaches the handler. The markup below needs no button, but the flag
