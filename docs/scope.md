@@ -53,7 +53,7 @@ One typed client failure: `ApiError`. Envelope parsing is the adapter's job thro
 
 ## Timeline
 
-`@nrynss/chaaya/timeline` maps seconds to pixels under zoom and scroll, with ruler ticks for a target spacing. Edit maths moves and resizes a segment against snap targets, inside bounds, above a minimum length, and clear of neighbours. `timelineHandle` turns any element into an edge or body handle with pointer drag, Escape to cancel, and arrow keys with coarse and fine steps. It draws nothing.
+`@nrynss/chaaya/timeline` maps seconds to pixels under zoom and scroll, with ruler ticks for a target spacing. Edit maths moves and resizes a segment against snap targets, inside bounds, above a minimum length, and clear of neighbours. `timelineHandle` turns any element into an edge or body handle with pointer drag, Escape to cancel, and arrow keys with coarse and fine steps. It draws nothing. `TimelineScale` imports no framework. It extends `Notifier` from `@nrynss/chaaya/core` and notifies once per change, so a Svelte view wraps it in `reactive` from `@nrynss/chaaya/svelte`.
 
 ## Still image capture
 
@@ -95,7 +95,7 @@ A run refused for lack of balance ends in `insufficient`, read through the adapt
 
 ## Framework
 
-Svelte 5 only, for now. The published modules use runes. There is no Svelte 4 build. The SvelteKit helpers sit on their own export, with `@sveltejs/kit` as an optional peer, so Kit is not pulled into every import.
+Svelte 5 only, for now. Svelte 5.7 is the floor, because the binding uses `createSubscriber`. The core is moving onto a framework-neutral change signal, `Notifier` on `@nrynss/chaaya/core`, and `@nrynss/chaaya/svelte` turns it into Svelte reactivity with `reactive` and `attach`. `TimelineScale` is the first class on it. The other published modules still use runes until they move. There is no Svelte 4 build. The SvelteKit helpers sit on their own export, with `@sveltejs/kit` as an optional peer, so Kit is not pulled into every import.
 
 ## Out of scope
 

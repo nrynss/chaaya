@@ -141,3 +141,19 @@ test("the docs page passes the accessibility and contrast gates", async ({ page 
 	await page.getByTestId("run-gates").click()
 	await expect(page.getByTestId("gates")).toHaveText("done", { timeout: 15_000 })
 })
+
+test("the docs scale updates the view through the svelte binding", async ({ page }) => {
+	await page.goto("/docs/timeline")
+	await expect(page.getByTestId("zoom-in")).toBeEnabled()
+	await expect(page.getByTestId("density")).toHaveText("50 pixels per second")
+	await expect(page.getByTestId("playhead")).toHaveText("playhead at 125 pixels")
+
+	// The zoom anchors on the segment start at 1 second.
+	await page.getByTestId("zoom-in").click()
+	await expect(page.getByTestId("density")).toHaveText("100 pixels per second")
+	await expect(page.getByTestId("playhead")).toHaveText("playhead at 200 pixels")
+
+	await page.getByTestId("zoom-out").click()
+	await expect(page.getByTestId("density")).toHaveText("50 pixels per second")
+	await expect(page.getByTestId("playhead")).toHaveText("playhead at 125 pixels")
+})
