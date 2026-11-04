@@ -315,8 +315,8 @@ snapshot that omits the counter and the stage is another.
 ## Status
 
 Published on [npm](https://www.npmjs.com/package/@nrynss/chaaya) as
-`@nrynss/chaaya`. The current release is `0.5.0`, matching the frozen
-`api/0.5.0/` record and tag `v0.5.0`.
+`@nrynss/chaaya`. The current release is `0.6.0`, matching the frozen
+`api/0.6.0/` record and tag `v0.6.0`.
 
 ```sh
 npm install @nrynss/chaaya
@@ -326,10 +326,10 @@ npm install @nrynss/chaaya
 
 `api/<version>/` is the frozen public declarations for a version that has
 been tagged. It is history, not a copy that every pull request refreshes.
-`api/0.1.0` through `api/0.5.0` stay. Nothing in those directories is
+`api/0.1.0` through `api/0.6.0` stay. Nothing in those directories is
 rewritten.
 
-`api/0.5.0/` is the freeze for this release. The gate diffs `dist` against
+`api/0.6.0/` is the freeze for this release. The gate diffs `dist` against
 that record. It fails if a published record changes, and it fails if
 `package.json` is not strictly newer than every frozen record. The packed
 tarball is still typechecked. A record that exists must match the build,
@@ -338,7 +338,7 @@ exports. Before `1.0.0` a minor bump may remove declarations (`0.2.4` to
 `0.3.0`). A patch may not. From `1.0.0` only a major bump may remove them.
 
 The next freeze needs a package bump first. `tools/freeze-api.sh` refuses
-to overwrite `api/0.5.0/`. To add public declarations after a release,
+to overwrite `api/0.6.0/`. To add public declarations after a release,
 move `package.json` (and the lockfile root versions) to the next version
 with no record yet. The gate then defers the byte diff until that version
 is frozen.

@@ -3,12 +3,12 @@
 Changes that reach the published package. A release section names its tag.
 Work merged since the last tag sits under Unreleased.
 
-## Unreleased (0.6.0)
+## 0.6.0 - 2026-11-04 (tag `v0.6.0`)
 
 0.6.0 makes the core framework-neutral, with Svelte and React as bindings.
 It is a breaking release. The migration guide is
-[docs/migrating-0.6.md](docs/migrating-0.6.md). The API freeze for 0.6.0 has
-not run yet.
+[docs/migrating-0.6.md](docs/migrating-0.6.md).
+`api/0.6.0/` is the frozen record for this release.
 
 ### Added
 
