@@ -2,9 +2,9 @@
 
 > **Chaaya** (ഛായ): likeness, shade.
 
-A Svelte 5 kit of behaviour, not looks. Each app that uses it keeps its own
-visual identity. Chaaya supplies the parts that are hard to get right and the
-same in every app.
+A framework-neutral kit of behaviour, not looks, with Svelte 5 and React
+bindings. Each app that uses it keeps its own visual identity. Chaaya supplies
+the parts that are hard to get right and the same in every app.
 
 Chaaya is a kit, not a backend SDK. A product's wire contract does not live in
 the generic modules. Keel is one adapter, at `@nrynss/chaaya/keel`. An app that
@@ -66,7 +66,9 @@ What the kit covers, and what it does not:
   resumable direct multipart `uploadDirectMultipart` on caller supplied URLs.
 - **Errors:** one typed `ApiError`. Envelope parsing is the adapter's
   (`ApiErrorParser`).
-- **Framework:** Svelte 5 only, for now.
+- **Framework:** none in the core. Every stateful class is an observable on
+  `@nrynss/chaaya/core`. `@nrynss/chaaya/svelte` binds it to Svelte 5 and
+  `@nrynss/chaaya/react` to React. See [docs/bindings.md](docs/bindings.md).
 
 The written page is [docs/scope.md](docs/scope.md).
 
@@ -221,6 +223,11 @@ is styled only by the reference stylesheet, so the behaviour shows without
 suggesting a look.
 
 - [scope](/docs/scope): what Chaaya covers (SSE over fetch, upload shapes) and what it does not.
+- [bindings](/docs/bindings): the `Observable` contract, the Svelte and React
+  bindings, and how to write one for another framework. The written page is
+  [docs/bindings.md](docs/bindings.md).
+- [Migrating from 0.5 to 0.6](docs/migrating-0.6.md): wrap every instance in
+  `reactive`, take the teardown `attach()` returns, and the other 0.6 breaks.
 - [tokens](/docs/tokens): the fixed role names and a checker that reports a
   role a theme block leaves out.
 - [theme](/docs/theme): the three-state theme mechanism and the head script

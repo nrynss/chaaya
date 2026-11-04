@@ -5,8 +5,10 @@ Work merged since the last tag sits under Unreleased.
 
 ## Unreleased (0.6.0)
 
-0.6.0 makes the core framework-neutral, with Svelte as one binding. It is a
-breaking release. The migration guide lands before the freeze.
+0.6.0 makes the core framework-neutral, with Svelte and React as bindings.
+It is a breaking release. The migration guide is
+[docs/migrating-0.6.md](docs/migrating-0.6.md). The API freeze for 0.6.0 has
+not run yet.
 
 ### Added
 
@@ -28,6 +30,10 @@ breaking release. The migration guide lands before the freeze.
   optional peer, `^18.0.0 || ^19.0.0`. Under Strict Mode in development, a
   target whose teardown closes it for good, such as `FrameLoop`, stays
   closed after the second mount; build one inside the effect there.
+
+- `docs/bindings.md` and the `/docs/bindings` page: the `Observable`
+  contract, both bindings, and a binding for another framework in about 20
+  lines. `docs/migrating-0.6.md`: every signature that changed since 0.5.
 
 ### Changed
 

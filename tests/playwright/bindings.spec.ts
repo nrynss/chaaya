@@ -35,3 +35,17 @@ test("reads, methods, and setters re-run one template evaluation per notificatio
 	await expect(page.getByTestId("teardowns")).toHaveText("2")
 	expect(errors).toEqual([])
 })
+
+test("the bindings page shows a wrapped reading that follows and a bare one that does not", async ({ page }) => {
+	const errors: string[] = []
+	page.on("pageerror", (error) => errors.push(error.message))
+	await page.goto("/docs/bindings")
+	await expect(page.getByTestId("hydrated")).toHaveText("ready")
+	await expect(page.getByTestId("wrapped")).toHaveText("0")
+	await expect(page.getByTestId("bare")).toHaveText("0")
+	await page.getByTestId("increment").click()
+	await page.getByTestId("increment").click()
+	await expect(page.getByTestId("wrapped")).toHaveText("2")
+	await expect(page.getByTestId("bare")).toHaveText("0")
+	expect(errors).toEqual([])
+})
