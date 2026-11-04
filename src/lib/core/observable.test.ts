@@ -137,3 +137,27 @@ test("subscribe refuses a listener that is not a function", () => {
 	const counter = new Counter()
 	expect(() => counter.subscribe(undefined as unknown as () => void)).toThrow(TypeError)
 })
+
+test("subscribe works unbound", () => {
+	const counter = new Counter()
+	const subscribe = counter.subscribe
+	const listener = vi.fn()
+	const unsubscribe = subscribe(listener)
+	counter.bump()
+	unsubscribe()
+	counter.bump()
+	expect(listener).toHaveBeenCalledTimes(1)
+	expect(counter.subscribe).toBe(subscribe)
+})
+
+test("a listener reads the new state and the new version", () => {
+	const counter = new Counter()
+	const readings: Array<[number, number]> = []
+	counter.subscribe(() => readings.push([counter.count, counter.version]))
+	counter.bump()
+	counter.bumpThrice()
+	expect(readings).toEqual([
+		[1, 1],
+		[4, 2]
+	])
+})

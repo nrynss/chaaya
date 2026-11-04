@@ -57,3 +57,25 @@ test("construction notifies nothing", () => {
 	const scale = new TimelineScale(50, 4)
 	expect(scale.version).toBe(0)
 })
+
+test("a refused zoom throws and notifies nothing", () => {
+	const scale = new TimelineScale(100, 2)
+	const listener: Array<number> = []
+	scale.subscribe(() => listener.push(scale.version))
+	expect(() => scale.zoom(0, 5)).toThrow(RangeError)
+	expect(() => scale.zoom(2, Number.NaN)).toThrow(RangeError)
+	expect(listener).toEqual([])
+	expect(scale.scale).toEqual({ pixelsPerSecond: 100, scrollSeconds: 2 })
+})
+
+test("an unsubscribed listener hears no later write", () => {
+	const scale = new TimelineScale()
+	let heard = 0
+	const unsubscribe = scale.subscribe(() => {
+		heard += 1
+	})
+	scale.scrollSeconds = 1
+	unsubscribe()
+	scale.scrollSeconds = 2
+	expect(heard).toBe(1)
+})

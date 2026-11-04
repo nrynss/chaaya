@@ -13,7 +13,8 @@ breaking release. The migration guide lands before the freeze.
 - `Notifier`, `Observable`, and `Listener` on `@nrynss/chaaya/core`. A
   stateful class keeps its fields private behind getters and calls
   `notify()` once per logical change. `subscribe(listener)` returns the
-  unsubscribe, and `version` increments on every change. Notification is
+  unsubscribe, and `version` increments once per change, before listeners
+  run. `subscribe` is bound to its instance, so it can be passed unbound. Notification is
   synchronous. A listener that throws does not stop the others, and its
   error is reported through `reportError`, or rethrown from a microtask
   where the runtime has none.

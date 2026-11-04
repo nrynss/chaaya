@@ -13,7 +13,8 @@ export type Listener = () => void
 export interface Observable {
 	/** Call listener after any public state change. Returns the unsubscribe. */
 	subscribe(listener: Listener): () => void
-	/** Increments on every change. A cheap snapshot key for bindings. */
+	/** Increments once per logical change, before listeners run. A cheap
+	 * snapshot key for bindings. */
 	readonly version: number
 }
 
@@ -52,14 +53,17 @@ export class Notifier implements Observable {
 	#subscriptions = new Set<Subscription>()
 	#version = 0
 
-	/** Increments on every change. A cheap snapshot key for bindings. */
+	/** Increments once per logical change, before listeners run. A cheap
+	 * snapshot key for bindings. */
 	get version(): number {
 		return this.#version
 	}
 
 	/** Call listener after any public state change. Returns the unsubscribe,
-	 * which is safe to call more than once. */
-	subscribe(listener: Listener): () => void {
+	 * which is safe to call more than once. The function is bound to its
+	 * instance, so a binding may pass `x.subscribe` around unbound, the way
+	 * an external-store hook takes it. */
+	readonly subscribe = (listener: Listener): (() => void) => {
 		if (typeof listener !== "function") {
 			throw new TypeError("subscribe needs a listener function.")
 		}

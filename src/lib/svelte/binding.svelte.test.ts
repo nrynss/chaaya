@@ -57,15 +57,17 @@ test("a derived over a method re-runs, and a plain instance never does", () => {
 test("the target subscription opens with the first reader and closes with the last", async () => {
 	const scale = new TimelineScale()
 	let open = 0
-	const subscribe = scale.subscribe.bind(scale)
-	scale.subscribe = (listener) => {
-		open += 1
-		const unsubscribe = subscribe(listener)
-		return () => {
-			open -= 1
-			unsubscribe()
+	const subscribe = scale.subscribe
+	Object.defineProperty(scale, "subscribe", {
+		value: (listener: () => void) => {
+			open += 1
+			const unsubscribe = subscribe(listener)
+			return () => {
+				open -= 1
+				unsubscribe()
+			}
 		}
-	}
+	})
 	const view = reactive(scale)
 	void view.pixelsPerSecond
 	expect(open).toBe(0)
@@ -103,6 +105,55 @@ test("the proxy keeps private fields, binds methods stably, and wraps once", () 
 	view.scrollSeconds = 1
 	expect(target.scrollSeconds).toBe(1)
 	expect(view.version).toBe(target.version)
+})
+
+/** A target with private state, a method, and a replaceable own function. */
+class Counter extends Notifier {
+	#value = 0
+	get value(): number {
+		return this.#value
+	}
+	set value(value: number) {
+		if (Object.is(value, this.#value)) return
+		this.#value = value
+		this.notify()
+	}
+	increment(): void {
+		this.value += 1
+	}
+	read = (): number => this.#value
+}
+
+test("a detached method and a setter keep the raw receiver", () => {
+	const target = new Counter()
+	const counter = reactive(target)
+	counter.value = 3
+	const increment = counter.increment
+	increment()
+	expect(target.value).toBe(4)
+	expect(counter.version).toBe(2)
+})
+
+test("a bound method keeps its identity until its source changes", () => {
+	const target = new Counter()
+	const counter = reactive(target)
+	const original = counter.read
+	expect(counter.read).toBe(original)
+	target.read = () => 9
+	expect(counter.read).not.toBe(original)
+	expect(counter.read).toBe(counter.read)
+	expect(counter.read()).toBe(9)
+})
+
+test("a subscription through the proxy hears changes and unsubscribes", () => {
+	const counter = reactive(new Counter())
+	const readings: number[] = []
+	const subscribe = counter.subscribe
+	const unsubscribe = subscribe(() => readings.push(counter.value))
+	counter.increment()
+	unsubscribe()
+	counter.increment()
+	expect(readings).toEqual([1])
 })
 
 test("reactive refuses a value that is not observable", () => {

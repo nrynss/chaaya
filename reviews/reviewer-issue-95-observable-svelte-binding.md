@@ -48,3 +48,29 @@ Reviewed hash: `3a15c8e`, after the round-one fix.
 - `npm run check` (0 errors, 0 warnings), `npx eslint src/lib/svelte`, and `npx vitest run src/lib/svelte/` (7 passed) passed on this head. CI `gate` passed on the PR.
 
 C 0, H 0, M 0, L 0. Residue from round one: none. Verdict: APPROVE, pending CodeRabbit.
+
+## Round three
+
+Reviewed after the ideas from the earlier take on #95 in #104 were brought in. That diff was read in full and compared with this branch against #95 and #93.
+
+What changed:
+
+- `Notifier.subscribe` is now an instance-bound arrow property, as in #104. An external-store hook such as React's `useSyncExternalStore` (#101) takes `x.subscribe` unbound, and a method would lose its receiver there. A new test subscribes through a detached `subscribe`.
+- `version` is documented as incrementing before listeners run, and a test reads the new state and the new version inside the listener.
+- Tests adopted from #104: a refused zoom throws and notifies nothing, an unsubscribed listener hears no later write, a detached method and a setter keep the raw receiver through the proxy, a bound method keeps its identity until its own-property source is replaced, and a subscription made through the proxy hears changes and unsubscribes.
+- The browser harness `/tests/bindings` and `tests/playwright/bindings.spec.ts`, adapted from #104. They check one template evaluation per notification across several reads, no re-run on an equal write, a stable method, no page error, and attach and teardown exactly once per mount across two mounts.
+
+Checks:
+
+- `CHAAYA_SKIP_BROWSER=1 ./tools/check.sh` passed with 532 tests.
+- The bindings and timeline specs passed on Chromium and Firefox: 11 of 11 on each.
+- Mutation: running `attach()` tracked instead of untracked makes the effect loop. The harness reads 1000 attaches and the spec fails on both engines.
+- Adversarial read of the bound `subscribe`: it is an own enumerable property now. `Object.keys` and a spread of an instance list it. `JSON.stringify` skips functions, so serialised output is unchanged. Field initialisers run in declaration order, so `#subscriptions` exists before `subscribe`. Read through `reactive`, the property comes back as a cached bound copy, which is harmless. No defect.
+
+Kept deliberately different from #104:
+
+- #104 swallows a listener error. This branch reports it through `reportError`, or rethrows it from a microtask, so a broken listener stays visible. #95 asks only that a thrower not stop the others.
+- #104's proxy tests ran under the server build of Svelte, where `createSubscriber` is a no-op. Here the binding tests run in the `svelte-client` project, so a reactive read is shown updating in Vitest too.
+- Kept from this branch and absent in #104: `TypeError` guards in `subscribe`, `reactive`, and `attach`; proxy reuse per target; the frozen-property guard; README, `docs/scope.md`, and the CHANGELOG.
+
+C 0, H 0, M 0, L 0. Verdict: APPROVE, pending CodeRabbit.
