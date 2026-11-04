@@ -21,6 +21,13 @@ breaking release. The migration guide lands before the freeze.
   reads of an observable reactive in a template, an effect, or a
   `$derived`. `attach(x)` runs `x.attach()` in the calling effect and calls
   the teardown it returns when the effect is destroyed.
+- `@nrynss/chaaya/react`, the React binding. `useObservable(x)` re-renders
+  a component once per notification, through `useSyncExternalStore` with
+  `x.version` as the snapshot, and returns `x`. `useAttached(x)` calls
+  `x.attach()` after mount and runs its teardown on unmount. `react` is an
+  optional peer, `^18.0.0 || ^19.0.0`. Under Strict Mode in development, a
+  target whose teardown closes it for good, such as `FrameLoop`, stays
+  closed after the second mount; build one inside the effect there.
 
 ### Changed
 

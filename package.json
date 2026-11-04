@@ -58,6 +58,10 @@
       "svelte": "./dist/sveltekit/index.js",
       "default": "./dist/sveltekit/index.js"
     },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "default": "./dist/react/index.js"
+    },
     "./sse": {
       "types": "./dist/core/sse/index.d.ts",
       "default": "./dist/core/sse/index.js"
@@ -124,6 +128,7 @@
     "@sveltejs/kit": "^2.0.0",
     "axe-core": "^4.13.0",
     "bits-ui": "^2.0.0",
+    "react": "^18.0.0 || ^19.0.0",
     "svelte": "^5.7.0"
   },
   "peerDependenciesMeta": {
@@ -131,6 +136,9 @@
       "optional": true
     },
     "bits-ui": {
+      "optional": true
+    },
+    "react": {
       "optional": true
     },
     "svelte": {
@@ -144,12 +152,17 @@
     "@sveltejs/kit": "^2.70.3",
     "@sveltejs/package": "^2.5.8",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^26.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "eslint": "^10.0.0",
     "eslint-plugin-svelte": "^3.23.0",
     "globals": "^17.12.0",
     "jsdom": "^30.0.1",
     "publint": "^0.3.24",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "svelte": "^5.57.0",
     "svelte-check": "^4.7.6",
     "typescript": "^5.9.3",

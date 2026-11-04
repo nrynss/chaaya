@@ -15,6 +15,29 @@ const bindingFiles = ["src/lib/svelte/**", "src/lib/sveltekit/**"]
  * `@sveltejs/` package, or a `.svelte` component file. */
 const svelteSource = "/^(svelte(\\u002F.*)?|@sveltejs\\u002F.*|.*\\.svelte)$/"
 
+/** A source that reaches React: `react`, `react-dom`, a subpath of either,
+ * or the React Testing Library. */
+const reactSource = "/^(react|react-dom|@testing-library\\u002Freact)(\\u002F.*)?$/"
+
+/** The React import rules, the same three shapes as the Svelte ones. */
+const reactImports = [
+  {
+    selector: `ImportDeclaration[source.value=${reactSource}]`,
+    message: "Only src/lib/react imports React. Keep this module framework-neutral."
+  },
+  {
+    selector: `ExportNamedDeclaration[source.value=${reactSource}], ExportAllDeclaration[source.value=${reactSource}]`,
+    message: "Only src/lib/react re-exports React. Keep this module framework-neutral."
+  },
+  {
+    selector: `ImportExpression[source.value=${reactSource}]`,
+    message: "Only src/lib/react imports React, even lazily. Keep this module framework-neutral."
+  }
+]
+
+/** The React binding directory. It may reach React, never Svelte. */
+const reactFiles = ["src/lib/react/**"]
+
 /** The neutral import rules: a static import, a re-export, and a dynamic
  * import of a Svelte source each fail. */
 const neutralImports = [
@@ -61,15 +84,29 @@ export default defineConfig(
   },
   {
     // The library is framework-neutral outside the binding directories. A
-    // Svelte import there, a SvelteKit import, or a component import fails
-    // here, before review. The patterns read the import source, so a bare
-    // specifier, a subpath and a relative path fail alike, and re-exports and
-    // dynamic imports fail the same way. Runes are not imports, so
+    // Svelte import there, a SvelteKit import, a React import, or a component
+    // import fails here, before review. The patterns read the import
+    // source, so a bare specifier, a subpath and a relative path fail alike,
+    // and re-exports and dynamic imports fail the same way. Runes are not imports, so
     // tools/guards/framework-neutral.mjs hunts them instead.
     files: neutralFiles,
-    ignores: bindingFiles,
+    ignores: [...bindingFiles, ...reactFiles],
+    rules: {
+      "no-restricted-syntax": ["error", ...neutralImports, ...reactImports]
+    }
+  },
+  {
+    // The React binding reaches React and nothing from Svelte.
+    files: reactFiles,
     rules: {
       "no-restricted-syntax": ["error", ...neutralImports]
+    }
+  },
+  {
+    // The Svelte binding reaches Svelte and nothing from React.
+    files: bindingFiles,
+    rules: {
+      "no-restricted-syntax": ["error", ...reactImports]
     }
   },
   {
@@ -98,6 +135,7 @@ export default defineConfig(
       "no-restricted-syntax": [
         "error",
         ...neutralImports,
+        ...reactImports,
         {
           selector: "ImportDeclaration[source.value=/\\.css$/]",
           message: "Core imports no stylesheet. Keep the values in the consumer theme."
