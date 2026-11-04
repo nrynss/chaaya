@@ -98,6 +98,10 @@ stop()
 `followTopUp` is often called from an event handler. Keep its teardown and
 call it from `onDestroy`, or call it from `onMount` and return the teardown.
 
+A React component calls `useAttached(x)` from `@nrynss/chaaya/react`. It
+keeps a closing target, such as a `FrameLoop`, alive through Strict Mode's
+development remount; see [bindings.md](bindings.md#react).
+
 ## `TranscriptFollower.follow()` becomes `attach()`
 
 ```svelte

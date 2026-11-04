@@ -7,6 +7,9 @@ import { JobStream } from "../core/job/job.js"
 import type { JobFrameAction } from "../core/job/types.js"
 import type { NamedEvent } from "../core/sse/frame.js"
 import { FrameLoop } from "../core/sse/loop.js"
+import { createEventStream } from "../core/sse/events.js"
+import { JobPoller } from "../core/job/poll.js"
+import { SessionGuard } from "../guard/session-guard.js"
 import { PricedAction } from "../priced/priced-action.js"
 import { useAttached, useObservable } from "./index.js"
 
@@ -18,6 +21,12 @@ afterEach(() => {
 	vi.unstubAllGlobals()
 	vi.useRealTimers()
 })
+
+/** Let queued microtasks, a deferred teardown among them, run. */
+async function flushMicrotasks(): Promise<void> {
+	await Promise.resolve()
+	await Promise.resolve()
+}
 
 function eventFrame(name: string, id: number, data = "{}"): string {
 	return [`event: ${name}`, `id: ${id}`, `data: ${data}`, "", ""].join("\n")
@@ -95,6 +104,7 @@ describe("useObservable and useAttached", () => {
 		expect(view.container.textContent).toBe("live:3:1")
 		expectOneRenderPerNotify(log, loop)
 		view.unmount()
+		await flushMicrotasks()
 		expect(loop.connection).toBe("closed")
 	})
 
@@ -224,7 +234,7 @@ describe("useObservable and useAttached", () => {
 		expect(renders).toBe(settled + 1)
 	})
 
-	test("useAttached attaches after mount and tears down on unmount, Strict Mode included", () => {
+	test("useAttached attaches once under Strict Mode and tears down a microtask after unmount", async () => {
 		const calls: string[] = []
 		const target = {
 			attach(): () => void {
@@ -238,11 +248,85 @@ describe("useObservable and useAttached", () => {
 			return createElement("output")
 		}
 		const view = render(createElement(StrictMode, null, createElement(Holder)))
-		// Strict Mode renders twice, then mounts, unmounts and mounts again.
-		expect(calls.filter((call) => call !== "render")).toEqual(["attach", "teardown", "attach"])
+		await flushMicrotasks()
+		// Strict Mode unmounts and remounts the effect at once. The teardown
+		// waits a microtask, the remount cancels it, and the attach stays.
+		expect(calls.filter((call) => call !== "render")).toEqual(["attach"])
 		expect(calls.indexOf("attach")).toBeGreaterThan(calls.indexOf("render"))
 		view.unmount()
-		expect(calls.filter((call) => call !== "render")).toEqual(["attach", "teardown", "attach", "teardown"])
+		expect(calls.filter((call) => call !== "render")).toEqual(["attach"])
+		await flushMicrotasks()
+		expect(calls.filter((call) => call !== "render")).toEqual(["attach", "teardown"])
+	})
+
+	test("a new target attaches at once and the old one tears down a microtask later", async () => {
+		const calls: string[] = []
+		const make = (name: string) => ({
+			attach(): () => void {
+				calls.push(`attach ${name}`)
+				return () => calls.push(`teardown ${name}`)
+			}
+		})
+		const first = make("a")
+		const second = make("b")
+		let swap!: () => void
+		function Holder(): ReactElement {
+			const [target, setTarget] = useState(first)
+			swap = () => setTarget(second)
+			useAttached(target)
+			return createElement("output")
+		}
+		const view = render(createElement(StrictMode, null, createElement(Holder)))
+		await flushMicrotasks()
+		act(() => swap())
+		await flushMicrotasks()
+		expect(calls).toEqual(["attach a", "attach b", "teardown a"])
+		view.unmount()
+		await flushMicrotasks()
+		expect(calls).toEqual(["attach a", "attach b", "teardown a", "teardown b"])
+	})
+
+	test("a remount under a new key adopts the live attachment of the same target", async () => {
+		const calls: string[] = []
+		let teardown: (() => void) | null = null
+		// Like ClipScheduler: a second attach returns the same teardown.
+		const target = {
+			attach(): () => void {
+				if (teardown !== null) return teardown
+				calls.push("attach")
+				teardown = () => {
+					calls.push("teardown")
+					teardown = null
+				}
+				return teardown
+			}
+		}
+		function Holder(): ReactElement {
+			useAttached(target)
+			return createElement("output")
+		}
+		let rekey!: () => void
+		function Parent(): ReactElement {
+			const [key, setKey] = useState(0)
+			rekey = () => setKey((k) => k + 1)
+			return createElement(Holder, { key })
+		}
+		const view = render(createElement(Parent))
+		act(() => rekey())
+		await flushMicrotasks()
+		expect(calls).toEqual(["attach"])
+		view.unmount()
+		await flushMicrotasks()
+		expect(calls).toEqual(["attach", "teardown"])
+	})
+
+	test("useAttached refuses an attach that returns no teardown", () => {
+		function Bad(): ReactElement {
+			useAttached({ attach: () => undefined as unknown as () => void })
+			return createElement("output")
+		}
+		vi.spyOn(console, "error").mockImplementation(() => {})
+		expect(() => render(createElement(Bad))).toThrow(TypeError)
 	})
 
 	test("useObservable refuses a value with no subscribe", () => {
@@ -252,5 +336,105 @@ describe("useObservable and useAttached", () => {
 		}
 		vi.spyOn(console, "error").mockImplementation(() => {})
 		expect(() => render(createElement(Bad))).toThrow(TypeError)
+	})
+})
+
+describe("the closing classes survive Strict Mode", () => {
+	/** A component under Strict Mode that reads and attaches one target. */
+	function strict<T extends Observable & { attach(): () => void }>(target: T, read: (t: T) => string): ReactElement {
+		function Holder(): ReactElement {
+			const live = useObservable(target)
+			useAttached(live)
+			return createElement("output", null, read(live))
+		}
+		return createElement(StrictMode, null, createElement(Holder))
+	}
+
+	test("a FrameLoop stays live with one connection", async () => {
+		const fetchMock = vi.fn(async () => new Response(streamOf([eventFrame("alpha", 1)], false)))
+		vi.stubGlobal("fetch", fetchMock)
+		const loop = new FrameLoop({ url: "http://strict.test/loop", onFrame: () => ({ keep: true }) })
+		const view = render(strict(loop, (l) => `${l.connection}:${l.lastEventId}`))
+		await act(async () => {
+			await vi.waitFor(() => expect(loop.lastEventId).toBe(1))
+		})
+		expect(view.container.textContent).toBe("live:1")
+		expect(fetchMock).toHaveBeenCalledTimes(1)
+		view.unmount()
+		await flushMicrotasks()
+		expect(loop.connection).toBe("closed")
+	})
+
+	test("a JobStream reaches its terminal state", async () => {
+		const readingOf = (frame: NamedEvent): JobFrameAction =>
+			frame.name === "done"
+				? { kind: "terminal", reading: { status: "done" } }
+				: { kind: "progress", reading: { current: 1, status: "running" } }
+		vi.stubGlobal("fetch", vi.fn(async () => new Response(streamOf([eventFrame("progress", 1), eventFrame("done", 2)], false))))
+		const stream = new JobStream({ url: "http://strict.test/job", frameMap: { progress: readingOf, done: readingOf }, reconnect: { baseMs: 0, maxMs: 0, attempts: 1 } })
+		const view = render(strict(stream, (s) => `${s.connection}:${s.progress.status ?? "-"}`))
+		await act(async () => {
+			await vi.waitFor(() => expect(stream.connection).toBe("closed"))
+		})
+		expect(view.container.textContent).toBe("closed:done")
+		expect(stream.progress.status).toBe("done")
+	})
+
+	test("createEventStream keeps receiving events", async () => {
+		vi.stubGlobal("fetch", vi.fn(async () => new Response(streamOf([eventFrame("note", 1), eventFrame("note", 2)], false))))
+		const events = createEventStream("http://strict.test/events")
+		const view = render(strict(events, (e) => `${e.connection}:${e.events.length}`))
+		await act(async () => {
+			await vi.waitFor(() => expect(events.events.length).toBe(2))
+		})
+		expect(view.container.textContent).toBe("live:2")
+		view.unmount()
+		await flushMicrotasks()
+		expect(events.connection).toBe("closed")
+	})
+
+	test("a JobPoller keeps polling to its terminal reading", async () => {
+		let reads = 0
+		const poller = new JobPoller<number>({
+			fetchState: async () => (reads += 1),
+			toProgress: (n) => ({ current: n, status: n >= 2 ? "done" : "running" }),
+			isTerminal: (reading) => reading.status === "done",
+			intervalMs: 1,
+			maxIntervalMs: 1
+		})
+		const view = render(strict(poller, (p) => `${p.connection}:${p.progress.current ?? "-"}`))
+		await act(async () => {
+			await vi.waitFor(() => expect(poller.progress.status).toBe("done"))
+		})
+		expect(view.container.textContent).toContain(":2")
+		expect(reads).toBe(2)
+	})
+
+	test("a SessionGuard sends no close during the Strict Mode remount, and one on unmount", async () => {
+		const beacon = vi.fn(() => true)
+		vi.stubGlobal("navigator", { sendBeacon: beacon })
+		const guard = new SessionGuard({ url: "http://strict.test/close" })
+		const view = render(strict(guard, (g) => String(g.closed)))
+		await flushMicrotasks()
+		expect(beacon).not.toHaveBeenCalled()
+		expect(view.container.textContent).toBe("false")
+		window.dispatchEvent(new Event("pagehide"))
+		expect(beacon).toHaveBeenCalledTimes(1)
+		view.unmount()
+		await flushMicrotasks()
+		expect(beacon).toHaveBeenCalledTimes(1)
+	})
+
+	test("an unmounted guard closes once, a microtask after unmount", async () => {
+		const beacon = vi.fn(() => true)
+		vi.stubGlobal("navigator", { sendBeacon: beacon })
+		const guard = new SessionGuard({ url: "http://strict.test/close" })
+		const view = render(strict(guard, (g) => String(g.closed)))
+		await flushMicrotasks()
+		view.unmount()
+		expect(beacon).not.toHaveBeenCalled()
+		await flushMicrotasks()
+		expect(beacon).toHaveBeenCalledTimes(1)
+		expect(guard.closed).toBe(true)
 	})
 })

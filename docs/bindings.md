@@ -85,11 +85,19 @@ function Progress() {
 snapshot, so one notification is one render and nothing tears. `useAttached(x)`
 calls `x.attach()` after mount and runs the teardown on unmount.
 
-Strict Mode in development mounts each component twice. A target whose
-teardown ends it for good, such as `FrameLoop`, `JobStream`,
-`createEventStream`, `JobPoller`, or `SessionGuard`, stays closed after the
-first teardown. Under Strict Mode, build such a target inside the effect that
-attaches it.
+Strict Mode in development unmounts and remounts each effect at once.
+`FrameLoop`, `JobStream`, `createEventStream`, `JobPoller`, and
+`SessionGuard` end for good on their teardown, so `useAttached` waits one
+microtask before it runs a teardown. A re-attach of the same target in that
+microtask, which is what Strict Mode does, cancels it and keeps the live
+attachment. Strict Mode therefore leaves one attachment: one connection, no
+state lost, and no close sent by a guard during mount. A real unmount tears
+the target down a microtask later.
+
+A closing target still cannot come back after a real teardown. A component
+hidden by `<Activity mode="hidden">` and shown later, for example, finds it
+closed. Build a fresh instance for each such lifetime, keyed so the hook sees
+a new target.
 
 ## Writing a binding
 

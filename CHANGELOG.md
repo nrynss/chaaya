@@ -27,9 +27,12 @@ not run yet.
   a component once per notification, through `useSyncExternalStore` with
   `x.version` as the snapshot, and returns `x`. `useAttached(x)` calls
   `x.attach()` after mount and runs its teardown on unmount. `react` is an
-  optional peer, `^18.0.0 || ^19.0.0`. Under Strict Mode in development, a
-  target whose teardown closes it for good, such as `FrameLoop`, stays
-  closed after the second mount; build one inside the effect there.
+  optional peer, `^18.0.0 || ^19.0.0`. `useAttached` runs a teardown one
+  microtask late, and a re-attach of the same target in that microtask
+  cancels it. Strict Mode's unmount and remount in development therefore
+  keep one live attachment, so a `FrameLoop`, `JobStream`,
+  `createEventStream`, `JobPoller`, or `SessionGuard` survives it, and a
+  guard sends no close during mount. Core is unchanged.
 
 - `docs/bindings.md` and the `/docs/bindings` page: the `Observable`
   contract, both bindings, and a binding for another framework in about 20

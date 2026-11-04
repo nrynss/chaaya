@@ -127,8 +127,9 @@ Published as `@nrynss/chaaya`.
 - `@nrynss/chaaya/react`: the React binding. `useObservable(x)` re-renders
   the component once per notification of `x` and returns `x`. It reads
   `x.version` through `useSyncExternalStore`, so nothing tears.
-  `useAttached(x)` calls `x.attach()` after mount and runs the teardown on
-  unmount. Needs React 18 or later, an optional peer.
+  `useAttached(x)` calls `x.attach()` after mount and runs the teardown a
+  microtask after unmount, so Strict Mode's remount keeps one live
+  attachment. Needs React 18 or later, an optional peer.
 - `@nrynss/chaaya/sveltekit`: form-action mappers for `ApiError`, and
   `createJobStreamResponse` for a `text/event-stream` `+server.ts`. Optional
   `@sveltejs/kit` peer.
