@@ -627,4 +627,24 @@ describe("notifications", () => {
 			expect(acknowledged + pending).toBeLessThanOrEqual(goldenChunks.length)
 		}
 	})
+
+	test("the server's stored bytes land with the acknowledgement that reported them", async () => {
+		const server = new UploadServer()
+		vi.stubGlobal("fetch", server.handle)
+		const uploader = new ChunkUploader({ url: base, owner: "owner-1", contentType: "audio/webm", chunkSize, store: new MemoryStore() })
+		await uploader.start()
+		const seen: [number, number][] = []
+		uploader.subscribe(() => seen.push([uploader.stored, uploader.acknowledged]))
+		for (const text of goldenChunks) uploader.append(bytesOf(text))
+		await uploader.finish()
+		expect(uploader.state).toBe("done")
+		expect(uploader.stored).toBeGreaterThan(0)
+		// Stored bytes never move in a notification of their own: each move
+		// comes with the acknowledgement that reported it.
+		let previous: [number, number] = [0, 0]
+		for (const entry of seen) {
+			if (entry[0] !== previous[0]) expect(entry[1]).toBe(previous[1] + 1)
+			previous = entry
+		}
+	})
 })

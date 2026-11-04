@@ -380,14 +380,21 @@ export class ChunkUploader extends Notifier implements Uploader {
 	async #pump(): Promise<void> {
 		while (this.#failure === undefined && this.#queue.length > 0) {
 			const chunk = this.#queue[0]
+			let stored: number | undefined
 			try {
-				await this.#send(chunk)
+				stored = await this.#send(chunk)
 			} catch (error) {
 				this.#fail(toUploadFailure(error))
 				return
 			}
 			this.#queue.shift()
-			this.#write({ acknowledged: this.acknowledged + 1, pending: this.#queue.length })
+			// One acknowledgement is one change: the server's stored bytes,
+			// the count, and the queue land together.
+			this.#write(
+				stored === undefined
+					? { acknowledged: this.acknowledged + 1, pending: this.#queue.length }
+					: { stored, acknowledged: this.acknowledged + 1, pending: this.#queue.length }
+			)
 		}
 	}
 
@@ -401,11 +408,12 @@ export class ChunkUploader extends Notifier implements Uploader {
 		}
 	}
 
-	/** Send one chunk and read the server's accounting from the answer. */
-	async #send(chunk: UploadChunk): Promise<void> {
+	/** Send one chunk, and return the stored bytes the server's answer
+	 * reports, or undefined when the answer carries no readable count. */
+	async #send(chunk: UploadChunk): Promise<number | undefined> {
 		const body = await this.#attempt(() => this.#put(chunk))
 		const parsed = parseUploadSnapshot(body)
-		if (parsed.ok) this.#write({ stored: parsed.value.storedBytes })
+		return parsed.ok ? parsed.value.storedBytes : undefined
 	}
 
 	/** Run one request, and retry it while a retry can answer it. */

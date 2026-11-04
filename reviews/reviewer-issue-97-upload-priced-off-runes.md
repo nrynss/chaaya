@@ -26,3 +26,13 @@ Deviation from the issue text, for the owner:
 Verdict: APPROVE, pending the browser leg and CI.
 
 Browser leg (chromium, firefox): priced-action, credit-wallet, audio-upload, audio-capture and direct-upload, 42 passed. WebKit was not run, because its libraries are missing on this box.
+
+## Round 2
+
+CodeRabbit's review of `bd2d86f` raised one finding, and it holds.
+
+1. **An acknowledgement notified twice.** `#send` wrote `stored` from the chunk answer, and then `#pump` wrote `acknowledged` and `pending`, so a subscriber saw the new stored bytes with the old counts first. Fixed: `#send` returns the stored bytes, and `#pump` writes `stored`, `acknowledged` and `pending` in one change after it removes the chunk from the queue. An answer with no readable count still moves only the counts. A new test pins that stored bytes never move in a notification of their own, and it fails against the previous code.
+
+Re-review: no other write in the uploader splits one logical change. The gate passes, and the audio-upload and audio-capture browser specs pass on chromium, firefox and firefox-sink (24 passed).
+
+Verdict: APPROVE.
