@@ -41,3 +41,11 @@ Finding:
    This is the binding's coarse-grained notification, the design #95 chose, and not a defect in the audio classes. The CHANGELOG entry now says so, and the #102 migration guide should carry the same pattern.
 
 The other `$effect` in the migrated routes (`tests/audio-stream`) only installs window hooks and reads no audio object, so it is unaffected.
+
+## Round 3
+
+- Merged main, which now carries #96 and #106. One conflict, in the `docs/scope.md` binding paragraph, was resolved by listing both sets of classes. svelte-check is clean, and the full Vitest run passes (564).
+- The diff was re-read after the merge. Nothing in #96 touches audio, and the transcript follower still uses its own effect runner until #99.
+- CodeRabbit is rate-limited, and the next slot is more than 30 minutes away. Under the owner's rule, this merges on a clean own review plus green CI.
+
+Verdict: APPROVE.
