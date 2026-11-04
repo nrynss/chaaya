@@ -1,3 +1,4 @@
+import { Notifier } from "../../core/observable.js"
 import { planPlacements, type TimedClip } from "./clips.js"
 
 /** The knobs a caller sets on a clip scheduler. */
@@ -38,11 +39,21 @@ const DEFAULT_CACHE_SIZE = 8
  * Importing this module does no DOM work. A caller builds the scheduler on
  * a context a gesture owns, then attaches it to the element it owns.
  */
-export class ClipScheduler {
-	/** The clips the next sync plans, in caller order. */
-	clips = $state<TimedClip[]>([])
-	/** The keys that failed to load, in failure order. */
-	skipped = $state<string[]>([])
+export class ClipScheduler extends Notifier {
+	#clips: readonly TimedClip[] = []
+	#skipped: readonly string[] = []
+
+	/** The clips the next sync plans, in caller order. Set them with
+	 * setClips, which replaces the list. */
+	get clips(): readonly TimedClip[] {
+		return this.#clips
+	}
+
+	/** The keys that failed to load, in failure order. A failure replaces
+	 * the list. */
+	get skipped(): readonly string[] {
+		return this.#skipped
+	}
 
 	#context: AudioContext
 	#element: HTMLMediaElement
@@ -61,6 +72,7 @@ export class ClipScheduler {
 	#attached = false
 
 	constructor(options: ClipSchedulerOptions) {
+		super()
 		this.#context = options.context
 		this.#element = options.element
 		this.#destination = options.destination ?? options.context.destination
@@ -71,7 +83,8 @@ export class ClipScheduler {
 
 	/** Replace the clip list. The next sync plans the new list. */
 	setClips(clips: readonly TimedClip[]): void {
-		this.clips = [...clips]
+		this.#clips = [...clips]
+		this.notify()
 	}
 
 	/** Decode every clip into the cache without sounding anything. A caller
@@ -83,10 +96,12 @@ export class ClipScheduler {
 		}
 	}
 
-	/** Listen to the element. Play and seek reschedule, pause stops every
-	 * source, and a timeupdate past the tolerance reschedules. */
-	attach(): void {
-		if (this.#attached) return
+	/** Listen to the element, and get back the teardown, which detaches.
+	 * Play and seek reschedule, pause stops every source, and a timeupdate
+	 * past the tolerance reschedules. A second attach adds nothing and
+	 * returns the same teardown. */
+	attach(): () => void {
+		if (this.#attached) return this.#detach
 		this.#attached = true
 		this.#element.addEventListener("play", this.#onPlay)
 		this.#element.addEventListener("pause", this.#onStop)
@@ -94,6 +109,11 @@ export class ClipScheduler {
 		this.#element.addEventListener("seeked", this.#onPlay)
 		this.#element.addEventListener("ratechange", this.#onPlay)
 		this.#element.addEventListener("timeupdate", this.#onTime)
+		return this.#detach
+	}
+
+	#detach = (): void => {
+		this.detach()
 	}
 
 	/** Drop the element listeners. Live sources keep sounding, so stop them
@@ -186,7 +206,8 @@ export class ClipScheduler {
 			return buffer
 		} catch (error) {
 			const reason = error instanceof Error ? error.message : String(error)
-			this.skipped = [...this.skipped, key]
+			this.#skipped = [...this.#skipped, key]
+			this.notify()
 			this.#onSkipped?.(key, reason)
 			return null
 		} finally {

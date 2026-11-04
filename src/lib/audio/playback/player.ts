@@ -1,3 +1,5 @@
+import { Notifier } from "../../core/observable.js"
+
 /** The three ways playback fails. A network failure means the bytes never
  * arrived. A decode failure means they arrived and the browser could not
  * read them. An output failure means they read fine but the audio sink could
@@ -75,29 +77,51 @@ export interface AudioPlayerOptions {
 /** How many recoveries one source may spend when the caller names none. */
 const DEFAULT_RESOLVE_BUDGET = 3
 
+/** The state a player publishes. One write may set several fields, and a
+ * view hears it once. */
+interface PlayerState {
+	playing: boolean
+	currentTime: number
+	duration: number
+	buffered: readonly BufferedSpan[]
+	error: PlaybackError | null
+	lastPlayError: PlayRefusal | null
+	source: string | null
+	recoveries: number
+	rate: number
+}
+
+/** True when two span lists hold the same spans. A progress event that
+ * buffered nothing new keeps the old list and notifies nothing. */
+function sameSpans(a: readonly BufferedSpan[], b: readonly BufferedSpan[]): boolean {
+	if (a.length !== b.length) return false
+	return a.every((span, index) => span.start === b[index].start && span.end === b[index].end)
+}
+
 /** One media element per app, unlocked by the first gesture and reused for
  * every clip. A browser blocks playback that no gesture started, so the first
  * user gesture primes the element with a silent clip. Every later clip reuses
  * that element, which keeps the unlocked state alive. The element is one the
- * caller owns, such as a `<video>` element, or one the player creates. */
-export class AudioPlayer {
-	/** True while the element is playing. */
-	playing = $state(false)
-	/** The element's position, in seconds. */
-	currentTime = $state(0)
-	/** The element's length, in seconds. */
-	duration = $state(0)
-	/** The buffered spans of the element. */
-	buffered = $state<BufferedSpan[]>([])
-	/** The failure of the last load, or null. */
-	error = $state<PlaybackError | null>(null)
-	/** The refusal of the last play or unlock, or null. A successful play
-	 * clears it, so it always names the latest refusal. */
-	lastPlayError = $state<PlayRefusal | null>(null)
-	/** The source the consumer asked for. */
-	source = $state<string | null>(null)
-	/** How many source recoveries ran. A test reads it without listening. */
-	recoveries = $state(0)
+ * caller owns, such as a `<video>` element, or one the player creates.
+ *
+ * The player is an observable. It notifies on the element events that move
+ * its state (`timeupdate`, `seeked`, `durationchange`, `loadedmetadata`,
+ * `progress`, `play`, `pause`, `ended`, `ratechange`, `error`), on a load,
+ * a seek, a play result, and a source recovery, and only when a published
+ * value changed. It adds no timer and no frame loop. A player meets the
+ * `subscribe` half of a transcript clock. */
+export class AudioPlayer extends Notifier {
+	#state: PlayerState = {
+		playing: false,
+		currentTime: 0,
+		duration: 0,
+		buffered: [],
+		error: null,
+		lastPlayError: null,
+		source: null,
+		recoveries: 0,
+		rate: 1
+	}
 	/** A fresh source for an expired one. Set it to opt into recovery. */
 	resolveSource: (() => string | Promise<string>) | null
 	/** How many recoveries one source may spend. */
@@ -105,7 +129,6 @@ export class AudioPlayer {
 
 	#element: HTMLMediaElement | null = null
 	#supplied: HTMLMediaElement | null
-	#rate = $state(1)
 	#unlocked = false
 	#unlocking: Promise<boolean> | null = null
 	#loaded: string | null = null
@@ -114,27 +137,85 @@ export class AudioPlayer {
 	/** Build a player. Pass an element the caller owns to drive it, or
 	 * nothing to let the player create its own audio element. */
 	constructor(options?: AudioPlayerOptions) {
+		super()
 		this.#supplied = options?.element ?? null
 		this.resolveSource = options?.resolveSource ?? null
 		this.resolveBudget = options?.resolveBudget ?? DEFAULT_RESOLVE_BUDGET
 	}
 
+	/** True while the element is playing. */
+	get playing(): boolean {
+		return this.#state.playing
+	}
+
+	/** The element's position, in seconds. */
+	get currentTime(): number {
+		return this.#state.currentTime
+	}
+
+	/** The element's length, in seconds. */
+	get duration(): number {
+		return this.#state.duration
+	}
+
+	/** The buffered spans of the element. The list is replaced, never
+	 * mutated. */
+	get buffered(): readonly BufferedSpan[] {
+		return this.#state.buffered
+	}
+
+	/** The failure of the last load, or null. */
+	get error(): PlaybackError | null {
+		return this.#state.error
+	}
+
+	/** The refusal of the last play or unlock, or null. A successful play
+	 * clears it, so it always names the latest refusal. */
+	get lastPlayError(): PlayRefusal | null {
+		return this.#state.lastPlayError
+	}
+
+	/** The source the consumer asked for. */
+	get source(): string | null {
+		return this.#state.source
+	}
+
+	/** How many source recoveries ran. A test reads it without listening. */
+	get recoveries(): number {
+		return this.#state.recoveries
+	}
+
 	/** The playback speed. Setting it drives the element when it exists. */
 	get rate(): number {
-		return this.#rate
+		return this.#state.rate
 	}
 	set rate(value: number) {
-		this.#rate = value
+		this.#write({ rate: value })
 		if (this.#element) this.#element.playbackRate = value
+	}
+
+	/** Apply one change to the published state and notify once when a value
+	 * moved. Equal values notify nothing, the way a rune skipped them. */
+	#write(patch: Partial<PlayerState>): void {
+		let changed = false
+		const next = { ...this.#state }
+		for (const key of Object.keys(patch) as (keyof PlayerState)[]) {
+			if (Object.is(next[key], patch[key])) continue
+			;(next as Record<keyof PlayerState, unknown>)[key] = patch[key]
+			changed = true
+		}
+		if (!changed) return
+		this.#state = next
+		this.notify()
 	}
 
 	/** Point the element at a source and reset the published state. The
 	 * element stays unlocked, so a later play needs no new gesture. */
 	load(source: string): void {
 		const element = this.#ensureElement()
-		this.source = source
 		this.#loaded = source
-		this.#clear()
+		this.#resolutions = 0
+		this.#write({ source, playing: false, currentTime: 0, duration: 0, buffered: [], error: null })
 		element.src = source
 		element.load()
 	}
@@ -144,7 +225,7 @@ export class AudioPlayer {
 		const element = this.#element
 		if (!element) return
 		element.currentTime = seconds
-		this.currentTime = element.currentTime
+		this.#write({ currentTime: element.currentTime })
 	}
 
 	/** Pause the element. */
@@ -159,22 +240,22 @@ export class AudioPlayer {
 	async play(source?: string): Promise<boolean> {
 		const target = source ?? this.source
 		if (!target) {
-			this.lastPlayError = { name: "NoSourceError", message: "No source to play." }
+			this.#write({ lastPlayError: { name: "NoSourceError", message: "No source to play." } })
 			return false
 		}
 		if (!(await this.unlock())) return false
 		if (target !== this.#loaded) this.load(target)
 		const element = this.#element
 		if (!element) {
-			this.lastPlayError = { name: "UnknownError", message: "No element to play." }
+			this.#write({ lastPlayError: { name: "UnknownError", message: "No element to play." } })
 			return false
 		}
 		try {
 			await element.play()
-			this.lastPlayError = null
+			this.#write({ lastPlayError: null })
 			return true
 		} catch (error) {
-			this.lastPlayError = toRefusal(error)
+			this.#write({ lastPlayError: toRefusal(error) })
 			return false
 		}
 	}
@@ -201,7 +282,7 @@ export class AudioPlayer {
 		if (this.#element) return this.#element
 		if (this.#supplied) {
 			const adopted = this.#supplied
-			adopted.playbackRate = this.#rate
+			adopted.playbackRate = this.#state.rate
 			this.#listen(adopted)
 			this.#element = adopted
 			return adopted
@@ -209,7 +290,7 @@ export class AudioPlayer {
 		const element = new Audio()
 		element.setAttribute("playsinline", "")
 		element.preload = "metadata"
-		element.playbackRate = this.#rate
+		element.playbackRate = this.#state.rate
 		this.#listen(element)
 		this.#element = element
 		return element
@@ -247,52 +328,51 @@ export class AudioPlayer {
 			element.currentTime = 0
 			element.muted = mutedBefore
 			this.#unlocked = true
-			this.lastPlayError = null
+			this.#write({ lastPlayError: null })
 			return true
 		} catch (error) {
 			element.muted = mutedBefore
-			this.lastPlayError = toRefusal(error)
+			this.#write({ lastPlayError: toRefusal(error) })
 			return false
 		}
 	}
 
-	#clear(): void {
-		this.playing = false
-		this.currentTime = 0
-		this.duration = 0
-		this.buffered = []
-		this.error = null
-		this.#resolutions = 0
-	}
-
 	#readClock = (): void => {
 		const element = this.#element
-		if (element) this.currentTime = element.currentTime
+		if (element) this.#write({ currentTime: element.currentTime })
 	}
 
 	#readTimeline = (): void => {
 		const element = this.#element
 		if (!element) return
-		this.duration = Number.isFinite(element.duration) ? element.duration : 0
-		this.buffered = readSpans(element)
+		this.#write({
+			duration: Number.isFinite(element.duration) ? element.duration : 0,
+			buffered: this.#spans(element)
+		})
 	}
 
 	#readBuffered = (): void => {
 		const element = this.#element
-		if (element) this.buffered = readSpans(element)
+		if (element) this.#write({ buffered: this.#spans(element) })
+	}
+
+	/** Read the element's spans, keeping the held list when nothing moved. */
+	#spans(element: HTMLMediaElement): readonly BufferedSpan[] {
+		const spans = readSpans(element)
+		return sameSpans(spans, this.#state.buffered) ? this.#state.buffered : spans
 	}
 
 	#onPlay = (): void => {
-		this.playing = true
+		this.#write({ playing: true })
 	}
 
 	#onPause = (): void => {
-		this.playing = false
+		this.#write({ playing: false })
 	}
 
 	#onRateChange = (): void => {
 		const element = this.#element
-		if (element) this.#rate = element.playbackRate
+		if (element) this.#write({ rate: element.playbackRate })
 	}
 
 	#onError = (): void => {
@@ -319,11 +399,11 @@ export class AudioPlayer {
 			media.code !== 2 &&
 			media.message.includes(SINK_FAULT)
 		) {
-			this.error = { failure: "output", message: media.message }
+			this.#write({ error: { failure: "output", message: media.message } })
 			return
 		}
-		const resume = this.playing
-		this.playing = false
+		const resume = this.#state.playing
+		this.#write({ playing: false })
 		void this.#handle(media, source, resume)
 	}
 
@@ -344,7 +424,7 @@ export class AudioPlayer {
 			await this.#recover(source, resume)
 			return
 		}
-		this.error = { failure, message: media.message }
+		this.#write({ error: { failure, message: media.message } })
 	}
 
 	async #classify(code: number, source: string): Promise<PlaybackFailure> {
@@ -363,28 +443,26 @@ export class AudioPlayer {
 		const resolve = this.resolveSource
 		if (!element || !resolve) return
 		this.#resolutions += 1
-		this.recoveries += 1
+		this.#write({ recoveries: this.#state.recoveries + 1 })
 		const position = element.currentTime
 		let fresh: string
 		try {
 			fresh = await resolve()
 		} catch (error) {
 			if (this.#loaded !== source) return
-			this.playing = false
-			this.error = { failure: "network", message: String(error) }
+			this.#write({ playing: false, error: { failure: "network", message: String(error) } })
 			return
 		}
 		if (this.#loaded !== source) return
-		this.source = fresh
 		this.#loaded = fresh
-		this.error = null
+		this.#write({ source: fresh, error: null })
 		/* Restore the position at once, and again once the fresh metadata
 		 * lands. An engine that drops a seek without metadata keeps the
 		 * second one, and one that honours the first repeats the same
 		 * value. */
 		const restore = (): void => {
 			element.currentTime = position
-			this.currentTime = element.currentTime
+			this.#write({ currentTime: element.currentTime })
 		}
 		element.src = fresh
 		element.load()
@@ -393,9 +471,9 @@ export class AudioPlayer {
 		if (resume) {
 			try {
 				await element.play()
-				this.lastPlayError = null
+				this.#write({ lastPlayError: null })
 			} catch (error) {
-				this.lastPlayError = toRefusal(error)
+				this.#write({ lastPlayError: toRefusal(error) })
 			}
 		}
 	}

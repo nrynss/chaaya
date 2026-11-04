@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { page } from "$app/state"
 	import type { CaptureChunk, CaptureMode, CaptureResult } from "$lib/audio/capture"
 	import { AudioRecorder } from "$lib/audio/capture"
@@ -94,7 +95,7 @@
 			return stream
 		}
 		if (refused) refuse()
-		const next = new AudioRecorder({
+		const next = reactive(new AudioRecorder({
 			mode,
 			onChunk: owned ? (chunk) => {
 				if (chunk.samples.some((sample) => Math.abs(sample) > 0.001)) {
@@ -105,7 +106,7 @@
 			context: mode === "pcm" && !owned
 				? sharedContext ?? undefined : undefined,
 			autoStopSeconds: TAKE_SECONDS
-		})
+		}))
 		recorder = next
 		const Context = globalThis.AudioContext
 		if (owned) {
@@ -144,7 +145,7 @@
 		probeTone = ""
 		probeFailure = ""
 		sharedContext = new AudioContext()
-		const next = new AudioRecorder({ mode: "pcm", context: sharedContext, autoStopSeconds: TAKE_SECONDS })
+		const next = reactive(new AudioRecorder({ mode: "pcm", context: sharedContext, autoStopSeconds: TAKE_SECONDS }))
 		recorder = next
 		await next.start()
 		microphone?.start()
@@ -241,12 +242,12 @@
 				chunkSize: STREAM_CHUNK_BYTES
 			})
 			uploader = next
-			const take = new AudioRecorder({
+			const take = reactive(new AudioRecorder({
 				mode: "pcm",
 				autoStopSeconds: STREAM_TAKE_SECONDS,
 				retain: false,
 				onChunk: onStreamBlock
-			})
+			}))
 			recorder = take
 			const opening = next.start()
 			await take.start()

@@ -1,8 +1,9 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { resolve } from "$app/paths"
 	import referenceCss from "$lib/tokens/reference.css?raw"
 	import { onMount } from "svelte"
-	import { AudioPlayer } from "$lib/audio/playback/player.svelte.js"
+	import { AudioPlayer } from "$lib/audio/playback/player.js"
 	import { TranscriptEditor, TranscriptFollower } from "$lib/transcript/index.js"
 	import { a11yGate, contrastGate } from "$lib/testing/index.js"
 
@@ -34,7 +35,7 @@
 
 	onMount(() => {
 		if (video) {
-			const owned = new AudioPlayer({ element: video })
+			const owned = reactive(new AudioPlayer({ element: video }))
 			owned.load("/docs/video-playback/media/clip.webm")
 			player = owned
 			const bound = new TranscriptFollower(editor, owned)

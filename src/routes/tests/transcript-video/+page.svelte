@@ -1,6 +1,7 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { onMount } from "svelte"
-	import { AudioPlayer } from "$lib/audio/playback/player.svelte"
+	import { AudioPlayer } from "$lib/audio/playback/player"
 	import { TranscriptEditor, TranscriptFollower } from "$lib/transcript/index.js"
 
 	/* Words number six, one per second, so each start reads whole seconds.
@@ -27,7 +28,7 @@
 	 * element clock through the player and never starts its own timer. */
 	onMount(() => {
 		if (video) {
-			const owned = new AudioPlayer({ element: video })
+			const owned = reactive(new AudioPlayer({ element: video }))
 			owned.load("/tests/transcript-video/media/clip.webm")
 			player = owned
 			const bound = new TranscriptFollower(editor, owned)

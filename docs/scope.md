@@ -47,9 +47,11 @@ One typed client failure: `ApiError`. Envelope parsing is the adapter's job thro
 - `ClipScheduler`, which previews timed audio clips against a media element clock through Web Audio. Clips decode once per key into a bounded cache, failed loads land in a skipped set nothing replaces, and the preview stays an approximation beside the measured server mix.
 - Live levels, and waveform peaks computed directly or in a worker.
 
+The player, the recorder, the stream player, the clip scheduler, and the live level import no framework. Each extends `Notifier` and notifies once per change, so a Svelte view wraps it in `reactive` from `@nrynss/chaaya/svelte`. The player notifies only on the element events that move its state, and starts no timer of its own.
+
 ## Transcript
 
-`@nrynss/chaaya/transcript` holds timed words. `TranscriptEditor` cuts and reverts ranges. A mapping converts between the source timeline and the edited one. Waveform regions come from the cuts. `TranscriptFollower` binds the words to playback through any `TranscriptClock`. A player driving a caller owned audio or video element meets that contract, and `mediaClock` adapts a bare element. The binding reads the element clock and never starts its own timer. `createTranscriptBridge` folds a timed-word stream into the editor's input. See [transcript-stream.md](transcript-stream.md).
+`@nrynss/chaaya/transcript` holds timed words. `TranscriptEditor` cuts and reverts ranges. A mapping converts between the source timeline and the edited one. Waveform regions come from the cuts. `TranscriptFollower` binds the words to playback through any `TranscriptClock`. A player driving a caller owned audio or video element meets that contract, and `mediaClock` adapts a bare element. The binding reads the element clock and never starts its own timer. Both clocks offer `subscribe`, which hears each position change; the clock from `mediaClock` listens to `timeupdate`, `seeking`, and `seeked`. `createTranscriptBridge` folds a timed-word stream into the editor's input. See [transcript-stream.md](transcript-stream.md).
 
 ## Timeline
 
@@ -95,7 +97,7 @@ A run refused for lack of balance ends in `insufficient`, read through the adapt
 
 ## Framework
 
-Svelte 5 only, for now. Svelte 5.7 is the floor, because the binding uses `createSubscriber`. The core is moving onto a framework-neutral change signal, `Notifier` on `@nrynss/chaaya/core`, and `@nrynss/chaaya/svelte` turns it into Svelte reactivity with `reactive` and `attach`. `TimelineScale` is the first class on it. The other published modules still use runes until they move. There is no Svelte 4 build. The SvelteKit helpers sit on their own export, with `@sveltejs/kit` as an optional peer, so Kit is not pulled into every import.
+Svelte 5 only, for now. Svelte 5.7 is the floor, because the binding uses `createSubscriber`. The core is moving onto a framework-neutral change signal, `Notifier` on `@nrynss/chaaya/core`, and `@nrynss/chaaya/svelte` turns it into Svelte reactivity with `reactive` and `attach`. `TimelineScale` and the audio classes are on it. The other published modules still use runes until they move. There is no Svelte 4 build. The SvelteKit helpers sit on their own export, with `@sveltejs/kit` as an optional peer, so Kit is not pulled into every import.
 
 ## Out of scope
 

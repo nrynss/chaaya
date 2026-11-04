@@ -1,6 +1,7 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { onMount } from "svelte"
-	import { ClipScheduler } from "$lib/audio/playback/scheduler.svelte"
+	import { ClipScheduler } from "$lib/audio/playback/scheduler"
 
 	/* The marker clip starts one second into the video, and its two beeps
 	 * start half a second and one and a half seconds into the clip. The
@@ -47,14 +48,14 @@
 		tap.onaudioprocess = (event: AudioProcessingEvent): void => {
 			captured.push(new Float32Array(event.inputBuffer.getChannelData(0)))
 		}
-		const preview = new ClipScheduler({
+		const preview = reactive(new ClipScheduler({
 			context: next,
 			element: video,
 			destination: tap,
 			onSkipped: (_key, reason) => {
 				skippedReason = reason
 			}
-		})
+		}))
 		preview.setClips([
 			{
 				key: "marker",

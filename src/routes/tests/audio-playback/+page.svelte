@@ -1,8 +1,9 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { onMount } from "svelte"
-	import { AudioPlayer } from "$lib/audio/playback/player.svelte"
+	import { AudioPlayer } from "$lib/audio/playback/player"
 
-	const player = new AudioPlayer()
+	const player = reactive(new AudioPlayer())
 
 	let hydrated = $state(false)
 	let source = $state("/tests/audio-playback/media/tone.wav")

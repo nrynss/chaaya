@@ -1,8 +1,9 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js";
 	import { resolve } from "$app/paths";
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
-	import { LiveLevel } from "$lib/audio/levels/live-level.svelte.js";
+	import { LiveLevel } from "$lib/audio/levels/live-level.js";
 
 	let hydrated = $state(false);
 	let phase = $state("idle");
@@ -54,7 +55,7 @@
 			mute.gain.value = 0;
 			analyser.connect(mute);
 			mute.connect(context.destination);
-			const live = new LiveLevel(analyser);
+			const live = reactive(new LiveLevel(analyser));
 
 			const silence = live.read();
 			silenceRms = format(silence.rmsDb);

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js";
 	import { resolve } from "$app/paths";
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
@@ -101,7 +102,7 @@
 			const inner = media.getUserMedia.bind(media);
 			media.getUserMedia = async () => generated.stream;
 			const context = await shared();
-			const take = new AudioRecorder({ mode: next, context, autoStopSeconds: 2 });
+			const take = reactive(new AudioRecorder({ mode: next, context, autoStopSeconds: 2 }));
 			recorder = take;
 			try {
 				await take.start();
@@ -143,7 +144,7 @@
 				owner: "docs",
 				contentType: "audio/x-pcm-f32le"
 			});
-			const take = new AudioRecorder({
+			const take = reactive(new AudioRecorder({
 				mode: "pcm",
 				context,
 				autoStopSeconds: 2,
@@ -154,7 +155,7 @@
 					uploader.append(new Uint8Array(chunk.samples.slice().buffer as ArrayBuffer));
 					drained += 1;
 				}
-			});
+			}));
 			recorder = take;
 			try {
 				await take.start();

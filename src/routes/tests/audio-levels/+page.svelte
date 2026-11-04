@@ -1,7 +1,8 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { onMount } from "svelte"
 	import { generateSamples } from "../../../../tests/playwright/support/audio/input"
-	import { LiveLevel } from "$lib/audio/levels/live-level.svelte"
+	import { LiveLevel } from "$lib/audio/levels/live-level"
 	import { computePeaksInWorker } from "$lib/audio/levels/peaks-client"
 
 	type Phase = "idle" | "running" | "done" | "failed"
@@ -110,7 +111,7 @@
 			mute.gain.value = 0
 			analyser.connect(mute)
 			mute.connect(context.destination)
-			const live = new LiveLevel(analyser)
+			const live = reactive(new LiveLevel(analyser))
 
 			const silence = live.read()
 			silenceRms = format(silence.rmsDb)

@@ -1,9 +1,10 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js";
 	import { resolve } from "$app/paths";
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
 	import { a11yGate, contrastGate } from "$lib/testing/index.js";
-	import { PcmStreamPlayer } from "$lib/audio/playback/stream.svelte.js";
+	import { PcmStreamPlayer } from "$lib/audio/playback/stream.js";
 
 	let player = $state<PcmStreamPlayer | null>(null);
 	let context = $state<AudioContext | null>(null);
@@ -27,7 +28,7 @@
 		const next = new AudioContext();
 		await next.resume();
 		context = next;
-		player = new PcmStreamPlayer({ context: next });
+		player = reactive(new PcmStreamPlayer({ context: next }));
 	}
 
 	function push(): void {

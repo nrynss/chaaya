@@ -141,7 +141,9 @@ Published as `@nrynss/chaaya`.
   playback through one media element, audio or video, unlocked by the first
   gesture, the PcmStreamPlayer for arriving blocks, and live levels and
   waveform peaks. Capture adds the resampleLinear and resampleChunks rate
-  conversion and the encodeWav file writer.
+  conversion and the encodeWav file writer. The player, recorder, stream
+  player, clip scheduler, and live level are observables; a Svelte view
+  reads one through `reactive(new AudioPlayer())`.
 - `@nrynss/chaaya/guard`: the SessionGuard that closes one live session
   exactly once when its page goes away.
 - `@nrynss/chaaya/transcript`: timed words, the TranscriptEditor that cuts and
