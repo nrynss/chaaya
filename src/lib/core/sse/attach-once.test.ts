@@ -77,3 +77,24 @@ test("a JobPoller attached twice opens one watch and one poll", () => {
 	second()
 	expect(watches()).toBe(0)
 })
+
+for (const which of ["first", "second"] as const) {
+	test(`the ${which} handle of a repeated FrameLoop attach closes it alone`, () => {
+		vi.stubGlobal("fetch", vi.fn(pending))
+		const watches = openWatches()
+		const target = loop()
+		const handles = { first: target.attach(), second: target.attach() }
+		handles[which]()
+		expect(watches()).toBe(0)
+		expect(target.stopped).toBe(true)
+	})
+
+	test(`the ${which} handle of a repeated JobPoller attach closes it alone`, () => {
+		const watches = openWatches()
+		const target = poller()
+		const handles = { first: target.attach(), second: target.attach() }
+		handles[which]()
+		expect(watches()).toBe(0)
+		expect(target.stopped).toBe(true)
+	})
+}

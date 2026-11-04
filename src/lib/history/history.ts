@@ -240,6 +240,8 @@ export class EditHistory<T> extends Notifier {
 			const last = top.invert
 			top.apply = (doc: T) => command.apply(first(doc))
 			top.invert = (doc: T) => last(command.invert(doc))
+			// A new list, so an entries view read during apply is rebuilt.
+			this.#entries = [...this.#entries]
 			this.notify()
 			return
 		}

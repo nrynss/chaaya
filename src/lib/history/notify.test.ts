@@ -100,4 +100,13 @@ describe("entries snapshots", () => {
 		expect(history.entries).toBe(history.entries)
 		expect(Object.isFrozen(history.entries[0])).toBe(true)
 	})
+
+	it("a coalesced step read through entries during apply shows the merged step", () => {
+		const history = new EditHistory({ n: 0 })
+		const nudge = { label: "nudge", coalesceKey: "k", apply: (doc: { n: number }) => ({ n: doc.n + 1 }), invert: (doc: { n: number }) => ({ n: doc.n - 1 }) }
+		history.execute(nudge)
+		history.execute({ ...nudge, apply: (doc) => (void history.entries, { n: doc.n + 1 }) })
+		expect(history.entries).toHaveLength(1)
+		expect(history.entries[0].apply({ n: 0 })).toEqual({ n: 2 })
+	})
 })
