@@ -29,8 +29,9 @@
 		<code>Last-Event-ID</code> is sent on reconnect. A hidden or offline page
 		pauses instead of polling or reconnecting. A server may still
 		start from now. Errors are one typed <code>ApiError</code>. The
-		envelope parser is the adapter's. Framework scope is Svelte 5 only,
-		for now.
+		envelope parser is the adapter's. The core imports no framework.
+		Svelte 5 and React reach it through their bindings, and any other
+		framework can read the same observables.
 	</p>
 	<p>
 		Audio capture, still image capture, share target intake, priced actions, a credit wallet with top-up return, playback through a

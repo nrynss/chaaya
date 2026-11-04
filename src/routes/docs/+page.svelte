@@ -26,6 +26,7 @@
 			<li><a href={resolve("/docs/tokens")}>tokens</a></li>
 			<li><a href={resolve("/docs/theme")}>theme</a></li>
 			<li><a href={resolve("/docs/scope")}>scope</a></li>
+			<li><a href={resolve("/docs/bindings")}>bindings</a></li>
 			<li><a href={resolve("/docs/wire")}>keel wire</a></li>
 			<li><a href={resolve("/docs/api")}>api</a></li>
 			<li><a href={resolve("/docs/auth")}>auth</a></li>
