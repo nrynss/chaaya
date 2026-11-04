@@ -39,6 +39,16 @@ not run yet.
   contract, both bindings, and a binding for another framework in about 20
   lines. `docs/migrating-0.6.md`: every signature that changed since 0.5.
 
+### Fixed
+
+- `FrameLoop` and `JobPoller` (and so `JobStream`, `createEventStream`, and
+  the keel job) ignore an `attach()` after they stop, and share the live
+  watch on a second `attach()`. Before, a re-attach after a teardown leaked
+  a visibility and network watch, and a second attach opened a second
+  stream or poll. Either returned teardown closes the target.
+- `EditHistory.entries` hands out frozen copies, so a kept snapshot no
+  longer changes under its reader when a later undo, redo, or commit lands.
+
 ### Changed
 
 - Only `./svelte` and `./sveltekit` carry the `svelte` export condition.

@@ -146,9 +146,19 @@ export class EditHistory<T> extends Notifier {
 	}
 
 	/** The undo entries, oldest first. Replaced on change. */
-	get entries(): readonly HistoryEntry<T>[] {
-		return this.#entries
+	get entries(): readonly Readonly<HistoryEntry<T>>[] {
+		// The live entries change in place as they apply, undo, and commit,
+		// so a reader gets frozen copies. A change replaces the live list, so
+		// the copies are rebuilt once per change, and a snapshot a reader
+		// kept never moves under it.
+		if (this.#view === undefined || this.#viewOf !== this.#entries) {
+			this.#viewOf = this.#entries
+			this.#view = Object.freeze(this.#entries.map((entry) => Object.freeze({ ...entry })))
+		}
+		return this.#view
 	}
+	#view: readonly Readonly<HistoryEntry<T>>[] | undefined
+	#viewOf: HistoryEntry<T>[] | undefined
 
 	#commit: CommitFn<T> | undefined
 	#frames: TransactionFrame<T>[] = []
@@ -164,27 +174,27 @@ export class EditHistory<T> extends Notifier {
 
 	/** Whether an undo step exists. */
 	get canUndo(): boolean {
-		return this.entries.some((entry) => entry.applied)
+		return this.#entries.some((entry) => entry.applied)
 	}
 
 	/** Whether a redo step exists. */
 	get canRedo(): boolean {
-		return this.entries.some((entry) => !entry.applied)
+		return this.#entries.some((entry) => !entry.applied)
 	}
 
 	/** The labels of applied steps, oldest first. A history view reads these. */
 	get pastLabels(): string[] {
-		return this.entries.filter((entry) => entry.applied).map((entry) => entry.label)
+		return this.#entries.filter((entry) => entry.applied).map((entry) => entry.label)
 	}
 
 	/** The labels of undone steps, oldest first. A history view reads these. */
 	get futureLabels(): string[] {
-		return this.entries.filter((entry) => !entry.applied).map((entry) => entry.label)
+		return this.#entries.filter((entry) => !entry.applied).map((entry) => entry.label)
 	}
 
 	/** How many steps await a commit. */
 	get pendingCount(): number {
-		return this.entries.filter((entry) => (entry.applied && !entry.committed) || (!entry.applied && entry.committed)).length
+		return this.#entries.filter((entry) => (entry.applied && !entry.committed) || (!entry.applied && entry.committed)).length
 	}
 
 	/** Whether every step is committed and nothing failed. */
@@ -194,15 +204,15 @@ export class EditHistory<T> extends Notifier {
 
 	/** The topmost applied entry, or undefined. */
 	#topApplied(): HistoryEntry<T> | undefined {
-		for (let index = this.entries.length - 1; index >= 0; index -= 1) {
-			if (this.entries[index].applied) return this.entries[index]
+		for (let index = this.#entries.length - 1; index >= 0; index -= 1) {
+			if (this.#entries[index].applied) return this.#entries[index]
 		}
 		return undefined
 	}
 
 	/** The earliest undone entry, or undefined. Redo runs earliest first. */
 	#firstUndone(): HistoryEntry<T> | undefined {
-		return this.entries.find((entry) => !entry.applied)
+		return this.#entries.find((entry) => !entry.applied)
 	}
 
 	/**
@@ -217,7 +227,7 @@ export class EditHistory<T> extends Notifier {
 			this.#executeBuffered(command)
 			return
 		}
-		this.#entries = this.entries.filter((entry) => entry.applied || entry.committed)
+		this.#entries = this.#entries.filter((entry) => entry.applied || entry.committed)
 		this.#doc = command.apply(this.doc)
 		const top = this.#topApplied()
 		if (
@@ -234,7 +244,7 @@ export class EditHistory<T> extends Notifier {
 			return
 		}
 		this.#entries = [
-			...this.entries,
+			...this.#entries,
 			{ label: command.label, apply: command.apply, invert: command.invert, coalesceKey: command.coalesceKey, applied: true, committed: false }
 		]
 		this.notify()
@@ -244,10 +254,10 @@ export class EditHistory<T> extends Notifier {
 	 * never merge into earlier entries, so the frame commit groups exactly
 	 * what ran inside it. */
 	#executeBuffered(command: EditCommand<T>): void {
-		this.#entries = this.entries.filter((entry) => entry.applied || entry.committed)
+		this.#entries = this.#entries.filter((entry) => entry.applied || entry.committed)
 		this.#doc = command.apply(this.doc)
 		this.#entries = [
-			...this.entries,
+			...this.#entries,
 			{ label: command.label, apply: command.apply, invert: command.invert, coalesceKey: command.coalesceKey, applied: true, committed: false }
 		]
 	}
@@ -297,9 +307,9 @@ export class EditHistory<T> extends Notifier {
 			throw error
 		}
 		this.#frames.pop()
-		const buffered = this.entries.filter((entry) => !frame.entries.includes(entry))
+		const buffered = this.#entries.filter((entry) => !frame.entries.includes(entry))
 		if (buffered.length === 0) return
-		const kept = this.entries.filter((entry) => frame.entries.includes(entry))
+		const kept = this.#entries.filter((entry) => frame.entries.includes(entry))
 		const applies = buffered.map((entry) => entry.apply)
 		const inverts = buffered.map((entry) => entry.invert).reverse()
 		const grouped: HistoryEntry<T> = {
@@ -377,7 +387,7 @@ export class EditHistory<T> extends Notifier {
 		let sendDoc = clone(this.serverDoc)
 		let revision = this.serverRevision
 		try {
-			const undone = this.entries.filter((entry) => !entry.applied && entry.committed).reverse()
+			const undone = this.#entries.filter((entry) => !entry.applied && entry.committed).reverse()
 			for (const entry of undone) {
 				sendDoc = entry.invert(sendDoc)
 				const answer = await commit({ base: revision, doc: clone(sendDoc), label: `Revert ${entry.label}` })
@@ -392,7 +402,7 @@ export class EditHistory<T> extends Notifier {
 				this.#entries = [...this.#entries]
 				this.notify()
 			}
-			const applied = this.entries.filter((entry) => entry.applied && !entry.committed)
+			const applied = this.#entries.filter((entry) => entry.applied && !entry.committed)
 			for (const entry of applied) {
 				sendDoc = entry.apply(sendDoc)
 				const answer = await commit({ base: revision, doc: clone(sendDoc), label: entry.label })
@@ -441,7 +451,7 @@ export class EditHistory<T> extends Notifier {
 		this.#serverDoc = clone(conflict.head)
 		this.#serverRevision = conflict.headRevision
 		let next = clone(conflict.head)
-		for (const entry of this.entries) {
+		for (const entry of this.#entries) {
 			if (!entry.applied || entry.committed) continue
 			next = entry.apply(next)
 		}
@@ -458,7 +468,7 @@ export class EditHistory<T> extends Notifier {
 	 * Committed steps keep their undo depth. A conflict clears with the rest.
 	 */
 	discardPending(): void {
-		this.#entries = this.entries.filter((entry) => entry.committed)
+		this.#entries = this.#entries.filter((entry) => entry.committed)
 		this.#doc = clone(this.serverDoc)
 		this.#conflict = null
 		this.#lastError = null

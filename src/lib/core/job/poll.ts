@@ -89,6 +89,8 @@ export class JobPoller<T> extends Notifier {
 	#pausedAt: number | undefined = undefined
 	#paused = false
 	#stopped = false
+	#attached = false
+	readonly #teardown = (): void => this.close()
 	#unwatch: (() => void) | undefined = undefined
 	#onAbort: (() => void) | undefined = undefined
 
@@ -124,14 +126,20 @@ export class JobPoller<T> extends Notifier {
 
 	/** Start polling. It returns the teardown, which closes the watch. A
 	 * Svelte component passes the poller to `attach` from
-	 * `@nrynss/chaaya/svelte`, which calls the teardown with the component. */
+	 * `@nrynss/chaaya/svelte`, which calls the teardown with the component.
+	 * A second attach while live shares the one watch, and an attach after
+	 * the stop opens nothing. Both hand back the same teardown. */
 	attach(): () => void {
+		// A stopped poller ends for good, and a second attach while one is
+		// live shares it, so neither opens a second watch or stream.
+		if (this.#stopped || this.#attached) return this.#teardown
+		this.#attached = true
 		if (this.#options.timeoutMs !== undefined) this.#deadline = Date.now() + this.#options.timeoutMs
 		const signal = this.#options.signal
 		if (signal !== undefined) {
 			if (signal.aborted) {
 				this.#stop("closed")
-				return () => this.close()
+				return this.#teardown
 			}
 			this.#onAbort = () => this.close()
 			signal.addEventListener("abort", this.#onAbort, { once: true })
@@ -144,7 +152,7 @@ export class JobPoller<T> extends Notifier {
 			if (isPaused()) this.#pause()
 		}
 		if (!this.#paused) void this.#poll()
-		return () => this.close()
+		return this.#teardown
 	}
 
 	/** Stop polling. It cancels the in-flight read and any pending poll. A second call changes nothing. */
