@@ -65,9 +65,13 @@ test("a listener subscribed twice holds two subscriptions", () => {
 	expect(listener).toHaveBeenCalledTimes(3)
 })
 
-test("a throwing listener does not stop the others, and its error is reported", () => {
-	const reported: unknown[] = []
-	vi.stubGlobal("reportError", (error: unknown) => reported.push(error))
+test("a throwing listener does not stop the others, and its error is logged", () => {
+	const logged: unknown[][] = []
+	const log = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+		logged.push(args)
+	})
+	const queued = vi.fn()
+	vi.stubGlobal("queueMicrotask", queued)
 	const counter = new Counter()
 	const failure = new Error("listener broke")
 	const before = vi.fn()
@@ -80,30 +84,27 @@ test("a throwing listener does not stop the others, and its error is reported", 
 	expect(() => counter.bump()).not.toThrow()
 	expect(before).toHaveBeenCalledTimes(1)
 	expect(after).toHaveBeenCalledTimes(1)
-	expect(reported).toEqual([failure])
+	expect(counter.version).toBe(1)
+	expect(logged).toHaveLength(1)
+	expect(logged[0]).toContain(failure)
+	// Nothing is rethrown later, so the host never sees an uncaught error.
+	expect(queued).not.toHaveBeenCalled()
+	log.mockRestore()
 })
 
-test("without reportError a listener error is rethrown from a microtask", async () => {
-	vi.stubGlobal("reportError", undefined)
-	const failure = new Error("listener broke")
-	const thrown: unknown[] = []
-	const queued: Array<() => void> = []
-	vi.stubGlobal("queueMicrotask", (task: () => void) => queued.push(task))
+test("each throwing listener is logged once per notification", () => {
+	const log = vi.spyOn(console, "error").mockImplementation(() => {})
 	const counter = new Counter()
-	const after = vi.fn()
 	counter.subscribe(() => {
-		throw failure
+		throw new Error("first")
 	})
-	counter.subscribe(after)
+	counter.subscribe(() => {
+		throw new Error("second")
+	})
 	counter.bump()
-	expect(after).toHaveBeenCalledTimes(1)
-	expect(queued).toHaveLength(1)
-	try {
-		queued[0]()
-	} catch (error) {
-		thrown.push(error)
-	}
-	expect(thrown).toEqual([failure])
+	counter.bump()
+	expect(log).toHaveBeenCalledTimes(4)
+	log.mockRestore()
 })
 
 test("notification is synchronous", () => {

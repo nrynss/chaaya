@@ -87,7 +87,9 @@ Published as `@nrynss/chaaya`.
   `createJobPoller` follow a job by polling and publish the same reading.
   `Notifier`, `Observable`, and `Listener` are the framework-neutral change
   signal: `subscribe(listener)` returns the unsubscribe, `version` counts
-  changes, and a stateful class notifies once per logical change.
+  changes, and a stateful class notifies once per logical change. A
+  listener that throws is logged with `console.error`, and the others
+  still run.
 - `@nrynss/chaaya/tokens`: the fixed role names and a checker that reports a
   role a theme block leaves out.
 - `@nrynss/chaaya/tokens/reference.css`: the reference stylesheet a new app
