@@ -60,6 +60,20 @@ breaking release. The migration guide lands before the freeze.
 - `mediaClock(element)` gains `subscribe(listener)`, which hears the
   element's `timeupdate`, `seeking`, and `seeked` events. `TranscriptClock`
   gains an optional `subscribe`; `AudioPlayer` provides it.
+- `ChunkUploader` on `@nrynss/chaaya/keel`, and
+  `PricedAction` and `CreditWallet` on `@nrynss/chaaya/priced`, are
+  observables and import no framework. A Svelte view wraps each one:
+  `reactive(new PricedAction(...))`, and `reactive(wallet.action(...))` for
+  an action the wallet makes. Their state fields are read-only getters now.
+  Each logical change notifies once: an acknowledgement moves `stored`,
+  `acknowledged`, and `pending` together, a failure lands `error` and `state` together, and
+  a refresh that lands a new balance and `ready` notifies once. A run that
+  settles notifies the wallet only through the refresh it starts.
+- `CreditWallet.followTopUp(reference, options)` takes no cleanup runner and
+  returns the teardown that stops the follow. Call it from `onMount` or an
+  `$effect` and return the teardown, or call it in an event handler and
+  keep the teardown. Each top-up answer notifies once. `Uploader` stays a
+  plain interface.
 - `EditHistory`, `TranscriptEditor`, `TranscriptFollower`, `CameraSession`,
   and `SessionGuard` are observables and import no framework. Their state
   fields are read-only getters, except `EditHistory.serverRevision` and
@@ -77,7 +91,8 @@ breaking release. The migration guide lands before the freeze.
   to the clock and the editor, skips a cut the playhead enters or a cut
   made under it, and returns its teardown. Without a framework, nothing
   re-runs a follower that is not attached. The follower notifies only when
-  `activeWord` changes. A Svelte component calls `attach(follower)` from `@nrynss/chaaya/svelte`.
+  `activeWord` changes. A Svelte component calls `attach(follower)` from
+  `@nrynss/chaaya/svelte`.
 - `SessionGuard.attach()` returns a teardown that closes the session, the
   same as `destroy()`. A second `attach()` returns the same teardown.
 - The `theme` store on `@nrynss/chaaya/theme` is an observable with the

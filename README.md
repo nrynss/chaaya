@@ -176,8 +176,10 @@ Published as `@nrynss/chaaya`.
   `insufficient` and keeps the quote. `CreditWallet` holds the balance and
   refreshes it after every run of an action it made. `consumeTopUpReturn`
   reads a checkout return once, and `followTopUp` polls the balance through
-  `JobPoller` until the top-up is credited or a timeout passes. The adapter
-  supplies every backend call, so no header and no route are named.
+  `JobPoller` until the top-up is credited or a timeout passes, and returns
+  its teardown. The adapter supplies every backend call, so no header and no
+  route are named. Both classes are observables; a Svelte view reads them
+  through `reactive`.
 - `@nrynss/chaaya/shortcuts`: `ShortcutRegistry` and `ShortcutDispatcher`.
   The registry is the one source a help view reads.
 - `@nrynss/chaaya/history`: `EditHistory`, with undo and redo over apply and

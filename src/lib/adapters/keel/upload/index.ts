@@ -6,7 +6,7 @@
  * protocol. This module is the Keel adapter, not a generic audio helper. A failed chunk retries with backoff, the upload survives a short
  * network drop, and a reloaded page resumes the upload it left behind.
  */
-export { ChunkUploader } from "./upload.svelte.js"
+export { ChunkUploader } from "./upload.js"
 export { IndexedDbStore } from "./store.js"
 export {
 	UploadFailure,

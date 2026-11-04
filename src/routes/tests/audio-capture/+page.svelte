@@ -235,12 +235,12 @@
 			return
 		}
 		try {
-			const next = new ChunkUploader({
+			const next = reactive(new ChunkUploader({
 				url: base,
 				owner: STREAM_OWNER,
 				contentType: "audio/x-pcm-f32le",
 				chunkSize: STREAM_CHUNK_BYTES
-			})
+			}))
 			uploader = next
 			const take = reactive(new AudioRecorder({
 				mode: "pcm",
@@ -292,7 +292,7 @@
 	async function resumeUpload(): Promise<void> {
 		const next = await ChunkUploader.resume()
 		if (next === undefined) return
-		uploader = next
+		uploader = reactive(next)
 		resumed = true
 		uploadId = next.id ?? ""
 		await next.finish()

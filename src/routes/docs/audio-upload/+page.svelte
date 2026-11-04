@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js";
 	import { resolve } from "$app/paths";
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
@@ -66,13 +67,13 @@
 				samples[index] = 0.5 * Math.sin((2 * Math.PI * 440 * index) / rate);
 			}
 			const bytes = new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength);
-			const next = new ChunkUploader({
+			const next = reactive(new ChunkUploader({
 				url: "/docs/audio-upload/uploads",
 				owner: "docs-owner",
 				contentType: "audio/pcm",
 				chunkSize,
 				store: memoryStore()
-			});
+			}));
 			uploader = next;
 			await next.start();
 			next.append(bytes);

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vitest"
-import type { PriceAmount } from "./priced-action.svelte.js"
-import { CreditWallet } from "./wallet.svelte.js"
+import type { PriceAmount } from "./priced-action.js"
+import { CreditWallet } from "./wallet.js"
 
 interface Answer {
 	readonly amount: number
@@ -9,8 +9,6 @@ interface Answer {
 }
 
 const label = "credit.label"
-const noCleanup = (): void => {}
-const register = (): ((task: () => () => void) => void) => () => noCleanup()
 
 function toBalance(answer: Answer): PriceAmount {
 	return { amount: answer.amount, currency: label }
@@ -194,7 +192,7 @@ test("a top-up follow polls until the reference is credited", async () => {
 		onChange: (next) => changes.push(next.amount)
 	})
 	expect(wallet.topUp).toBe("idle")
-	wallet.followTopUp("ref-1", { isCredited: (answer, reference) => answer.credited?.includes(reference) ?? false, intervalMs: 1000 }, register())
+	wallet.followTopUp("ref-1", { isCredited: (answer, reference) => answer.credited?.includes(reference) ?? false, intervalMs: 1000 })
 	expect(wallet.topUp).toBe("following")
 	expect(wallet.topUpReference).toBe("ref-1")
 	await vi.advanceTimersByTimeAsync(0)
@@ -214,7 +212,7 @@ test("a top-up follow polls until the reference is credited", async () => {
 test("a top-up follow that never sees the credit times out", async () => {
 	vi.useFakeTimers()
 	const wallet = new CreditWallet<Answer>({ readBalance: async () => ({ amount: 10 }), toBalance })
-	wallet.followTopUp("ref-1", { isCredited: () => false, intervalMs: 1000, maxIntervalMs: 1000, timeoutMs: 3500 }, register())
+	wallet.followTopUp("ref-1", { isCredited: () => false, intervalMs: 1000, maxIntervalMs: 1000, timeoutMs: 3500 })
 	await vi.advanceTimersByTimeAsync(3000)
 	expect(wallet.topUp).toBe("following")
 	await vi.advanceTimersByTimeAsync(1000)
@@ -231,7 +229,7 @@ test("a top-up follow fails past its error budget", async () => {
 		},
 		toBalance
 	})
-	wallet.followTopUp("ref-1", { isCredited: () => true, intervalMs: 1000, errorBudget: 1 }, register())
+	wallet.followTopUp("ref-1", { isCredited: () => true, intervalMs: 1000, errorBudget: 1 })
 	await vi.advanceTimersByTimeAsync(0)
 	expect(wallet.topUp).toBe("following")
 	await vi.advanceTimersByTimeAsync(1000)
@@ -249,8 +247,8 @@ test("a newer follow closes the older one, and close stops it", async () => {
 		},
 		toBalance
 	})
-	wallet.followTopUp("ref-1", { isCredited: () => false }, register())
-	wallet.followTopUp("ref-2", { isCredited: () => false }, register())
+	wallet.followTopUp("ref-1", { isCredited: () => false })
+	wallet.followTopUp("ref-2", { isCredited: () => false })
 	expect(signals[0]?.aborted).toBe(true)
 	expect(wallet.topUpReference).toBe("ref-2")
 	expect(wallet.topUp).toBe("following")
@@ -270,7 +268,7 @@ test("a follow answer that began later beats a slow refresh", async () => {
 		toBalance
 	})
 	const pending = wallet.refresh()
-	wallet.followTopUp("ref-1", { isCredited: (answer, reference) => answer.credited?.includes(reference) ?? false }, register())
+	wallet.followTopUp("ref-1", { isCredited: (answer, reference) => answer.credited?.includes(reference) ?? false })
 	await vi.waitFor(() => expect(wallet.topUp).toBe("landed"))
 	slow.resolve({ amount: 10 })
 	await pending
@@ -289,8 +287,7 @@ test("a throwing credit check counts as a failed read and publishes nothing", as
 			},
 			intervalMs: 1000,
 			errorBudget: 0
-		},
-		register()
+		}
 	)
 	await vi.advanceTimersByTimeAsync(0)
 	expect(wallet.topUp).toBe("failed")
@@ -310,9 +307,66 @@ test("a follow answer marks the wallet ready and clears an earlier refresh failu
 	await wallet.refresh()
 	expect(wallet.phase).toBe("failed")
 	fail = false
-	wallet.followTopUp("ref-1", { isCredited: (answer, reference) => answer.credited?.includes(reference) ?? false }, register())
+	wallet.followTopUp("ref-1", { isCredited: (answer, reference) => answer.credited?.includes(reference) ?? false })
 	await vi.advanceTimersByTimeAsync(0)
 	expect(wallet.topUp).toBe("landed")
 	expect(wallet.phase).toBe("ready")
 	expect(wallet.error).toBeNull()
+})
+
+test("a settled run notifies the wallet once for its refresh, whatever the outcome", async () => {
+	const insufficient = new Error("Insufficient.")
+	let amount = 100
+	const wallet = new CreditWallet<Answer>({
+		readBalance: async () => ({ amount }),
+		toBalance,
+		parseInsufficientFunds: (error) => (error === insufficient ? {} : undefined)
+	})
+	await wallet.refresh()
+	let short = true
+	const action = wallet.action<string>({
+		quote: async () => ({ id: "q1", price: { amount: 40, currency: label } }),
+		run: async () => {
+			if (short) throw insufficient
+			amount -= 40
+			return "ran"
+		}
+	})
+	const seen: string[] = []
+	wallet.subscribe(() => seen.push(`${wallet.phase}:${wallet.balance?.amount}`))
+	await action.requestQuote()
+	// A quote is not a run, and the action's own changes leave the wallet quiet.
+	expect(seen).toEqual([])
+	await action.confirm()
+	expect(action.phase).toBe("insufficient")
+	await vi.waitFor(() => expect(wallet.phase).toBe("ready"))
+	// The refresh starts, then lands, and the balance had not moved.
+	expect(seen).toEqual(["reading:100", "ready:100"])
+	short = false
+	await action.confirm()
+	expect(action.phase).toBe("done")
+	await vi.waitFor(() => expect(wallet.balance?.amount).toBe(60))
+	// The new balance and the ready phase land as one notification.
+	expect(seen).toEqual(["reading:100", "ready:100", "reading:100", "ready:60"])
+})
+
+test("a top-up answer notifies once, and the teardown stops the follow", async () => {
+	vi.useFakeTimers()
+	let amount = 10
+	const wallet = new CreditWallet<Answer>({ readBalance: async () => ({ amount }), toBalance })
+	const stop = wallet.followTopUp("ref-1", { isCredited: () => false, intervalMs: 1000, maxIntervalMs: 1000 })
+	await vi.advanceTimersByTimeAsync(0)
+	const heard = vi.fn()
+	wallet.subscribe(heard)
+	amount = 20
+	await vi.advanceTimersByTimeAsync(1000)
+	expect(wallet.balance?.amount).toBe(20)
+	expect(heard).toHaveBeenCalledTimes(1)
+	stop()
+	expect(wallet.topUp).toBe("closed")
+	const reads = heard.mock.calls.length
+	amount = 30
+	await vi.advanceTimersByTimeAsync(5000)
+	expect(wallet.balance?.amount).toBe(20)
+	expect(heard.mock.calls.length).toBe(reads)
 })

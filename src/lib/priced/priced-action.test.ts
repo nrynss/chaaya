@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import { PricedAction, type PriceQuote } from "./priced-action.svelte.js"
+import { PricedAction, type PriceQuote } from "./priced-action.js"
 
 /** A quote priced in whole minor units of any label. */
 function quoteWith(id: string, amount: number, currency = "credit.label", expiresAt?: number): PriceQuote {
@@ -362,4 +362,30 @@ test("a lapsed initial quote re-quotes on confirm", async () => {
 	expect(action.expired).toBe(true)
 	await action.confirm()
 	expect(ids).toEqual(["fresh"])
+})
+
+test("each logical change notifies once", async () => {
+	const insufficient = new Error("Insufficient.")
+	let outcome: "done" | "short" = "short"
+	const action = new PricedAction<string>({
+		quote: async () => quoteWith("q1", 40),
+		run: async (id) => {
+			if (outcome === "short") throw insufficient
+			return `ran ${id}`
+		},
+		parseInsufficientFunds: (error) => (error === insufficient ? { balance: { amount: 1, currency: "credit.label" } } : undefined)
+	})
+	const phases: string[] = []
+	action.subscribe(() => phases.push(action.phase))
+	await action.requestQuote()
+	expect(phases).toEqual(["quoting", "quoted"])
+	await action.confirm()
+	expect(phases).toEqual(["quoting", "quoted", "running", "insufficient"])
+	expect(action.insufficient).not.toBeNull()
+	outcome = "done"
+	await action.confirm()
+	expect(phases).toEqual(["quoting", "quoted", "running", "insufficient", "running", "done"])
+	action.reset()
+	expect(phases.at(-1)).toBe("idle")
+	expect(phases).toHaveLength(7)
 })
