@@ -1,6 +1,7 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { onMount } from "svelte"
-	import { AudioPlayer } from "$lib/audio/playback/player.svelte"
+	import { AudioPlayer } from "$lib/audio/playback/player"
 
 	let video: HTMLVideoElement | undefined
 	let player = $state<AudioPlayer | null>(null)
@@ -16,7 +17,7 @@
 	 * exists, so a test that clicks one waits instead of racing. The player
 	 * adopts the markup element, the shape a caller owns. */
 	onMount(() => {
-		if (video) player = new AudioPlayer({ element: video })
+		if (video) player = reactive(new AudioPlayer({ element: video }))
 		hydrated = true
 	})
 

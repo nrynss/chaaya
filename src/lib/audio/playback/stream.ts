@@ -1,3 +1,4 @@
+import { Notifier } from "../../core/observable.js"
 import { resampleLinear } from "../capture/resample.js"
 
 /** One block the player placed on the context clock. */
@@ -35,11 +36,20 @@ const DEFAULT_LEAD_SECONDS = 0.05
  * Importing this module does no DOM work. A caller builds the player when a
  * gesture is at hand, on the context the capture already runs on.
  */
-export class PcmStreamPlayer {
-	/** Every block placed so far, in order, on the context clock. */
-	blocks = $state<ScheduledBlock[]>([])
+export class PcmStreamPlayer extends Notifier {
+	#blocks: readonly ScheduledBlock[] = []
+	#lastCut: number | null = null
+
+	/** Every block placed so far, in order, on the context clock. Each push
+	 * replaces the list, so a view sees a new list per block. */
+	get blocks(): readonly ScheduledBlock[] {
+		return this.#blocks
+	}
+
 	/** The cut time of the last flush, or null before the first one. */
-	lastCut = $state<number | null>(null)
+	get lastCut(): number | null {
+		return this.#lastCut
+	}
 
 	/** How many placed blocks opened with a gap before them. */
 	get underruns(): number {
@@ -54,6 +64,7 @@ export class PcmStreamPlayer {
 	#live: AudioBufferSourceNode[] = []
 
 	constructor(options: StreamPlayerOptions) {
+		super()
 		this.#context = options.context
 		this.#streamRate = options.streamRate ?? options.context.sampleRate
 		this.#lead = options.leadSeconds ?? DEFAULT_LEAD_SECONDS
@@ -94,7 +105,8 @@ export class PcmStreamPlayer {
 			underrun: previous !== null && start > previous
 		}
 		this.#nextStart = end
-		this.blocks.push(placed)
+		this.#blocks = [...this.#blocks, placed]
+		this.notify()
 		return placed
 	}
 
@@ -114,7 +126,8 @@ export class PcmStreamPlayer {
 		}
 		this.#live = []
 		this.#nextStart = null
-		this.lastCut = cut
+		this.#lastCut = cut
+		this.notify()
 		return cut
 	}
 }

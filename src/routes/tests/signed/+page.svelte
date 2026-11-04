@@ -1,8 +1,9 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { onMount } from "svelte"
-	import { AudioPlayer } from "$lib/audio/playback/player.svelte"
+	import { AudioPlayer } from "$lib/audio/playback/player"
 
-	const player = new AudioPlayer()
+	const player = reactive(new AudioPlayer())
 	/** The source the expiry check plays. The player resolves it again on
 	 * recovery, so it stays a function rather than a fixed string. */
 	const entry = "/tests/signed/entry"

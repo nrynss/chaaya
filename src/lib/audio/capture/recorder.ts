@@ -1,3 +1,4 @@
+import { Notifier } from "../../core/observable.js"
 import { CAPTURE_PROCESSOR_NAME, CAPTURE_PROCESSOR_SOURCE } from "./pcm-worklet.js"
 import { resampleChunks } from "./resample.js"
 import { nextState } from "./state.js"
@@ -34,6 +35,17 @@ const FLUSH_TIMEOUT_MS = 1000
 /** How often a running take rechecks its tracks. A stopped track sets its own
  * state without an event, so the take has to look for itself. */
 const TRACK_CHECK_MS = 250
+
+/** The state a recorder publishes. One logical change may set several
+ * fields, and a view hears it once. */
+interface RecorderFields {
+	state: CaptureState
+	countdown: number
+	chunkCount: number
+	result: CaptureResult | null
+	error: unknown
+	renderRate: number
+}
 
 interface WorkletChunk {
 	samples: Float32Array
@@ -97,26 +109,54 @@ function readSampleRate(stream: MediaStream): number {
  * and build a file from the same blocks with resampling and WAV encoding
  * when a file is needed.
  */
-export class AudioRecorder {
+export class AudioRecorder extends Notifier {
 	/** The capture mode this recorder writes with. */
 	readonly mode: CaptureMode
+
+	#fields: RecorderFields = {
+		state: "idle",
+		countdown: 0,
+		chunkCount: 0,
+		result: null,
+		error: null,
+		renderRate: FALLBACK_SAMPLE_RATE
+	}
+	#depth = 0
+	#dirty = false
+	#view: readonly CaptureChunk[] | null = null
+
 	/** The lifecycle state of the recorder. */
-	state = $state<CaptureState>("idle")
+	get state(): CaptureState {
+		return this.#fields.state
+	}
+
 	/** The seconds left before the take stops itself. */
-	countdown = $state(0)
+	get countdown(): number {
+		return this.#fields.countdown
+	}
+
 	/** The number of blocks captured so far. */
-	chunkCount = $state(0)
+	get chunkCount(): number {
+		return this.#fields.chunkCount
+	}
+
 	/** The finished take, or null before a stop. */
-	result = $state<CaptureResult | null>(null)
+	get result(): CaptureResult | null {
+		return this.#fields.result
+	}
+
 	/**
 	 * The rate blocks arrive at, in hertz. A browser may render at the
 	 * device rate rather than the rate the take declares.
 	 */
 	get renderRate(): number {
-		return this.#renderRate
+		return this.#fields.renderRate
 	}
+
 	/** The error behind a denied or failed state, or null. */
-	error = $state<unknown>(null)
+	get error(): unknown {
+		return this.#fields.error
+	}
 
 	#stream: MediaStream | null = null
 	#context: AudioContext | null = null
@@ -128,7 +168,6 @@ export class AudioRecorder {
 	#ticker: ReturnType<typeof setInterval> | null = null
 	#timer: ReturnType<typeof setTimeout> | null = null
 	#sampleRate = FALLBACK_SAMPLE_RATE
-	#renderRate = $state(FALLBACK_SAMPLE_RATE)
 	#autoStop: number
 	#chunkFrames: number
 	#constraints: MediaTrackConstraints
@@ -143,6 +182,7 @@ export class AudioRecorder {
 	#trackWatch: ReturnType<typeof setInterval> | null = null
 
 	constructor(options: CaptureOptions = {}) {
+		super()
 		this.mode = options.mode ?? "compressed"
 		this.#suppliedContext = options.context ?? null
 		this.#autoStop = options.autoStopSeconds ?? DEFAULT_AUTO_STOP_SECONDS
@@ -163,8 +203,41 @@ export class AudioRecorder {
 	 * counts arrivals either way.
 	 */
 	get chunks(): readonly CaptureChunk[] {
-		void this.chunkCount
-		return this.#blocks
+		// A new block drops the view, so a reader after the next notify gets
+		// a new list. The copy happens on read, not once per block.
+		this.#view ??= this.#blocks.slice()
+		return this.#view
+	}
+
+	/** Apply one change to the published state. Equal values change
+	 * nothing. Outside a batch a change notifies at once; inside one it
+	 * notifies once when the outermost batch ends. */
+	#write(patch: Partial<RecorderFields>): void {
+		let changed = false
+		const next = { ...this.#fields }
+		for (const key of Object.keys(patch) as (keyof RecorderFields)[]) {
+			if (Object.is(next[key], patch[key])) continue
+			;(next as Record<keyof RecorderFields, unknown>)[key] = patch[key]
+			changed = true
+		}
+		if (!changed) return
+		this.#fields = next
+		if (this.#depth > 0) this.#dirty = true
+		else this.notify()
+	}
+
+	/** Run one logical change, so its writes notify once. */
+	#batch(change: () => void): void {
+		this.#depth += 1
+		try {
+			change()
+		} finally {
+			this.#depth -= 1
+			if (this.#depth === 0 && this.#dirty) {
+				this.#dirty = false
+				this.notify()
+			}
+		}
 	}
 
 	/** The span of one block in seconds, the tolerance a duration check allows. */
@@ -178,10 +251,11 @@ export class AudioRecorder {
 		if (this.state === "requesting" || this.state === "recording") return
 		this.#session += 1
 		const session = this.#session
-		this.#clearData()
 		this.#closing = false
-		this.state = nextState(this.state, "start")
-		this.error = null
+		this.#batch(() => {
+			this.#clearData()
+			this.#write({ state: nextState(this.state, "start"), error: null })
+		})
 		try {
 			const stream = await this.#openMicrophone()
 			if (session !== this.#session) {
@@ -193,22 +267,27 @@ export class AudioRecorder {
 			// Watch the tracks before startup, so a track lost during the awaits still fails.
 			this.#watchTracks(stream, session)
 			this.#beginTrackWatch(session)
-			if (this.state !== "requesting") return
+			// Read the field, not the getter: the guard at the top narrowed
+			// the getter, and the writes since then go through #write.
+			if (this.#fields.state !== "requesting") return
 			if (this.mode === "pcm") await this.#startPcm(stream, session)
 			else await this.#startCompressed(stream, session)
-			if (session !== this.#session || this.state !== "requesting") return
+			if (session !== this.#session || this.#fields.state !== "requesting") return
 			// A track can reach ended without firing an event, so recheck after startup.
 			if (this.#tracksEnded()) {
 				this.#trackLost(session)
 				return
 			}
-			this.state = nextState(this.state, "granted")
-			this.#beginCountdown()
+			this.#batch(() => {
+				this.#write({ state: nextState(this.state, "granted") })
+				this.#beginCountdown()
+			})
 		} catch (error) {
-			if (session !== this.#session || this.state !== "requesting") return
-			this.#release()
-			this.error = error
-			this.state = nextState(this.state, isDenied(error) ? "denied" : "failed")
+			if (session !== this.#session || this.#fields.state !== "requesting") return
+			this.#batch(() => {
+				this.#release()
+				this.#write({ error, state: nextState(this.state, isDenied(error) ? "denied" : "failed") })
+			})
 		}
 	}
 
@@ -231,10 +310,11 @@ export class AudioRecorder {
 		this.#session += 1
 		this.#closing = true
 		if (this.#mediaRecorder?.state === "recording") this.#mediaRecorder.stop()
-		this.#release()
-		this.#clearData()
-		this.error = null
-		this.state = nextState(this.state, "reset")
+		this.#batch(() => {
+			this.#release()
+			this.#clearData()
+			this.#write({ error: null, state: nextState(this.state, "reset") })
+		})
 		this.#resolveStop()
 		this.#closing = false
 	}
@@ -260,7 +340,7 @@ export class AudioRecorder {
 		recorder.ondataavailable = (event) => {
 			if (event.data.size > 0) {
 				this.#parts.push(event.data)
-				this.chunkCount = this.#parts.length
+				this.#write({ chunkCount: this.#parts.length })
 			}
 		}
 		recorder.onerror = () => {
@@ -269,15 +349,19 @@ export class AudioRecorder {
 		}
 		recorder.onstop = () => {
 			if (session !== this.#session) return
-			if (this.state === "requesting") {
-				this.error = new Error("The microphone stopped before the take started.")
-				this.state = nextState(this.state, "failed")
-			}
-			this.#release()
-			const mimeType = recorder.mimeType || type
-			// A failed take keeps its parts, so build the blob before the state moves.
-			this.#buildResult(new Blob(this.#parts, { type: mimeType }), mimeType)
-			this.state = nextState(this.state, "finished")
+			this.#batch(() => {
+				if (this.state === "requesting") {
+					this.#write({
+						error: new Error("The microphone stopped before the take started."),
+						state: nextState(this.state, "failed")
+					})
+				}
+				this.#release()
+				const mimeType = recorder.mimeType || type
+				// A failed take keeps its parts, so build the blob before the state moves.
+				this.#buildResult(new Blob(this.#parts, { type: mimeType }), mimeType)
+				this.#write({ state: nextState(this.state, "finished") })
+			})
 			this.#resolveStop()
 		}
 		recorder.start(COMPRESSED_TIMESLICE_MS)
@@ -288,7 +372,7 @@ export class AudioRecorder {
 	async #startPcm(stream: MediaStream, session: number): Promise<void> {
 		const supplied = this.#suppliedContext
 		const context = supplied ?? this.#openContext()
-		this.#renderRate = context.sampleRate
+		this.#write({ renderRate: context.sampleRate })
 		const module = URL.createObjectURL(
 			new Blob([CAPTURE_PROCESSOR_SOURCE], { type: "text/javascript" })
 		)
@@ -337,8 +421,11 @@ export class AudioRecorder {
 			try {
 				this.#onChunk?.(chunk)
 			} finally {
-				if (this.#retain) this.#blocks.push(chunk)
-				this.chunkCount += 1
+				if (this.#retain) {
+					this.#blocks.push(chunk)
+					this.#view = null
+				}
+				this.#write({ chunkCount: this.chunkCount + 1 })
 			}
 		}
 		if (data.final) {
@@ -371,12 +458,12 @@ export class AudioRecorder {
 		// so there is nothing left to encode and the result stays null. The
 		// caller holds the audio.
 		if (!this.#retain) {
-			this.state = nextState(this.state, "finished")
+			this.#write({ state: nextState(this.state, "finished") })
 			this.#resolveStop()
 			return
 		}
 		const blob = encodeWav(
-			resampleChunks(this.#blocks, this.#renderRate, this.#sampleRate),
+			resampleChunks(this.#blocks, this.renderRate, this.#sampleRate),
 			this.#sampleRate
 		)
 		this.#finish(blob, "audio/wav")
@@ -411,40 +498,43 @@ export class AudioRecorder {
 
 	#fail(error: Error): void {
 		this.#closing = true
-		this.#stopCountdown()
-		if (this.#mediaRecorder?.state === "recording") this.#mediaRecorder.stop()
-		// A failed take keeps what it captured, so encode the blocks it holds.
-		// A streaming take holds none, so it ends with no result.
-		if (this.mode === "pcm" && this.#retain && this.#blocks.length > 0) {
-			this.#buildResult(
-				encodeWav(
-					resampleChunks(this.#blocks, this.#renderRate, this.#sampleRate),
-					this.#sampleRate
-				),
-				"audio/wav"
-			)
-		}
-		this.#release()
-		this.error = error
-		this.state = nextState(this.state, "failed")
+		this.#batch(() => {
+			this.#stopCountdown()
+			if (this.#mediaRecorder?.state === "recording") this.#mediaRecorder.stop()
+			// A failed take keeps what it captured, so encode the blocks it holds.
+			// A streaming take holds none, so it ends with no result.
+			if (this.mode === "pcm" && this.#retain && this.#blocks.length > 0) {
+				this.#buildResult(
+					encodeWav(
+						resampleChunks(this.#blocks, this.renderRate, this.#sampleRate),
+						this.#sampleRate
+					),
+					"audio/wav"
+				)
+			}
+			this.#release()
+			this.#write({ error, state: nextState(this.state, "failed") })
+		})
 		this.#resolveStop()
 	}
 
 	#buildResult(blob: Blob, mimeType: string): void {
-		this.result = { blob, mimeType, sampleRate: this.#sampleRate }
+		this.#write({ result: { blob, mimeType, sampleRate: this.#sampleRate } })
 	}
 
 	#finish(blob: Blob, mimeType: string): void {
-		this.#buildResult(blob, mimeType)
-		this.state = nextState(this.state, "finished")
+		this.#batch(() => {
+			this.#buildResult(blob, mimeType)
+			this.#write({ state: nextState(this.state, "finished") })
+		})
 		this.#resolveStop()
 	}
 
 	#beginCountdown(): void {
 		if (this.#autoStop <= 0) return
-		this.countdown = this.#autoStop
+		this.#write({ countdown: this.#autoStop })
 		this.#ticker = setInterval(() => {
-			this.countdown = this.countdown > 0 ? this.countdown - 1 : 0
+			this.#write({ countdown: this.countdown > 0 ? this.countdown - 1 : 0 })
 		}, 1000)
 		this.#timer = setTimeout(() => {
 			if (this.state === "recording") void this.stop()
@@ -456,7 +546,7 @@ export class AudioRecorder {
 		if (this.#timer !== null) clearTimeout(this.#timer)
 		this.#ticker = null
 		this.#timer = null
-		this.countdown = 0
+		this.#write({ countdown: 0 })
 	}
 
 	#resolveStart(): void {
@@ -473,9 +563,9 @@ export class AudioRecorder {
 
 	#clearData(): void {
 		this.#blocks = []
+		this.#view = null
 		this.#parts = []
-		this.chunkCount = 0
-		this.result = null
+		this.#write({ chunkCount: 0, result: null })
 	}
 
 	#release(): void {

@@ -1,8 +1,9 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { resolve } from "$app/paths"
 	import referenceCss from "$lib/tokens/reference.css?raw"
 	import { onMount } from "svelte"
-	import { AudioPlayer } from "$lib/audio/playback/player.svelte.js"
+	import { AudioPlayer } from "$lib/audio/playback/player.js"
 
 	let video: HTMLVideoElement | undefined
 	let player = $state<AudioPlayer | null>(null)
@@ -13,7 +14,7 @@
 	let videoPaused = $state(true)
 
 	onMount(() => {
-		if (video) player = new AudioPlayer({ element: video })
+		if (video) player = reactive(new AudioPlayer({ element: video }))
 	})
 
 	async function play(): Promise<void> {

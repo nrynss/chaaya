@@ -8,19 +8,40 @@ export interface TranscriptClock {
 	currentTime: number
 	/** Move the position to a source second. */
 	seek(seconds: number): void
+	/** Hear each position change, and get back a function that stops
+	 * listening. An `AudioPlayer` and a `mediaClock` both provide it. */
+	subscribe?(listener: () => void): () => void
 }
+
+/** The element events that move a media clock. */
+const CLOCK_EVENTS = ["timeupdate", "seeking", "seeked"] as const
 
 /** Read a caller owned media element as a transcript clock. The binding
  * reads the element clock on every access and never starts a wall clock
- * timer. A player driving the same element meets the contract too, and its
- * published position stays reactive while the element plays. */
-export function mediaClock(element: HTMLMediaElement): TranscriptClock {
+ * timer. Its subscribe listens to the element's `timeupdate`, `seeking` and
+ * `seeked` events. A player driving the same element meets the contract
+ * too, and its published position stays reactive while the element plays. */
+export function mediaClock(
+	element: HTMLMediaElement
+): TranscriptClock & { subscribe(listener: () => void): () => void } {
 	return {
 		get currentTime(): number {
 			return element.currentTime
 		},
 		seek(seconds: number): void {
 			element.currentTime = seconds
+		},
+		subscribe(listener: () => void): () => void {
+			// Each subscription gets its own handler, so one listener
+			// subscribed twice is two subscriptions, as on a Notifier.
+			const handler = (): void => listener()
+			for (const type of CLOCK_EVENTS) element.addEventListener(type, handler)
+			let live = true
+			return () => {
+				if (!live) return
+				live = false
+				for (const type of CLOCK_EVENTS) element.removeEventListener(type, handler)
+			}
 		}
 	}
 }

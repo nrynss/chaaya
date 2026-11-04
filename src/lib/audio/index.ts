@@ -21,21 +21,21 @@ export type {
 	CaptureResult,
 	CaptureState
 } from "./capture/index.js"
-export { AudioPlayer } from "./playback/player.svelte.js"
+export { AudioPlayer } from "./playback/player.js"
 export type {
 	AudioPlayerOptions,
 	BufferedSpan,
 	PlaybackError,
 	PlaybackFailure,
 	PlayRefusal
-} from "./playback/player.svelte.js"
+} from "./playback/player.js"
 export { placementAt, planPlacements } from "./playback/clips.js"
 export type { ClipPlacement, TimedClip } from "./playback/clips.js"
-export { ClipScheduler } from "./playback/scheduler.svelte.js"
-export type { ClipSchedulerOptions } from "./playback/scheduler.svelte.js"
-export { PcmStreamPlayer } from "./playback/stream.svelte.js"
-export type { ScheduledBlock, StreamPlayerOptions } from "./playback/stream.svelte.js"
-export { LiveLevel } from "./levels/live-level.svelte.js"
+export { ClipScheduler } from "./playback/scheduler.js"
+export type { ClipSchedulerOptions } from "./playback/scheduler.js"
+export { PcmStreamPlayer } from "./playback/stream.js"
+export type { ScheduledBlock, StreamPlayerOptions } from "./playback/stream.js"
+export { LiveLevel } from "./levels/live-level.js"
 export {
 	measureAnalyser,
 	measureBlock,

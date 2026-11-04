@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import { PcmStreamPlayer } from "./stream.svelte.js"
+import { PcmStreamPlayer } from "./stream.js"
 
 /** The times one scheduled source recorded. */
 interface FakeSource {
@@ -134,4 +134,23 @@ test("an empty block schedules nothing and keeps the schedule", () => {
 	player.push(new Float32Array(0))
 	expect(player.blocks.length).toBe(count)
 	expect(clock.sources.length).toBe(count)
+})
+
+test("each push and each flush notifies once, and a push replaces the list", () => {
+	const clock = fakeClock(48000)
+	const player = new PcmStreamPlayer({ context: clock.asContext() })
+	let heard = 0
+	player.subscribe(() => {
+		heard += 1
+	})
+	const before = player.blocks
+	player.push(new Float32Array(480))
+	expect(heard).toBe(1)
+	expect(player.blocks).not.toBe(before)
+	expect(before).toHaveLength(0)
+	player.push(new Float32Array(0))
+	expect(heard).toBe(1)
+	player.flush()
+	expect(heard).toBe(2)
+	expect(player.lastCut).toBe(0)
 })

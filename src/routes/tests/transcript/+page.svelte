@@ -1,6 +1,7 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { onMount } from "svelte"
-	import { AudioPlayer } from "$lib/audio/playback/player.svelte"
+	import { AudioPlayer } from "$lib/audio/playback/player"
 	import { TranscriptEditor, TranscriptFollower, regionsFromCuts } from "$lib/transcript/index.js"
 
 	/* Words number six, one per second, so each start reads whole seconds.
@@ -15,7 +16,7 @@
 	]
 
 	const editor = new TranscriptEditor(demo)
-	const player = new AudioPlayer()
+	const player = reactive(new AudioPlayer())
 	const follower = new TranscriptFollower(editor, player)
 	follower.follow()
 

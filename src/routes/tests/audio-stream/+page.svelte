@@ -1,6 +1,7 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { onMount } from "svelte"
-	import { PcmStreamPlayer } from "$lib/audio/playback/stream.svelte.js"
+	import { PcmStreamPlayer } from "$lib/audio/playback/stream.js"
 
 	/** The generated signal this page plays. A tone with a loud burst
 	 * marking every slot, so a reader finds each marker by its level. */
@@ -62,7 +63,7 @@
 		gain.connect(tap)
 		destination = tap
 		context = next
-		player = new PcmStreamPlayer({ context: next, destination: gain })
+		player = reactive(new PcmStreamPlayer({ context: next, destination: gain }))
 	}
 
 	async function playTwo(): Promise<void> {

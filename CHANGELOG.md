@@ -43,3 +43,20 @@ breaking release. The migration guide lands before the freeze.
   `@nrynss/chaaya/svelte` instead of `x.attach()`.
 - The `svelte` peer range is `^5.7.0`, because the binding uses
   `createSubscriber` from `svelte/reactivity`.
+- `AudioPlayer`, `AudioRecorder`, `ClipScheduler`, `PcmStreamPlayer`, and
+  `LiveLevel` on `@nrynss/chaaya/audio` are observables and import no
+  framework. A Svelte view wraps each one: `reactive(new AudioPlayer())`.
+  Their state fields are read-only getters now; `AudioPlayer.rate` keeps
+  its setter. List fields (`buffered`, `blocks`, `clips`, `skipped`,
+  `chunks`) are readonly and replaced on change, never mutated.
+  `AudioPlayer` notifies on the element events that already moved its
+  state, and only when a value changed; it adds no timer. A load, a failed
+  take, and a finished take each notify once. `LiveLevel` notifies once
+  per sample. `ClipScheduler.attach()` returns its teardown. A wrapped
+  object notifies for any field, so an effect that reads one re-runs on
+  every notification, a recorder's per-block count and countdown included.
+  An effect that must run once per state transition reads the field through
+  `$derived`, which only passes on a changed value.
+- `mediaClock(element)` gains `subscribe(listener)`, which hears the
+  element's `timeupdate`, `seeking`, and `seeked` events. `TranscriptClock`
+  gains an optional `subscribe`; `AudioPlayer` provides it.

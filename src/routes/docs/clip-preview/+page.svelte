@@ -1,8 +1,9 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { resolve } from "$app/paths"
 	import referenceCss from "$lib/tokens/reference.css?raw"
 	import { onMount } from "svelte"
-	import { ClipScheduler } from "$lib/audio/playback/scheduler.svelte.js"
+	import { ClipScheduler } from "$lib/audio/playback/scheduler.js"
 	import { a11yGate, contrastGate } from "$lib/testing/index.js"
 
 	let video: HTMLVideoElement | undefined
@@ -33,7 +34,7 @@
 		/* The markup carries no source, so the page hands the clip to the
 		 * element it owns, the way the video pages already do. */
 		video.src = "/tests/clip-preview/media/clip.webm"
-		const preview = new ClipScheduler({ context: next, element: video })
+		const preview = reactive(new ClipScheduler({ context: next, element: video }))
 		preview.setClips([
 			{
 				key: "marker",

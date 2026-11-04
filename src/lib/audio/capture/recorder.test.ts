@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest"
 import { resampleChunks } from "./resample.js"
-import { AudioRecorder } from "./recorder.svelte.js"
+import { AudioRecorder } from "./recorder.js"
 import type { CaptureChunk } from "./types.js"
 import { encodeWav } from "./wav.js"
 
@@ -402,3 +402,51 @@ for (const outcome of ["ready", "error", "reset", "track-ended", "track-lost-bef
 		recorder.reset()
 	})
 }
+
+test("a take notifies once per logical change", async () => {
+	installGrant({ stream: fakeStream(48000) })
+	const context = fakeContext(44100, { calls: 0 })
+	const recorder = new AudioRecorder({ mode: "pcm", context, autoStopSeconds: 0 })
+	const states: string[] = []
+	recorder.subscribe(() => states.push(recorder.state))
+	await recorder.start()
+	// The request, the render rate, then the grant.
+	expect(states).toEqual(["requesting", "requesting", "recording"])
+	await recorder.stop()
+	// The result and the finished state land as one change.
+	expect(states).toEqual(["requesting", "requesting", "recording", "stopped"])
+	expect(recorder.result).not.toBeNull()
+	recorder.reset()
+	expect(states).toEqual(["requesting", "requesting", "recording", "stopped", "idle"])
+	expect(recorder.result).toBeNull()
+})
+
+test("a refused grant notifies the request and the refusal, once each", async () => {
+	const refusal = Object.assign(new Error("no"), { name: "NotAllowedError" })
+	installGrant({ failure: refusal })
+	const recorder = new AudioRecorder({ mode: "pcm", autoStopSeconds: 0 })
+	const seen: [string, unknown][] = []
+	recorder.subscribe(() => seen.push([recorder.state, recorder.error]))
+	await recorder.start()
+	expect(seen).toEqual([
+		["requesting", null],
+		["denied", refusal]
+	])
+})
+
+test("the countdown notifies once per second", async () => {
+	vi.useFakeTimers()
+	installGrant({ stream: fakeStream(48000) })
+	const context = fakeContext(48000, { calls: 0 })
+	const recorder = new AudioRecorder({ mode: "pcm", context, autoStopSeconds: 3 })
+	await recorder.start()
+	expect(recorder.countdown).toBe(3)
+	const heard = vi.fn()
+	recorder.subscribe(heard)
+	vi.advanceTimersByTime(1000)
+	expect(heard).toHaveBeenCalledTimes(1)
+	expect(recorder.countdown).toBe(2)
+	vi.advanceTimersByTime(1000)
+	expect(heard).toHaveBeenCalledTimes(2)
+	recorder.reset()
+})
