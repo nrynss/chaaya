@@ -4,5 +4,5 @@
  * it is destroyed. Building the guard touches no browser global, so a server
  * render may build one freely.
  */
-export { SessionGuard } from "./session-guard.svelte.js"
-export type { SessionGuardOptions } from "./session-guard.svelte.js"
+export { SessionGuard } from "./session-guard.js"
+export type { SessionGuardOptions } from "./session-guard.js"

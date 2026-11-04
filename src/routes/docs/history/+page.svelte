@@ -1,10 +1,11 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { resolve } from "$app/paths"
 	import referenceCss from "$lib/tokens/reference.css?raw"
 	import { onMount } from "svelte"
 	import { EditHistory } from "$lib/history/index.js"
 
-	const history = new EditHistory<string>("a")
+	const history = reactive(new EditHistory<string>("a"))
 
 	let hydrated = $state(false)
 

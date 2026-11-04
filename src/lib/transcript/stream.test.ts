@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import { TranscriptEditor } from "./editor.svelte.js"
+import { TranscriptEditor } from "./editor.js"
 import { createTranscriptBridge, type TranscriptFrame } from "./stream.js"
 
 function frame(name: string, data: unknown, kind?: TranscriptFrame["kind"]): TranscriptFrame {

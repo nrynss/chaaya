@@ -1,3 +1,5 @@
+import { Notifier } from "../core/observable.js"
+
 /**
  * Which lens a camera session opens. Front by default, rear on request. The
  * app names the lens and the session passes it to the capture backend.
@@ -48,6 +50,14 @@ function messageOf(error: unknown): string {
 	return error instanceof Error && error.message !== "" ? error.message : String(error)
 }
 
+/** The state a camera session publishes. One write may set several fields, and a
+ * view hears it once. */
+interface CameraFields {
+	phase: CameraPhase
+	facing: CameraFacing
+	reason: string
+}
+
 /**
  * Opens the camera on a caller supplied video element and grabs stills.
  *
@@ -62,13 +72,42 @@ function messageOf(error: unknown): string {
  * The session stops its tracks when the page hides and when the caller stops
  * or destroys it, so the camera light goes off.
  */
-export class CameraSession {
+export class CameraSession extends Notifier {
+	#fields: CameraFields = {
+		phase: "idle",
+		facing: "user",
+		reason: ""
+	}
+
 	/** The lifecycle state of the session. */
-	phase = $state<CameraPhase>("idle")
+	get phase(): CameraPhase {
+		return this.#fields.phase
+	}
+
 	/** Which lens the session runs or would open. */
-	facing = $state<CameraFacing>("user")
+	get facing(): CameraFacing {
+		return this.#fields.facing
+	}
+
 	/** The message behind a denied, unavailable, or failed phase. Empty elsewhere. */
-	reason = $state("")
+	get reason(): string {
+		return this.#fields.reason
+	}
+
+	/** Apply one change to the published state and notify once when a value
+	 * moved. Equal values notify nothing, the way a rune skipped them. */
+	#write(patch: Partial<CameraFields>): void {
+		let changed = false
+		const next = { ...this.#fields }
+		for (const key of Object.keys(patch) as (keyof CameraFields)[]) {
+			if (Object.is(next[key], patch[key])) continue
+			;(next as Record<keyof CameraFields, unknown>)[key] = patch[key]
+			changed = true
+		}
+		if (!changed) return
+		this.#fields = next
+		this.notify()
+	}
 
 	#stream: MediaStream | null = null
 	#video: HTMLVideoElement | null = null
@@ -122,11 +161,13 @@ export class CameraSession {
 	async start(options: CameraStartOptions = {}): Promise<void> {
 		if (this.phase === "requesting" || this.phase === "live") return
 		if (options.video !== undefined && options.video !== null) this.bind(options.video)
-		if (options.facing !== undefined) this.facing = options.facing
 		this.#session += 1
 		const session = this.#session
-		this.phase = "requesting"
-		this.reason = ""
+		this.#write(
+			options.facing !== undefined
+				? { facing: options.facing, phase: "requesting", reason: "" }
+				: { phase: "requesting", reason: "" }
+		)
 		try {
 			const stream = await this.#openCamera(this.facing)
 			if (session !== this.#session) {
@@ -135,16 +176,18 @@ export class CameraSession {
 			}
 			this.#stream = stream
 			await this.#play(stream)
-			if (session !== this.#session || this.phase !== "requesting") {
+			if (session !== this.#session || this.#fields.phase !== "requesting") {
 				for (const track of stream.getTracks()) track.stop()
 				return
 			}
-			this.phase = "live"
+			this.#write({ phase: "live" })
 		} catch (error) {
-			if (session !== this.#session || this.phase !== "requesting") return
+			if (session !== this.#session || this.#fields.phase !== "requesting") return
 			this.#release()
-			this.reason = messageOf(error)
-			this.phase = isDenial(error) ? "denied" : isMissing(error) ? "unavailable" : "failed"
+			this.#write({
+				reason: messageOf(error),
+				phase: isDenial(error) ? "denied" : isMissing(error) ? "unavailable" : "failed"
+			})
 		}
 	}
 
@@ -152,16 +195,14 @@ export class CameraSession {
 	async switchFacing(): Promise<void> {
 		const next: CameraFacing = this.facing === "user" ? "environment" : "user"
 		if (this.phase !== "live" && this.phase !== "requesting") {
-			this.facing = next
+			this.#write({ facing: next })
 			return
 		}
-		this.facing = next
 		this.#session += 1
 		const session = this.#session
 		const video = this.#video
 		this.#release()
-		this.phase = "requesting"
-		this.reason = ""
+		this.#write({ facing: next, phase: "requesting", reason: "" })
 		try {
 			const stream = await this.#openCamera(next)
 			if (session !== this.#session) {
@@ -177,12 +218,14 @@ export class CameraSession {
 				for (const track of stream.getTracks()) track.stop()
 				return
 			}
-			this.phase = "live"
+			this.#write({ phase: "live" })
 		} catch (error) {
 			if (session !== this.#session || this.phase !== "requesting") return
 			this.#release()
-			this.reason = messageOf(error)
-			this.phase = isDenial(error) ? "denied" : isMissing(error) ? "unavailable" : "failed"
+			this.#write({
+				reason: messageOf(error),
+				phase: isDenial(error) ? "denied" : isMissing(error) ? "unavailable" : "failed"
+			})
 		}
 	}
 
@@ -222,8 +265,7 @@ export class CameraSession {
 	stop(): void {
 		this.#session += 1
 		this.#release()
-		if (this.phase !== "idle") this.phase = "idle"
-		this.reason = ""
+		this.#write({ phase: "idle", reason: "" })
 	}
 
 	/** Stop the stream and drop the hide handlers. Call when the owner leaves. */

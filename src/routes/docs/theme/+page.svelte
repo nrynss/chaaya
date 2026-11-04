@@ -1,8 +1,10 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js";
 	import { resolve } from "$app/paths";
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
-	import { theme, themeToggleLabel, themeScript } from "$lib/theme/index.js";
+	import { theme as themeStore, themeToggleLabel, themeScript } from "$lib/theme/index.js";
+	const theme = reactive(themeStore);
 
 	let hydrated = $state(false);
 
@@ -22,7 +24,9 @@
 		`<!doctype html>\n<html lang="en">\n\t<head>\n\t\t<meta charset="utf-8" />\n\t\t${headScript}\n\t\t%sveltekit.head%\n\t</head>\n\t<body>\n\t\t<div style="display: contents">%sveltekit.body%</div>\n\t</body>\n</html>`;
 
 	const layoutSnippet = `<script lang="ts">
-	import { theme, themeToggleLabel } from "@nrynss/chaaya/theme";
+	import { reactive } from "@nrynss/chaaya/svelte";
+	import { theme as themeStore, themeToggleLabel } from "@nrynss/chaaya/theme";
+	const theme = reactive(themeStore);
 
 	function toggle(): void {
 		theme.set(theme.resolved === "dark" ? "light" : "dark");

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest"
-import { CameraSession } from "./camera-session.svelte.js"
+import { CameraSession } from "./camera-session.js"
 import { fileBackend, nativeBackend, sessionBackend } from "./seam.js"
 
 afterEach(() => {
@@ -210,4 +210,21 @@ test("the seam wraps a session, a picker, and a native hook", async () => {
 	expect(native.kind).toBe("native")
 	expect((await native.capture()).size).toBeGreaterThan(0)
 	session.destroy()
+})
+
+test("start notifies each phase it passes through, and destroy notifies once", async () => {
+	const { stream } = fakeStream()
+	installGrant(stream, [])
+	const session = new CameraSession()
+	session.bind(fakeVideo(640, 480))
+	const phases: string[] = []
+	session.subscribe(() => phases.push(session.phase))
+	await session.start()
+	expect(phases).toEqual(["requesting", "live"])
+	await session.start()
+	expect(phases).toEqual(["requesting", "live"])
+	session.destroy()
+	expect(phases).toEqual(["requesting", "live", "idle"])
+	session.destroy()
+	expect(phases).toEqual(["requesting", "live", "idle"])
 })

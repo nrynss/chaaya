@@ -11,13 +11,13 @@
  * literal path and never searches for an extension, so the built barrel needs
  * that name to load.
  */
-export { CameraSession } from "./camera-session.svelte.js"
+export { CameraSession } from "./camera-session.js"
 export type {
 	CameraCaptureOptions,
 	CameraFacing,
 	CameraPhase,
 	CameraStartOptions
-} from "./camera-session.svelte.js"
+} from "./camera-session.js"
 export {
 	fitDimensions,
 	hasExifSegment,

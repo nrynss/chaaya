@@ -51,7 +51,7 @@ The player, the recorder, the stream player, the clip scheduler, and the live le
 
 ## Transcript
 
-`@nrynss/chaaya/transcript` holds timed words. `TranscriptEditor` cuts and reverts ranges. A mapping converts between the source timeline and the edited one. Waveform regions come from the cuts. `TranscriptFollower` binds the words to playback through any `TranscriptClock`. A player driving a caller owned audio or video element meets that contract, and `mediaClock` adapts a bare element. The binding reads the element clock and never starts its own timer. Both clocks offer `subscribe`, which hears each position change; the clock from `mediaClock` listens to `timeupdate`, `seeking`, and `seeked`. `createTranscriptBridge` folds a timed-word stream into the editor's input. See [transcript-stream.md](transcript-stream.md).
+`@nrynss/chaaya/transcript` holds timed words. `TranscriptEditor` cuts and reverts ranges. A mapping converts between the source timeline and the edited one. Waveform regions come from the cuts. `TranscriptFollower` binds the words to playback through any `TranscriptClock`. A player driving a caller owned audio or video element meets that contract, and `mediaClock` adapts a bare element. The binding reads the element clock and never starts its own timer. Every `TranscriptClock` offers `subscribe`, which hears each position change, and `TranscriptFollower.attach()` subscribes to it and returns the teardown; the clock from `mediaClock` listens to `timeupdate`, `seeking`, and `seeked`. `createTranscriptBridge` folds a timed-word stream into the editor's input. See [transcript-stream.md](transcript-stream.md).
 
 ## Timeline
 
@@ -77,7 +77,7 @@ A run refused for lack of balance ends in `insufficient`, read through the adapt
 
 ## Session guard
 
-`SessionGuard` on `@nrynss/chaaya/guard` closes one live session exactly once when its page goes away.
+`SessionGuard` on `@nrynss/chaaya/guard` closes one live session exactly once when its page goes away. `attach()` returns a teardown that closes it.
 
 ## Keyboard shortcuts
 
@@ -85,7 +85,7 @@ A run refused for lack of balance ends in `insufficient`, read through the adapt
 
 ## Edit history
 
-`EditHistory` on `@nrynss/chaaya/history` holds undoable entries as apply and invert pairs over plain data. A coalescing key merges consecutive entries, such as a drag or repeated nudges. A transaction groups several commands into one entry. Proposals wait in a separate list, and accepting one becomes one undoable entry. The sync layer sends pending edits in order with the parent revision through a caller supplied commit function. A conflict refusal pauses the queue and exposes the server head. The caller rebases or discards, and the history never silently overwrites.
+`EditHistory` on `@nrynss/chaaya/history` holds undoable entries as apply and invert pairs over plain data. A coalescing key merges consecutive entries, such as a drag or repeated nudges. A transaction groups several commands into one entry. Proposals wait in a separate list, and accepting one becomes one undoable entry. The sync layer sends pending edits in order with the parent revision through a caller supplied commit function. A conflict refusal pauses the queue and exposes the server head. The caller rebases or discards, and the history never silently overwrites. `doc`, `entries`, and `proposals` are replaced on change, never mutated, and `doc` is read-only to the caller: every change goes through `execute`.
 
 ## Theme and tokens
 
@@ -97,7 +97,7 @@ A run refused for lack of balance ends in `insufficient`, read through the adapt
 
 ## Framework
 
-Svelte 5 only, for now. Svelte 5.7 is the floor, because the binding uses `createSubscriber`. The core is moving onto a framework-neutral change signal, `Notifier` on `@nrynss/chaaya/core`, and `@nrynss/chaaya/svelte` turns it into Svelte reactivity with `reactive` and `attach`. `TimelineScale`, `FrameLoop`, `createEventStream`, both `JobStream` classes, `JobPoller`, and the audio classes are on it, and their `attach()` returns the teardown. The other published modules still use runes until they move. There is no Svelte 4 build. The SvelteKit helpers sit on their own export, with `@sveltejs/kit` as an optional peer, so Kit is not pulled into every import.
+Svelte 5 only, for now. Svelte 5.7 is the floor, because the binding uses `createSubscriber`. The core is moving onto a framework-neutral change signal, `Notifier` on `@nrynss/chaaya/core`, and `@nrynss/chaaya/svelte` turns it into Svelte reactivity with `reactive` and `attach`. `TimelineScale`, `FrameLoop`, `createEventStream`, both `JobStream` classes, `JobPoller`, the audio classes, `EditHistory`, `TranscriptEditor`, `TranscriptFollower`, `CameraSession`, `SessionGuard`, and the `theme` store are on it, and their `attach()` returns the teardown. The other published modules still use runes until they move. There is no Svelte 4 build. The SvelteKit helpers sit on their own export, with `@sveltejs/kit` as an optional peer, so Kit is not pulled into every import.
 
 ## Out of scope
 

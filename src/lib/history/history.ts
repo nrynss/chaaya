@@ -1,3 +1,5 @@
+import { Notifier } from "../core/observable.js"
+
 /**
  * The sync lifecycle. `idle` means nothing is in flight. `syncing` means a
  * flush is running. `conflict` means the server refused a commit and the
@@ -79,23 +81,74 @@ function clone<T>(doc: T): T {
  * through entries, so undo inverts them in place. Sync replays the same
  * entries against the server in order. Proposals wait in a separate list
  * until the caller accepts or dismisses them.
+ *
+ * The history is an observable. Each method that changes it notifies once,
+ * and a flush notifies once per server answer. The document is replaced on
+ * every change, never edited in place by the history, and it is read-only
+ * to the caller: a change goes through `execute`, so it can be undone.
+ * `entries` and `proposals` are replaced on change too.
  */
-export class EditHistory<T> {
-	/** The live document, with every local change applied. */
-	doc = $state<T>() as T
-	/** The last acknowledged server revision. */
-	serverRevision = $state(0)
-	/** The document the server last acknowledged. */
-	serverDoc = $state<T>() as T
+export class EditHistory<T> extends Notifier {
+	#doc: T
+	#serverRevision = 0
+	#serverDoc: T
+	#status: SyncStatus = "idle"
+	#conflict: { headRevision: number; head: T } | null = null
+	#lastError: unknown = null
+	#proposals: readonly HistoryProposal<T>[] = []
+	#entries: HistoryEntry<T>[] = []
+
+	/** The live document, with every local change applied. Read-only:
+	 * change it through `execute`. */
+	get doc(): T {
+		return this.#doc
+	}
+
+	/** The last acknowledged server revision. A caller that loaded the
+	 * document from the server sets it once, before the first flush. */
+	get serverRevision(): number {
+		return this.#serverRevision
+	}
+	set serverRevision(value: number) {
+		if (value === this.#serverRevision) return
+		this.#serverRevision = value
+		this.notify()
+	}
+
+	/** The document the server last acknowledged. A caller that loaded the
+	 * document from the server sets it with the revision. */
+	get serverDoc(): T {
+		return this.#serverDoc
+	}
+	set serverDoc(value: T) {
+		this.#serverDoc = value
+		this.notify()
+	}
+
 	/** The sync lifecycle. */
-	status = $state<SyncStatus>("idle")
+	get status(): SyncStatus {
+		return this.#status
+	}
+
 	/** The server head behind a conflict, or null elsewhere. */
-	conflict = $state<{ headRevision: number; head: T } | null>(null)
+	get conflict(): { headRevision: number; head: T } | null {
+		return this.#conflict
+	}
+
 	/** The failure behind an error status, or null elsewhere. */
-	lastError = $state<unknown>(null)
+	get lastError(): unknown {
+		return this.#lastError
+	}
+
 	/** Proposals awaiting review. Accepting one runs it as one entry. */
-	proposals = $state<HistoryProposal<T>[]>([])
-	entries = $state<HistoryEntry<T>[]>([])
+	get proposals(): readonly HistoryProposal<T>[] {
+		return this.#proposals
+	}
+
+	/** The undo entries, oldest first. Replaced on change. */
+	get entries(): readonly HistoryEntry<T>[] {
+		return this.#entries
+	}
 
 	#commit: CommitFn<T> | undefined
 	#frames: TransactionFrame<T>[] = []
@@ -103,8 +156,9 @@ export class EditHistory<T> {
 	#inflight: Promise<void> | null = null
 
 	constructor(initial: T, options: EditHistoryOptions<T> = {}) {
-		this.doc = clone(initial)
-		this.serverDoc = clone(initial)
+		super()
+		this.#doc = clone(initial)
+		this.#serverDoc = clone(initial)
 		this.#commit = options.commit
 	}
 
@@ -159,11 +213,12 @@ export class EditHistory<T> {
 	 */
 	execute(command: EditCommand<T>): void {
 		if (this.#frames.length > 0) {
+			// The outermost transaction notifies once when it closes.
 			this.#executeBuffered(command)
 			return
 		}
-		this.entries = this.entries.filter((entry) => entry.applied || entry.committed)
-		this.doc = command.apply(this.doc)
+		this.#entries = this.entries.filter((entry) => entry.applied || entry.committed)
+		this.#doc = command.apply(this.doc)
 		const top = this.#topApplied()
 		if (
 			top !== undefined &&
@@ -175,21 +230,23 @@ export class EditHistory<T> {
 			const last = top.invert
 			top.apply = (doc: T) => command.apply(first(doc))
 			top.invert = (doc: T) => last(command.invert(doc))
+			this.notify()
 			return
 		}
-		this.entries = [
+		this.#entries = [
 			...this.entries,
 			{ label: command.label, apply: command.apply, invert: command.invert, coalesceKey: command.coalesceKey, applied: true, committed: false }
 		]
+		this.notify()
 	}
 
 	/** Run one command inside the open transaction frame. Buffered commands
 	 * never merge into earlier entries, so the frame commit groups exactly
 	 * what ran inside it. */
 	#executeBuffered(command: EditCommand<T>): void {
-		this.entries = this.entries.filter((entry) => entry.applied || entry.committed)
-		this.doc = command.apply(this.doc)
-		this.entries = [
+		this.#entries = this.entries.filter((entry) => entry.applied || entry.committed)
+		this.#doc = command.apply(this.doc)
+		this.#entries = [
 			...this.entries,
 			{ label: command.label, apply: command.apply, invert: command.invert, coalesceKey: command.coalesceKey, applied: true, committed: false }
 		]
@@ -201,7 +258,9 @@ export class EditHistory<T> {
 		const top = this.#topApplied()
 		if (top === undefined) return false
 		top.applied = false
-		this.doc = top.invert(this.doc)
+		this.#entries = [...this.#entries]
+		this.#doc = top.invert(this.doc)
+		this.notify()
 		return true
 	}
 
@@ -211,7 +270,9 @@ export class EditHistory<T> {
 		const first = this.#firstUndone()
 		if (first === undefined) return false
 		first.applied = true
-		this.doc = first.apply(this.doc)
+		this.#entries = [...this.#entries]
+		this.#doc = first.apply(this.doc)
+		this.notify()
 		return true
 	}
 
@@ -219,17 +280,20 @@ export class EditHistory<T> {
 	 * Group several commands into one undo step under one label. The
 	 * commands run at once, so the document moves during the frame. A throw
 	 * rolls every buffered command back and reruns nothing. Undo and redo
-	 * stay outside, and frames nest.
+	 * stay outside, and frames nest. The commands inside notify nothing; the
+	 * outermost frame notifies once when it closes having changed anything.
 	 */
 	transaction(label: string, run: () => void): void {
-		const frame: TransactionFrame<T> = { label, entries: this.entries, doc: clone(this.doc) }
+		const frame: TransactionFrame<T> = { label, entries: this.#entries, doc: clone(this.doc) }
 		this.#frames.push(frame)
 		try {
 			run()
 		} catch (error) {
 			this.#frames.pop()
-			this.entries = frame.entries
-			this.doc = frame.doc
+			const moved = this.#entries !== frame.entries
+			this.#entries = frame.entries
+			this.#doc = frame.doc
+			if (moved && this.#frames.length === 0) this.notify()
 			throw error
 		}
 		this.#frames.pop()
@@ -246,7 +310,8 @@ export class EditHistory<T> {
 			applied: true,
 			committed: false
 		}
-		this.entries = [...kept, grouped]
+		this.#entries = [...kept, grouped]
+		if (this.#frames.length === 0) this.notify()
 	}
 
 	/**
@@ -256,7 +321,8 @@ export class EditHistory<T> {
 	propose(command: EditCommand<T>): string {
 		this.#proposalCount += 1
 		const id = `proposal-${this.#proposalCount}`
-		this.proposals = [...this.proposals, { ...command, id }]
+		this.#proposals = [...this.proposals, { ...command, id }]
+		this.notify()
 		return id
 	}
 
@@ -267,7 +333,8 @@ export class EditHistory<T> {
 		const proposal = this.proposals.find((candidate) => candidate.id === id)
 		if (proposal === undefined) return false
 		if (this.#frames.length > 0) throw new Error("Proposals are accepted outside a transaction.")
-		this.proposals = this.proposals.filter((candidate) => candidate.id !== id)
+		// The execute below notifies once, and carries the proposal removal.
+		this.#proposals = this.proposals.filter((candidate) => candidate.id !== id)
 		this.execute({ label: proposal.label, apply: proposal.apply, invert: proposal.invert })
 		return true
 	}
@@ -275,7 +342,8 @@ export class EditHistory<T> {
 	/** Dismiss a proposal unread. Returns false for an unknown id. */
 	dismissProposal(id: string): boolean {
 		if (!this.proposals.some((candidate) => candidate.id === id)) return false
-		this.proposals = this.proposals.filter((candidate) => candidate.id !== id)
+		this.#proposals = this.proposals.filter((candidate) => candidate.id !== id)
+		this.notify()
 		return true
 	}
 
@@ -303,8 +371,9 @@ export class EditHistory<T> {
 			if (this.pendingCount === 0) return
 			throw new Error("A history without a commit function stays local.")
 		}
-		this.status = "syncing"
-		this.lastError = null
+		this.#status = "syncing"
+		this.#lastError = null
+		this.notify()
 		let sendDoc = clone(this.serverDoc)
 		let revision = this.serverRevision
 		try {
@@ -317,9 +386,11 @@ export class EditHistory<T> {
 					return
 				}
 				revision = answer.revision
-				this.serverRevision = revision
-				this.serverDoc = clone(sendDoc)
+				this.#serverRevision = revision
+				this.#serverDoc = clone(sendDoc)
 				entry.committed = false
+				this.#entries = [...this.#entries]
+				this.notify()
 			}
 			const applied = this.entries.filter((entry) => entry.applied && !entry.committed)
 			for (const entry of applied) {
@@ -330,24 +401,29 @@ export class EditHistory<T> {
 					return
 				}
 				revision = answer.revision
-				this.serverRevision = revision
-				this.serverDoc = clone(sendDoc)
+				this.#serverRevision = revision
+				this.#serverDoc = clone(sendDoc)
 				entry.committed = true
+				this.#entries = [...this.#entries]
+				this.notify()
 			}
-			this.conflict = null
-			this.status = "idle"
+			this.#conflict = null
+			this.#status = "idle"
+			this.notify()
 		} catch (error) {
-			this.status = "error"
-			this.lastError = error
+			this.#status = "error"
+			this.#lastError = error
+			this.notify()
 			throw error
 		}
 	}
 
 	/** Pause on a conflict and roll back to the last acknowledged state. */
 	#pause(headRevision: number, head: T): void {
-		this.conflict = { headRevision, head: clone(head) }
-		this.doc = clone(this.serverDoc)
-		this.status = "conflict"
+		this.#conflict = { headRevision, head: clone(head) }
+		this.#doc = clone(this.serverDoc)
+		this.#status = "conflict"
+		this.notify()
 	}
 
 	/**
@@ -362,17 +438,18 @@ export class EditHistory<T> {
 	rebase(): boolean {
 		const conflict = this.conflict
 		if (conflict === null || this.status !== "conflict") return false
-		this.serverDoc = clone(conflict.head)
-		this.serverRevision = conflict.headRevision
+		this.#serverDoc = clone(conflict.head)
+		this.#serverRevision = conflict.headRevision
 		let next = clone(conflict.head)
 		for (const entry of this.entries) {
 			if (!entry.applied || entry.committed) continue
 			next = entry.apply(next)
 		}
-		this.doc = next
-		this.conflict = null
-		this.lastError = null
-		this.status = "idle"
+		this.#doc = next
+		this.#conflict = null
+		this.#lastError = null
+		this.#status = "idle"
+		this.notify()
 		return true
 	}
 
@@ -381,10 +458,11 @@ export class EditHistory<T> {
 	 * Committed steps keep their undo depth. A conflict clears with the rest.
 	 */
 	discardPending(): void {
-		this.entries = this.entries.filter((entry) => entry.committed)
-		this.doc = clone(this.serverDoc)
-		this.conflict = null
-		this.lastError = null
-		this.status = "idle"
+		this.#entries = this.entries.filter((entry) => entry.committed)
+		this.#doc = clone(this.serverDoc)
+		this.#conflict = null
+		this.#lastError = null
+		this.#status = "idle"
+		this.notify()
 	}
 }

@@ -1,8 +1,9 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js";
 	import { resolve } from "$app/paths";
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
-	import { SessionGuard } from "$lib/guard/session-guard.svelte.js";
+	import { SessionGuard } from "$lib/guard/session-guard.js";
 
 	let guard: SessionGuard | null = $state(null);
 	let hydrated = $state(false);
@@ -23,8 +24,9 @@
 		"\turl: \"/docs/session-guard/close\",",
 		"\tbody: () => sessionId,",
 		"});",
-		"guard.attach();",
+		"const release = guard.attach();",
 		"sessionId = await startSession();",
+		"// release() closes the session and drops the pagehide listener.",
 	].join("\n");
 
 	onMount(() => {
@@ -34,10 +36,10 @@
 	/** Hold one live session, so the page tells the server when it leaves. */
 	function hold(): void {
 		if (guard !== null) return;
-		const next = new SessionGuard({
+		const next = reactive(new SessionGuard({
 			url: "/docs/session-guard/close",
 			body: () => sessionId,
-		});
+		}));
 		next.attach();
 		guard = next;
 		/* The id arrives after attach(), the way a provider session id does. */

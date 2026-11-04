@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { mediaClock } from "./follow.svelte.js"
+import { mediaClock } from "./follow.js"
 
 /** An element with a clock and hand-fired events. */
 function fakeElement(): HTMLMediaElement & { fire(type: string): void } {

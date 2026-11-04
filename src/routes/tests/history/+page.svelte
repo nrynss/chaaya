@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js";
 	import { EditHistory, type CommitRequest, type CommitResponse } from "$lib/history/index.js";
 
 	/** A random session per load, so parallel runs never share a record. */
@@ -29,7 +30,7 @@
 		return { revision: done.revision };
 	}
 
-	const history = new EditHistory<string>("", { commit });
+	const history = reactive(new EditHistory<string>("", { commit }));
 
 	/** The next letter to append, cycling through the alphabet. */
 	function nextLetter(): string {

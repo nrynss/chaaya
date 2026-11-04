@@ -60,3 +60,27 @@ breaking release. The migration guide lands before the freeze.
 - `mediaClock(element)` gains `subscribe(listener)`, which hears the
   element's `timeupdate`, `seeking`, and `seeked` events. `TranscriptClock`
   gains an optional `subscribe`; `AudioPlayer` provides it.
+- `EditHistory`, `TranscriptEditor`, `TranscriptFollower`, `CameraSession`,
+  and `SessionGuard` are observables and import no framework. Their state
+  fields are read-only getters, except `EditHistory.serverRevision` and
+  `serverDoc` and `TranscriptEditor.reason`, which keep their setters. A
+  Svelte view wraps each one: `reactive(new EditHistory(doc))`. Each method
+  notifies once, and a no-op notifies nothing. A transaction notifies once,
+  when its outermost frame closes. A flush notifies when it starts, on each
+  commit answer, and when it ends.
+- `EditHistory` replaces `doc`, `entries`, and `proposals` on change instead
+  of mutating them, and `entries` and `proposals` are typed `readonly`. `doc`
+  is read-only to the caller; change it through `execute`.
+- `TranscriptClock.subscribe` is required. `mediaClock` and `AudioPlayer`
+  already provide it; a custom clock adds it.
+- `TranscriptFollower.follow()` is replaced by `attach()`, which subscribes
+  to the clock and the editor, skips a cut the playhead enters or a cut
+  made under it, and returns its teardown. Without a framework, nothing re-runs a follower that is not
+  attached. The follower notifies only when `activeWord` changes. A Svelte
+  component calls `attach(follower)` from `@nrynss/chaaya/svelte`.
+- `SessionGuard.attach()` returns a teardown that closes the session, the
+  same as `destroy()`. A second `attach()` returns the same teardown.
+- The `theme` store on `@nrynss/chaaya/theme` is an observable with the
+  same `mode`, `resolved`, and `set`. It still reads storage on first use,
+  not on import. It notifies once per change of `mode` or `resolved`. A Svelte view reads it through `reactive(theme)`. The
+  head script is unchanged.

@@ -4,6 +4,7 @@
  * skipping every cut span this module reports.
  */
 
+import { Notifier } from "../core/observable.js"
 import {
 	cutSpans,
 	editedEnd,
@@ -25,24 +26,72 @@ export type RevertMiss = "unknown-cut"
 /** The focused word of the editor. */
 export type Anchor = number | null
 
-/** One reactive editor over a fixed word list. Selection, extension, cut
- * and revert all run from named methods, which the view wires to keyboard
- * friendly controls. */
-export class TranscriptEditor {
+/** The state an editor publishes. One write may set several fields, and a
+ * view hears it once. */
+interface EditorFields {
+	cuts: readonly TranscriptCut[]
+	anchor: Anchor
+	focus: Anchor
+	reason: string
+}
+
+/** One editor over a fixed word list. Selection, extension, cut and revert
+ * all run from named methods, which the view wires to keyboard friendly
+ * controls. The editor is an observable: each method notifies once when it
+ * changed something, and `cuts` is replaced on change. */
+export class TranscriptEditor extends Notifier {
+	#fields: EditorFields = {
+		cuts: [],
+		anchor: null,
+		focus: null,
+		reason: "cut for clarity"
+	}
+
+	/** The live cuts in the order they arrived. Replaced on change. */
+	get cuts(): readonly TranscriptCut[] {
+		return this.#fields.cuts
+	}
+
+	/** The focused word index, or null before anything is selected. */
+	get anchor(): Anchor {
+		return this.#fields.anchor
+	}
+
+	/** One end of the selection while it extends, or null when idle. */
+	get focus(): Anchor {
+		return this.#fields.focus
+	}
+
+	/** The reason the next cut carries. */
+	get reason(): string {
+		return this.#fields.reason
+	}
+	set reason(value: string) {
+		this.#write({ reason: value })
+	}
+
+	/** Apply one change to the published state and notify once when a value
+	 * moved. Equal values notify nothing, the way a rune skipped them. */
+	#write(patch: Partial<EditorFields>): void {
+		let changed = false
+		const next = { ...this.#fields }
+		for (const key of Object.keys(patch) as (keyof EditorFields)[]) {
+			if (Object.is(next[key], patch[key])) continue
+			;(next as Record<keyof EditorFields, unknown>)[key] = patch[key]
+			changed = true
+		}
+		if (!changed) return
+		this.#fields = next
+		this.notify()
+	}
+
 	/** The words the editor reads, in source order. */
 	readonly words: readonly TranscriptWord[]
-	/** The live cuts in the order they arrived. */
-	cuts = $state<TranscriptCut[]>([])
-	/** The focused word index, or null before anything is selected. */
-	anchor = $state<Anchor>(null)
-	/** One end of the selection while it extends, or null when idle. */
-	focus = $state<Anchor>(null)
-	/** The reason the next cut carries. */
-	reason = $state("cut for clarity")
 
 	#nextCut = 1
 
 	constructor(words: readonly TranscriptWord[]) {
+		super()
 		this.words = words
 	}
 
@@ -72,13 +121,11 @@ export class TranscriptEditor {
 	/** Focus one word. */
 	select(index: number): void {
 		if (this.words.length === 0) {
-			this.anchor = null
-			this.focus = null
+			this.#write({ anchor: null, focus: null })
 			return
 		}
 		const clamped = Math.min(Math.max(index, 0), this.words.length - 1)
-		this.anchor = clamped
-		this.focus = clamped
+		this.#write({ anchor: clamped, focus: clamped })
 	}
 
 	/** Grow the selection toward a word while the anchor stays put. */
@@ -88,15 +135,15 @@ export class TranscriptEditor {
 			return
 		}
 		if (this.words.length === 0) return
-		this.focus = Math.min(Math.max(index, 0), this.words.length - 1)
+		this.#write({ focus: Math.min(Math.max(index, 0), this.words.length - 1) })
 	}
 
 	/** Move the focused word by a step, keeping the selection where it is. */
 	move(step: number): void {
 		if (this.words.length === 0) return
 		const base = this.focus ?? this.anchor ?? 0
-		this.focus = Math.min(Math.max(base + step, 0), this.words.length - 1)
-		if (this.anchor === null) this.anchor = this.focus
+		const focus = Math.min(Math.max(base + step, 0), this.words.length - 1)
+		this.#write(this.anchor === null ? { focus, anchor: focus } : { focus })
 	}
 
 	/** Cut the selection with a reason and clear the selection. */
@@ -110,28 +157,22 @@ export class TranscriptEditor {
 			reason: text
 		}
 		this.#nextCut += 1
-		this.cuts = [...this.cuts, cut]
-		this.anchor = null
-		this.focus = null
+		this.#write({ cuts: [...this.cuts, cut], anchor: null, focus: null })
 		return cut
 	}
 
 	/** Revert one cut by id. An unknown id leaves every cut untouched. */
 	revert(id: string): TranscriptCut | RevertMiss {
-		let found: TranscriptCut | null = null
-		this.cuts = this.cuts.filter((cut) => {
-			if (cut.id === id) {
-				found = cut
-				return false
-			}
-			return true
-		})
-		return found ?? "unknown-cut"
+		const found = this.cuts.find((cut) => cut.id === id)
+		if (found === undefined) return "unknown-cut"
+		this.#write({ cuts: this.cuts.filter((cut) => cut !== found) })
+		return found
 	}
 
 	/** Revert every cut. */
 	revertAll(): void {
-		this.cuts = []
+		if (this.cuts.length === 0) return
+		this.#write({ cuts: [] })
 	}
 
 	/** Map a source second to the edited timeline. */
