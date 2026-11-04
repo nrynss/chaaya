@@ -75,12 +75,13 @@ breaking release. The migration guide lands before the freeze.
   already provide it; a custom clock adds it.
 - `TranscriptFollower.follow()` is replaced by `attach()`, which subscribes
   to the clock and the editor, skips a cut the playhead enters or a cut
-  made under it, and returns its teardown. Without a framework, nothing re-runs a follower that is not
-  attached. The follower notifies only when `activeWord` changes. A Svelte
-  component calls `attach(follower)` from `@nrynss/chaaya/svelte`.
+  made under it, and returns its teardown. Without a framework, nothing
+  re-runs a follower that is not attached. The follower notifies only when
+  `activeWord` changes. A Svelte component calls `attach(follower)` from `@nrynss/chaaya/svelte`.
 - `SessionGuard.attach()` returns a teardown that closes the session, the
   same as `destroy()`. A second `attach()` returns the same teardown.
 - The `theme` store on `@nrynss/chaaya/theme` is an observable with the
   same `mode`, `resolved`, and `set`. It still reads storage on first use,
-  not on import. It notifies once per change of `mode` or `resolved`. A Svelte view reads it through `reactive(theme)`. The
-  head script is unchanged.
+  not on import. It notifies once per change of `mode` or `resolved`. A
+  Svelte view reads it through `reactive(theme)`. The head script is
+  unchanged.
