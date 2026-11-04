@@ -1,3 +1,5 @@
+import { Notifier } from "../core/observable.js"
+
 /**
  * The largest close body the guard sends, in bytes. The fetch standard gives
  * the keepalive bodies a page has in flight one shared budget of 64 KiB. A
@@ -59,28 +61,39 @@ export interface SessionGuardOptions {
  * Building a guard touches no browser global. Only attach(), close() and
  * destroy() reach the window, so a server render may build one freely.
  */
-export class SessionGuard {
-	/** True once the close notice has gone. */
-	closed = $state(false)
+export class SessionGuard extends Notifier {
+	#closed = false
+	#teardown: (() => void) | null = null
+
+	/** True once the close notice has gone. Notifies once, when it turns. */
+	get closed(): boolean {
+		return this.#closed
+	}
 
 	readonly #url: string
 	readonly #body: (() => CloseBody | null) | undefined
 	#onHide: (() => void) | null = null
 
 	constructor(options: SessionGuardOptions) {
+		super()
 		this.#url = options.url
 		this.#body = options.body
 	}
 
 	/**
-	 * Listen for the page going away. Call after mount, so no server render
-	 * touches the window. A second call does nothing.
+	 * Listen for the page going away, and get back the teardown, which runs
+	 * `destroy`. Call after mount, so no server render touches the window.
+	 * A Svelte component calls `attach(guard)` from `@nrynss/chaaya/svelte`.
+	 * A second call adds nothing and returns the same teardown.
 	 */
-	attach(): void {
-		if (this.#onHide !== null) return
+	attach(): () => void {
+		if (this.#teardown !== null) return this.#teardown
 		const onHide = () => this.close()
 		this.#onHide = onHide
 		window.addEventListener("pagehide", onHide)
+		const teardown = (): void => this.destroy()
+		this.#teardown = teardown
+		return teardown
 	}
 
 	/**
@@ -91,8 +104,9 @@ export class SessionGuard {
 	 * one body this close read.
 	 */
 	close(): void {
-		if (this.closed) return
-		this.closed = true
+		if (this.#closed) return
+		this.#closed = true
+		this.notify()
 		const body = this.#readBody()
 		if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
 			try {
@@ -134,6 +148,7 @@ export class SessionGuard {
 			window.removeEventListener("pagehide", this.#onHide)
 			this.#onHide = null
 		}
+		this.#teardown = null
 		this.close()
 	}
 }

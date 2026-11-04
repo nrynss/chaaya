@@ -1,7 +1,8 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { page } from "$app/state"
 	import { onMount } from "svelte"
-	import { SessionGuard } from "$lib/guard/session-guard.svelte.js"
+	import { SessionGuard } from "$lib/guard/session-guard.js"
 
 	/** The endpoint that collects close notices. A spec passes one in. */
 	const target = page.url.searchParams.get("close") ?? ""
@@ -144,11 +145,11 @@
 		const source = ArrayBuffer.isView(body) ? body.buffer : body
 		tag = Object.prototype.toString.call(source)
 		shadowed = ownClaims(body)
-		const next = new SessionGuard({
+		const next = reactive(new SessionGuard({
 			url: target,
 			/* A shared buffer is outside the option's type, so the harness hands every kind over the way untyped code does. */
 			body: () => body as string,
-		})
+		}))
 		next.attach()
 		guard = next
 		attached = true

@@ -16,7 +16,7 @@
 		{ start: 5, end: 6, text: "early" }
 	]
 
-	const editor = new TranscriptEditor(demo)
+	const editor = reactive(new TranscriptEditor(demo))
 	let video: HTMLVideoElement | undefined
 	let player = $state<AudioPlayer | null>(null)
 	let follower = $state<TranscriptFollower | null>(null)
@@ -26,16 +26,19 @@
 	/* The player adopts the markup element, the shape a caller owns. The
 	 * follower binds the words to that player, so the binding reads the
 	 * element clock through the player and never starts its own timer. */
+	let stopFollow: (() => void) | undefined
+
 	onMount(() => {
 		if (video) {
 			const owned = reactive(new AudioPlayer({ element: video }))
 			owned.load("/tests/transcript-video/media/clip.webm")
 			player = owned
-			const bound = new TranscriptFollower(editor, owned)
-			bound.follow()
+			const bound = reactive(new TranscriptFollower(editor, owned))
+			stopFollow = bound.attach()
 			follower = bound
 		}
 		hydrated = true
+		return () => stopFollow?.()
 	})
 
 	/* Move focus onto the chosen word, so a keyboard run watches focus move

@@ -5,8 +5,8 @@
  * folds a generic timed-word stream into the editor's word list.
  */
 
-export { TranscriptEditor, type Anchor, type RevertMiss } from "./editor.svelte.js"
-export { TranscriptFollower, mediaClock, type TranscriptClock } from "./follow.svelte.js"
+export { TranscriptEditor, type Anchor, type RevertMiss } from "./editor.js"
+export { TranscriptFollower, mediaClock, type TranscriptClock } from "./follow.js"
 export {
 	activeWordAt,
 	cutSpans,

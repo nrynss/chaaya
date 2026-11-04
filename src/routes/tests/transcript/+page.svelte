@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { reactive } from "$lib/svelte/index.js"
+	import { attach, reactive } from "$lib/svelte/index.js"
 	import { onMount } from "svelte"
 	import { AudioPlayer } from "$lib/audio/playback/player"
 	import { TranscriptEditor, TranscriptFollower, regionsFromCuts } from "$lib/transcript/index.js"
@@ -15,10 +15,10 @@
 		{ start: 5, end: 6, text: "early" }
 	]
 
-	const editor = new TranscriptEditor(demo)
+	const editor = reactive(new TranscriptEditor(demo))
 	const player = reactive(new AudioPlayer())
-	const follower = new TranscriptFollower(editor, player)
-	follower.follow()
+	const follower = reactive(new TranscriptFollower(editor, player))
+	attach(follower)
 
 	/* Ten buckets over ten seconds, so bucket N covers second N. The regions
 	 * below derive from the same cuts, so a cut appears where it happened. */

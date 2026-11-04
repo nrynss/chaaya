@@ -65,12 +65,38 @@ breaking release. The migration guide lands before the freeze.
   observables and import no framework. A Svelte view wraps each one:
   `reactive(new PricedAction(...))`, and `reactive(wallet.action(...))` for
   an action the wallet makes. Their state fields are read-only getters now.
-  Each logical change notifies once: an acknowledgement moves `acknowledged`
-  and `pending` together, a failure lands `error` and `state` together, and
-  a refresh that lands a new balance and `ready` notifies once. A run that
+  Each logical change notifies once: an acknowledgement moves `stored`,
+  `acknowledged`, and `pending` together, a failure lands `error` and
+  `state` together, and a refresh that lands a new balance and `ready` notifies once. A run that
   settles notifies the wallet only through the refresh it starts.
 - `CreditWallet.followTopUp(reference, options)` takes no cleanup runner and
   returns the teardown that stops the follow. Call it from `onMount` or an
   `$effect` and return the teardown, or call it in an event handler and
   keep the teardown. Each top-up answer notifies once. `Uploader` stays a
   plain interface.
+- `EditHistory`, `TranscriptEditor`, `TranscriptFollower`, `CameraSession`,
+  and `SessionGuard` are observables and import no framework. Their state
+  fields are read-only getters, except `EditHistory.serverRevision` and
+  `serverDoc` and `TranscriptEditor.reason`, which keep their setters. A
+  Svelte view wraps each one: `reactive(new EditHistory(doc))`. Each method
+  notifies once, and a no-op notifies nothing. A transaction notifies once,
+  when its outermost frame closes. A flush notifies when it starts, on each
+  commit answer, and when it ends.
+- `EditHistory` replaces `doc`, `entries`, and `proposals` on change instead
+  of mutating them, and `entries` and `proposals` are typed `readonly`. `doc`
+  is read-only to the caller; change it through `execute`.
+- `TranscriptClock.subscribe` is required. `mediaClock` and `AudioPlayer`
+  already provide it; a custom clock adds it.
+- `TranscriptFollower.follow()` is replaced by `attach()`, which subscribes
+  to the clock and the editor, skips a cut the playhead enters or a cut
+  made under it, and returns its teardown. Without a framework, nothing
+  re-runs a follower that is not attached. The follower notifies only when
+  `activeWord` changes. A Svelte component calls `attach(follower)` from
+  `@nrynss/chaaya/svelte`.
+- `SessionGuard.attach()` returns a teardown that closes the session, the
+  same as `destroy()`. A second `attach()` returns the same teardown.
+- The `theme` store on `@nrynss/chaaya/theme` is an observable with the
+  same `mode`, `resolved`, and `set`. It still reads storage on first use,
+  not on import. It notifies once per change of `mode` or `resolved`. A
+  Svelte view reads it through `reactive(theme)`. The head script is
+  unchanged.

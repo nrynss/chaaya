@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js";
 	import { resolve } from "$app/paths";
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onMount } from "svelte";
@@ -16,7 +17,7 @@
 		{ start: 3, end: 3.5, text: "early", speaker: "sam" }
 	];
 
-	const editor = new TranscriptEditor(demo);
+	const editor = reactive(new TranscriptEditor(demo));
 
 	const regions = $derived(regionsFromCuts(editor.words, editor.cuts, 8, 4));
 

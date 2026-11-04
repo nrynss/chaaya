@@ -1,6 +1,7 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js";
 	import { page } from "$app/state";
-	import { CameraSession } from "$lib/capture/camera-session.svelte.js";
+	import { CameraSession } from "$lib/capture/camera-session.js";
 	import { prepareImage, type PreparedImage } from "$lib/capture/prepare-image.js";
 	import { onMount } from "svelte";
 
@@ -81,7 +82,7 @@
 	async function start(facing: "user" | "environment"): Promise<void> {
 		failure = "";
 		try {
-			const next = session ?? new CameraSession();
+			const next = session ?? reactive(new CameraSession());
 			session = next;
 			hook().session = next;
 			if (element) next.bind(element);

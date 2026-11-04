@@ -1,4 +1,4 @@
-import type { CameraSession } from "./camera-session.svelte.js"
+import type { CameraSession } from "./camera-session.js"
 
 /**
  * One still image backend. A live session, a file picker, and a native camera

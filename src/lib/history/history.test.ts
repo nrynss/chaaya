@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import { EditHistory, type CommitRequest, type CommitResponse, type EditCommand } from "./history.svelte.js"
+import { EditHistory, type CommitRequest, type CommitResponse, type EditCommand } from "./history.js"
 
 /** Add a fixed step to a counter. */
 function add(step: number, label = `add ${step}`, coalesceKey?: string): EditCommand<number> {

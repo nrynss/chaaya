@@ -11,7 +11,7 @@
  * literal path and never searches for an extension, so the built barrel needs
  * that name to load.
  */
-export { EditHistory } from "./history.svelte.js"
+export { EditHistory } from "./history.js"
 export type {
 	CommitFn,
 	CommitRequest,
@@ -20,4 +20,4 @@ export type {
 	EditHistoryOptions,
 	HistoryProposal,
 	SyncStatus
-} from "./history.svelte.js"
+} from "./history.js"

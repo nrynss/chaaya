@@ -1,3 +1,4 @@
+import { Notifier } from "../core/observable.js"
 import { resolveTheme, THEME_KEY, type Theme, type ThemeMode } from "./theme.js"
 
 /** True when the operating system asks for the dark theme. It reads the
@@ -42,64 +43,60 @@ function paint(mode: ThemeMode): void {
 	document.documentElement.dataset.theme = mode
 }
 
-/** The live theme state. One object serves the whole app. */
-class ThemeController {
-	#mode = $state<ThemeMode>("system")
-	#systemDark = $state(false)
+/** The live theme state. One object serves the whole app. It reads storage
+ * and the media query on its first use, not at import, so a plain node
+ * import stays inert. It notifies once per change of `mode` or `resolved`. */
+class ThemeStore extends Notifier {
+	#ready = false
+	#mode: ThemeMode = "system"
+	#systemDark = false
 
-	constructor() {
+	/** Read the stored mode and the system preference once, paint, and
+	 * start listening to the system preference. */
+	#init(): void {
+		if (this.#ready) return
+		this.#ready = true
 		this.#mode = storedMode()
 		this.#systemDark = systemPrefersDark()
 		if (typeof document !== "undefined") paint(this.#mode)
 		if (typeof window !== "undefined") {
-			window
-				.matchMedia("(prefers-color-scheme: dark)")
-				.addEventListener("change", this.#onSystemChange)
+			window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", this.#onSystemChange)
 		}
 	}
 
+	/** The chosen mode. */
 	get mode(): ThemeMode {
+		this.#init()
 		return this.#mode
 	}
 
-	get resolved(): Theme {
-		return resolveTheme(this.#mode, this.#systemDark)
-	}
-
-	set(mode: ThemeMode): void {
-		this.#mode = mode
-		persist(mode)
-		paint(mode)
-	}
-
-	#onSystemChange = (): void => {
-		this.#systemDark = systemPrefersDark()
-	}
-}
-
-let instance: ThemeController | undefined
-
-/** The controller, built on the first read. Importing this module runs no
- * rune, so a plain node import stays inert. */
-function controller(): ThemeController {
-	instance ??= new ThemeController()
-	return instance
-}
-
-/** The one theme object the app reads. A consumer reads `mode` and
- * `resolved`, and calls `set` from its own control. */
-export const theme = {
-	/** The chosen mode. */
-	get mode(): ThemeMode {
-		return controller().mode
-	},
 	/** The theme the document paints. It follows the system preference live
 	 * while the mode is system. */
 	get resolved(): Theme {
-		return controller().resolved
-	},
+		this.#init()
+		return resolveTheme(this.#mode, this.#systemDark)
+	}
+
 	/** Choose a mode, persist it, and paint it. */
 	set(mode: ThemeMode): void {
-		controller().set(mode)
+		this.#init()
+		const changed = mode !== this.#mode
+		this.#mode = mode
+		persist(mode)
+		paint(mode)
+		if (changed) this.notify()
+	}
+
+	#onSystemChange = (): void => {
+		const dark = systemPrefersDark()
+		if (dark === this.#systemDark) return
+		this.#systemDark = dark
+		// A forced mode keeps `resolved`, so only the system mode notifies.
+		if (this.#mode === "system") this.notify()
 	}
 }
+
+/** The one theme object the app reads. A consumer reads `mode` and
+ * `resolved`, and calls `set` from its own control. A Svelte view reads it
+ * through `reactive(theme)`. */
+export const theme = new ThemeStore()

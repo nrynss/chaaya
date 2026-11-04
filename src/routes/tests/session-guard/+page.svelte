@@ -1,7 +1,8 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js";
 	import { page } from "$app/state";
 	import { onMount } from "svelte";
-	import { SessionGuard, type SessionGuardOptions } from "$lib/guard/session-guard.svelte.js";
+	import { SessionGuard, type SessionGuardOptions } from "$lib/guard/session-guard.js";
 
 	/** The endpoint that collects close notices. A spec passes one in. */
 	const target = page.url.searchParams.get("close") ?? "";
@@ -85,7 +86,7 @@
 	onMount(() => {
 		hydrated = true
 		const body = bodyOption()
-		const next = new SessionGuard(body === undefined ? { url: target } : { url: target, body })
+		const next = reactive(new SessionGuard(body === undefined ? { url: target } : { url: target, body }))
 		next.attach()
 		guard = next
 		attached = true

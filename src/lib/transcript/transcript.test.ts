@@ -1,6 +1,6 @@
 import { expect, test } from "vitest"
-import { TranscriptEditor } from "./editor.svelte"
-import { TranscriptFollower } from "./follow.svelte"
+import { TranscriptEditor } from "./editor"
+import { TranscriptFollower } from "./follow"
 import {
 	activeWordAt,
 	cutSpans,
@@ -181,7 +181,8 @@ test("a follower seeks to the word start and skips a cut once", () => {
 		seek(seconds: number): void {
 			seeks.push(seconds)
 			position = seconds
-		}
+		},
+		subscribe: () => () => {}
 	}
 	editor.select(1)
 	editor.extend(2)

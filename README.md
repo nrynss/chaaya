@@ -98,7 +98,9 @@ Published as `@nrynss/chaaya`.
 - `@nrynss/chaaya/tokens/reference.css`: the reference stylesheet a new app
   copies.
 - `@nrynss/chaaya/theme`: the three-state theme mechanism and the head
-  script that paints the stored mode before first paint.
+  script that paints the stored mode before first paint. The `theme`
+  store is an observable; a Svelte view reads it through
+  `reactive(theme)`.
 - `@nrynss/chaaya/api`: the fetch client. Pass `parseError` to read a
   backend's envelope. Without a parser, a non-2xx body stays `http_error`.
   `createApi({ parseError })` sets that parser for every call.
@@ -150,11 +152,14 @@ Published as `@nrynss/chaaya`.
   player, clip scheduler, and live level are observables; a Svelte view
   reads one through `reactive(new AudioPlayer())`.
 - `@nrynss/chaaya/guard`: the SessionGuard that closes one live session
-  exactly once when its page goes away.
+  exactly once when its page goes away. `attach()` returns a teardown that
+  closes it.
 - `@nrynss/chaaya/transcript`: timed words, the TranscriptEditor that cuts and
   reverts ranges over them, the mapping between the source and edited
   timelines, the waveform regions derived from the cuts, and the
-  TranscriptFollower that binds the words to playback.
+  TranscriptFollower that binds the words to playback. The editor and the
+  follower are observables. `follower.attach()` subscribes to the clock and
+  returns its teardown.
 - `@nrynss/chaaya/timeline`: seconds to pixels under zoom and scroll with
   ruler ticks, segment move and resize against snap targets, and the handle
   that turns any element into a keyboard operable edge or body control. `TimelineScale` is an observable with no framework import. A Svelte
@@ -162,6 +167,7 @@ Published as `@nrynss/chaaya`.
 - `@nrynss/chaaya/capture`: `CameraSession` with permission phases and lens
   switching, `prepareImage` that stands pixels upright and drops EXIF, and
   one capture seam over a live session, a file picker, and a native backend.
+  `CameraSession` is an observable.
 - `@nrynss/chaaya/share`: `readSharedPayload` and `consumeShareLaunch`, which
   read a share target launch once into one payload and clean the address bar.
 - `@nrynss/chaaya/priced`: `PricedAction`, which quotes, confirms, and runs
@@ -178,7 +184,8 @@ Published as `@nrynss/chaaya`.
   The registry is the one source a help view reads.
 - `@nrynss/chaaya/history`: `EditHistory`, with undo and redo over apply and
   invert pairs, proposals, and commit reconciliation through a caller
-  supplied commit function.
+  supplied commit function. `EditHistory` is an observable; `doc` is
+  read-only, and every change goes through `execute`.
 - `@nrynss/chaaya/testing`: a contrast gate and an accessibility gate a
   consumer points at its own stylesheet and container, plus protocol asserts
   an adapter author points at its frames, errors, and readings.

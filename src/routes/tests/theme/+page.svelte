@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js"
 	import { onMount } from "svelte"
-	import { theme, themeScript, themeToggleLabel } from "$lib/theme"
+	import { theme as themeStore, themeScript, themeToggleLabel } from "$lib/theme"
+	const theme = reactive(themeStore)
 
 	/* The stored mode lives in the browser, so the markup waits for mount.
 	 * A server render cannot know it and would hydrate a different theme. */
