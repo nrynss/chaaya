@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs"
-import { join } from "node:path"
+import { join, sep } from "node:path"
 import { compileModule } from "svelte/compiler"
 import { repoRoot } from "./lib.mjs"
 
@@ -8,9 +8,15 @@ import { repoRoot } from "./lib.mjs"
 // class below ES2022 turns a rune field into a constructor assignment, and
 // that compile throws state_invalid_placement on first import. This guard
 // runs the same compiler over every module in dist and fails naming the
-// first file that throws, so a build below the rune floor cannot pass.
+// first file that throws, so a build below the rune floor cannot pass. Only
+// the binding directories ship such a module, and one anywhere else fails.
 
 const distDir = join(repoRoot, "dist")
+
+/** The packaged binding directories, the only ones that may ship a
+ * .svelte.js module. The framework-neutral guard keeps the source of every
+ * other directory plain. */
+const bindingDirs = ["svelte", "sveltekit"].map((dir) => join(distDir, dir) + sep)
 
 /** Every .svelte.js file under a directory, in directory walk order. */
 function listModules(dir) {
@@ -33,6 +39,13 @@ try {
 
 if (modules.length === 0) {
 	console.error("Blocked. dist carries no .svelte.js module, so nothing proves the packaged Svelte modules compile.")
+	process.exit(1)
+}
+
+const stray = modules.filter((file) => !bindingDirs.some((dir) => file.startsWith(dir)))
+if (stray.length > 0) {
+	console.error("Blocked. dist ships a .svelte.js module outside the binding directories:")
+	for (const file of stray) console.error(`  ${file}`)
 	process.exit(1)
 }
 
