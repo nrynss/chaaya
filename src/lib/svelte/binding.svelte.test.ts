@@ -94,6 +94,7 @@ test("the proxy keeps private fields, binds methods stably, and wraps once", () 
 	const target = new TimelineScale(100, 2)
 	const view = reactive(target)
 	expect(reactive(target)).toBe(view)
+	expect(reactive(view)).toBe(view)
 	expect(view).toBeInstanceOf(TimelineScale)
 	const zoom = view.zoom
 	expect(view.zoom).toBe(zoom)

@@ -1,7 +1,8 @@
 import { createSubscriber } from "svelte/reactivity"
 import type { Observable } from "../core/observable.js"
 
-/** One proxy per target, so wrapping twice hands back the same object. */
+/** One proxy per target, so wrapping twice hands back the same object. A
+ * proxy maps to itself, so wrapping a proxy hands it back too. */
 const proxies = new WeakMap<Observable, Observable>()
 
 /**
@@ -16,7 +17,8 @@ const proxies = new WeakMap<Observable, Observable>()
  * Reads and writes run against the target itself, so getters, setters, and
  * `#private` fields keep their brand checks. A method comes back bound to
  * the target, and the bound copy is cached, so `proxy.method` is stable.
- * Wrapping the same target again returns the same proxy.
+ * Wrapping the same target again, or wrapping the proxy, returns the same
+ * proxy.
  */
 export function reactive<T extends Observable>(target: T): T {
 	if (target === null || typeof target !== "object" || typeof target.subscribe !== "function") {
@@ -48,5 +50,6 @@ export function reactive<T extends Observable>(target: T): T {
 		}
 	})
 	proxies.set(target, proxy)
+	proxies.set(proxy, proxy)
 	return proxy
 }
