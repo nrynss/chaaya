@@ -58,3 +58,12 @@ Reviewed hash: `23d5101`.
 - `npx eslint src/lib/core/job` and `npx vitest run` (542) passed on this head.
 
 C 0, H 0, M 0, L 0. Residue: none. Verdict: APPROVE, pending CodeRabbit.
+
+## Round 3
+
+- Merged main, which brought in #106 (listener errors are logged). The merge was clean with no conflicts. The CHANGELOG, README and observable docs read consistently, and the core unit tests pass (120).
+- Browser leg on the box (chromium, firefox and firefox-sink): 334 passed and 4 skipped. That covers the job, job-poll, job-pause, credit-wallet and priced-action specs. WebKit was not run, because the box lacks its system libraries.
+- The migrated routes have no `$effect` that reads a wrapped object, so the coarse-notification pitfall found in #98 does not apply here.
+- CodeRabbit is rate-limited, and the next slot is more than 30 minutes away. Under the owner's rule, this merges on a clean own review plus green CI.
+
+Verdict: APPROVE.
