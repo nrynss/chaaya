@@ -28,9 +28,10 @@ export function mergeProgress(base: JobProgress, reading: JobProgress): JobProgr
  * instead of taking the browser's schedule. There is no WebSocket path.
  *
  * Construction touches nothing, so importing this module on a server is safe.
- * attach() opens the stream, and a component calls it during initialisation.
- * The stream therefore opens before the first render, and any frame that
- * arrives before the component mounts still lands in the published state.
+ * attach() opens the stream and returns the teardown. The stream holds its
+ * own state, so any frame that arrives before a view reads it still lands
+ * in the published state. A Svelte component passes the stream to `attach`
+ * from `@nrynss/chaaya/svelte`, which opens it once the component mounts.
  *
  * Each connection waits for the stream to open, then reads state to catch up
  * when `fetchState` is set, then applies frames as they arrive. A refused
