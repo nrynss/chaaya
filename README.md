@@ -120,8 +120,13 @@ Published as `@nrynss/chaaya`.
   notifies. `attach(x)` runs `x.attach()` in the calling component's effect
   and calls the teardown it returns when the component goes away. A read
   without `reactive` renders once and never updates. Needs Svelte `^5.7.0`.
-  Every other entry imports no framework, so `svelte` is an optional peer
-  that only this entry and `@nrynss/chaaya/sveltekit` need.
+  Every entry but the bindings imports no framework, so `svelte` is an
+  optional peer that only this entry and `@nrynss/chaaya/sveltekit` need.
+- `@nrynss/chaaya/react`: the React binding. `useObservable(x)` re-renders
+  the component once per notification of `x` and returns `x`. It reads
+  `x.version` through `useSyncExternalStore`, so nothing tears.
+  `useAttached(x)` calls `x.attach()` after mount and runs the teardown on
+  unmount. Needs React 18 or later, an optional peer.
 - `@nrynss/chaaya/sveltekit`: form-action mappers for `ApiError`, and
   `createJobStreamResponse` for a `text/event-stream` `+server.ts`. Optional
   `@sveltejs/kit` peer.
