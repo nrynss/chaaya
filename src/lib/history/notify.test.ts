@@ -74,3 +74,39 @@ describe("EditHistory notifications", () => {
 		expect(statuses).toEqual(["syncing:0", "syncing:1", "syncing:2", "idle:2"])
 	})
 })
+
+describe("entries snapshots", () => {
+	const step = { label: "one", apply: (doc: { n: number }) => ({ n: doc.n + 1 }), invert: (doc: { n: number }) => ({ n: doc.n - 1 }) }
+
+	it("a kept snapshot never moves when a later undo, redo or commit lands", async () => {
+		const history = new EditHistory({ n: 0 }, { commit: async () => ({ revision: 1 }) })
+		history.execute(step)
+		const before = history.entries
+		history.undo()
+		expect(before[0].applied).toBe(true)
+		const undone = history.entries
+		expect(undone[0]).not.toBe(before[0])
+		history.redo()
+		expect(undone[0].applied).toBe(false)
+		const redone = history.entries
+		await history.flush()
+		expect(redone[0].committed).toBe(false)
+		expect(history.entries[0].committed).toBe(true)
+	})
+
+	it("a snapshot is stable between changes and frozen", () => {
+		const history = new EditHistory({ n: 0 })
+		history.execute(step)
+		expect(history.entries).toBe(history.entries)
+		expect(Object.isFrozen(history.entries[0])).toBe(true)
+	})
+
+	it("a coalesced step read through entries during apply shows the merged step", () => {
+		const history = new EditHistory({ n: 0 })
+		const nudge = { label: "nudge", coalesceKey: "k", apply: (doc: { n: number }) => ({ n: doc.n + 1 }), invert: (doc: { n: number }) => ({ n: doc.n - 1 }) }
+		history.execute(nudge)
+		history.execute({ ...nudge, apply: (doc) => (void history.entries, { n: doc.n + 1 }) })
+		expect(history.entries).toHaveLength(1)
+		expect(history.entries[0].apply({ n: 0 })).toEqual({ n: 2 })
+	})
+})

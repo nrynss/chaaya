@@ -135,6 +135,8 @@ export class FrameLoop extends Notifier {
 	#attempts = 0
 	#opened = false
 	#stopped = false
+	#attached = false
+	readonly #teardown = (): void => this.close()
 	#paused = false
 	#unwatch: (() => void) | undefined = undefined
 
@@ -179,8 +181,14 @@ export class FrameLoop extends Notifier {
 
 	/** Follow the stream. It returns the teardown, which closes the loop. A
 	 * Svelte component passes the loop to `attach` from
-	 * `@nrynss/chaaya/svelte`, which calls the teardown with the component. */
+	 * `@nrynss/chaaya/svelte`, which calls the teardown with the component.
+	 * A second attach while live shares the one watch, and an attach after
+	 * the stop opens nothing. Both hand back the same teardown. */
 	attach(): () => void {
+		// A stopped loop ends for good, and a second attach while one is
+		// live shares it, so neither opens a second watch or stream.
+		if (this.#stopped || this.#attached) return this.#teardown
+		this.#attached = true
 		if (this.#options.pauseWhenHidden !== false) {
 			this.#unwatch = watchPause(
 				() => this.#pause(),
@@ -189,7 +197,7 @@ export class FrameLoop extends Notifier {
 			if (isPaused()) this.#pause()
 		}
 		if (!this.#paused) void this.#connect()
-		return () => this.close()
+		return this.#teardown
 	}
 
 	/** Stop following. It cancels the stream and any pending reconnect. A second call changes nothing. */
