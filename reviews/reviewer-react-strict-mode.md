@@ -12,3 +12,7 @@
 
 ## Round 3
 Clean.
+
+## Round 4: CodeRabbit
+- Two components sharing a target overwrote each other's pending teardown, so a stale microtask could tear down a target still mounted. Valid. Replaced the pending map with a reference-counted attachment per target: the first user attaches, the last unmount tears down a microtask later, and a re-attach in between keeps it. Tests added for siblings under Strict Mode and for re-attach after a real teardown.
+- Mutations: ignore re-attach (10 fail), no sharing (4), no decrement (9), no delete after teardown (1). All caught.

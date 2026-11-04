@@ -5,16 +5,17 @@ export interface Attachable {
 	attach(): () => void
 }
 
-/** A teardown that waits one microtask, so a re-attach can cancel it. */
-interface PendingTeardown {
+/** One live attachment of a target, shared by every component using it. */
+interface Attachment {
 	readonly teardown: () => void
-	cancelled: boolean
+	/** How many mounted effects use it. */
+	users: number
 }
 
-/** The teardowns still waiting, by target. Keyed by the target rather than
- * by the component, so a component remounted under a new key adopts the
- * live attachment too, instead of attaching twice and losing it. */
-const waiting = new WeakMap<Attachable, PendingTeardown>()
+/** The live attachments, by target. Keyed by the target rather than by the
+ * component, so components that share a target, or a component remounted
+ * under a new key, share one attachment instead of attaching twice. */
+const live = new WeakMap<Attachable, Attachment>()
 
 /**
  * Call `target.attach()` after mount, and run the teardown it returns after
@@ -23,8 +24,10 @@ const waiting = new WeakMap<Attachable, PendingTeardown>()
  * Attach opens a watch, a listener or a stream, so it runs in an effect and
  * never during a server render.
  *
- * The teardown waits one microtask. If any component attaches the same
- * target again before then, the teardown is cancelled and the target stays
+ * Components that use the same target share one attachment: the first
+ * attaches it, and the teardown runs once the last one unmounts. That
+ * teardown waits one microtask. If any component attaches the same target
+ * again before then, the teardown is cancelled and the target stays
  * attached. React's development Strict Mode unmounts and remounts each
  * effect at once, and this is what keeps a target alive through it. A
  * `FrameLoop`, `JobStream`, `createEventStream`, `JobPoller` or
@@ -35,28 +38,24 @@ const waiting = new WeakMap<Attachable, PendingTeardown>()
  */
 export function useAttached(target: Attachable): void {
 	useEffect(() => {
-		const pending = waiting.get(target)
-		let teardown: () => void
-		if (pending !== undefined && !pending.cancelled) {
-			// A remount of the same target within the microtask: keep the
-			// live attachment.
-			pending.cancelled = true
-			waiting.delete(target)
-			teardown = pending.teardown
-		} else {
-			teardown = target.attach()
+		let attachment = live.get(target)
+		if (attachment === undefined) {
+			const teardown = target.attach()
 			if (typeof teardown !== "function") {
 				throw new TypeError("attach() must return its teardown function.")
 			}
+			attachment = { teardown, users: 0 }
+			live.set(target, attachment)
 		}
+		attachment.users++
+		const mine = attachment
 		return () => {
-			const entry: PendingTeardown = { teardown, cancelled: false }
-			waiting.set(target, entry)
+			mine.users--
 			queueMicrotask(() => {
-				if (entry.cancelled) return
-				entry.cancelled = true
-				if (waiting.get(target) === entry) waiting.delete(target)
-				entry.teardown()
+				// A re-attach within the microtask keeps the attachment.
+				if (mine.users > 0 || live.get(target) !== mine) return
+				live.delete(target)
+				mine.teardown()
 			})
 		}
 	}, [target])

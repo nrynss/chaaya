@@ -337,6 +337,62 @@ describe("useObservable and useAttached", () => {
 		vi.spyOn(console, "error").mockImplementation(() => {})
 		expect(() => render(createElement(Bad))).toThrow(TypeError)
 	})
+
+	test("siblings that share a target attach it once and tear it down after the last unmount", async () => {
+		let attaches = 0
+		let teardowns = 0
+		const target = {
+			attach(): () => void {
+				attaches++
+				return () => {
+					teardowns++
+				}
+			},
+		}
+		function User(): ReactElement {
+			useAttached(target)
+			return createElement("span")
+		}
+		function Pair({ both }: { both: boolean }): ReactElement {
+			return createElement(
+				"div",
+				null,
+				createElement(User, { key: "a" }),
+				both ? createElement(User, { key: "b" }) : null,
+			)
+		}
+		const view = render(createElement(StrictMode, null, createElement(Pair, { both: true })))
+		await flushMicrotasks()
+		expect([attaches, teardowns]).toEqual([1, 0])
+		view.rerender(createElement(StrictMode, null, createElement(Pair, { both: false })))
+		await flushMicrotasks()
+		expect([attaches, teardowns]).toEqual([1, 0])
+		view.unmount()
+		await flushMicrotasks()
+		expect([attaches, teardowns]).toEqual([1, 1])
+	})
+
+	test("a target mounted again after a real teardown attaches again", async () => {
+		let attaches = 0
+		let teardowns = 0
+		const target = {
+			attach(): () => void {
+				attaches++
+				return () => {
+					teardowns++
+				}
+			},
+		}
+		function User(): ReactElement {
+			useAttached(target)
+			return createElement("span")
+		}
+		render(createElement(User)).unmount()
+		await flushMicrotasks()
+		render(createElement(User)).unmount()
+		await flushMicrotasks()
+		expect([attaches, teardowns]).toEqual([2, 2])
+	})
 })
 
 describe("the closing classes survive Strict Mode", () => {

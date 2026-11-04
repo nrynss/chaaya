@@ -32,7 +32,8 @@ not run yet.
   cancels it. Strict Mode's unmount and remount in development therefore
   keep one live attachment, so a `FrameLoop`, `JobStream`,
   `createEventStream`, `JobPoller`, or `SessionGuard` survives it, and a
-  guard sends no close during mount. Core is unchanged.
+  guard sends no close during mount. Components that use the same target
+  share one attachment, torn down after the last unmount. Core is unchanged.
 
 - `docs/bindings.md` and the `/docs/bindings` page: the `Observable`
   contract, both bindings, and a binding for another framework in about 20

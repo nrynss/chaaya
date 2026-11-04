@@ -91,8 +91,9 @@ Strict Mode in development unmounts and remounts each effect at once.
 microtask before it runs a teardown. A re-attach of the same target in that
 microtask, which is what Strict Mode does, cancels it and keeps the live
 attachment. Strict Mode therefore leaves one attachment: one connection, no
-state lost, and no close sent by a guard during mount. A real unmount tears
-the target down a microtask later.
+state lost, and no close sent by a guard during mount. Components that use
+the same target share one attachment, and the last one to unmount tears it
+down a microtask later.
 
 A closing target still cannot come back after a real teardown. A component
 hidden by `<Activity mode="hidden">` and shown later, for example, finds it
