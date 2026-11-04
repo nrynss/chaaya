@@ -45,3 +45,16 @@ This file records one agent's adversarial read of the change. It is not a mainta
 ## Severity counts and verdict
 
 Round one: C 0, H 0, M 0, L 1 (fixed), INFO 2. Verdict: REMEDIATE.
+
+## Round two
+
+Reviewed hash: `23d5101`.
+
+- The round-one L is resolved. The `JobStream` class doc now says `attach()` returns the teardown and that the binding opens the stream on mount.
+- I read the full diff again: the five converted classes, the wallet bridge, the internal `runInEffect`, the routes, and the docs.
+  - Owner suppression is correct. `#applying` is set only around synchronous work, and the loop notifies synchronously, so no notify slips through or gets lost.
+  - `EventStream` now extends `Observable`, so a hand-written implementation must add `subscribe` and `version`. That belongs to the 0.6.0 break and is noted in the CHANGELOG with the other type changes.
+  - The diff touches 29 files, under the size where CodeRabbit skips a PR.
+- `npx eslint src/lib/core/job` and `npx vitest run` (542) passed on this head.
+
+C 0, H 0, M 0, L 0. Residue: none. Verdict: APPROVE, pending CodeRabbit.
