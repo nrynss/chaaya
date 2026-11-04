@@ -66,8 +66,8 @@ breaking release. The migration guide lands before the freeze.
   `reactive(new PricedAction(...))`, and `reactive(wallet.action(...))` for
   an action the wallet makes. Their state fields are read-only getters now.
   Each logical change notifies once: an acknowledgement moves `stored`,
-  `acknowledged`, and `pending` together, a failure lands `error` and `state` together, and
-  a refresh that lands a new balance and `ready` notifies once. A run that
+  `acknowledged`, and `pending` together, a failure lands `error` and
+  `state` together, and a refresh that lands a new balance and `ready` notifies once. A run that
   settles notifies the wallet only through the refresh it starts.
 - `CreditWallet.followTopUp(reference, options)` takes no cleanup runner and
   returns the teardown that stops the follow. Call it from `onMount` or an
