@@ -1,12 +1,12 @@
+import { Notifier } from "../core/observable.js"
 import type { ChaayaError } from "../core/error.js"
 import { JobPoller } from "../core/job/poll.js"
-import { runInEffect } from "../svelte/run-in-effect.svelte.js"
 import {
 	PricedAction,
 	type InsufficientFunds,
 	type PriceAmount,
 	type PricedActionOptions
-} from "./priced-action.svelte.js"
+} from "./priced-action.js"
 
 /**
  * Where the balance read stands. `idle` has never read. `reading` has a
@@ -71,6 +71,14 @@ export interface TopUpFollowOptions<R> {
 	readonly pauseWhenHidden?: boolean
 }
 
+/** The state a wallet publishes. One write may set several fields, and a
+ * view hears it once. */
+interface WalletFields {
+	balance: PriceAmount | null
+	phase: WalletPhase
+	error: unknown
+}
+
 /** The default top-up follow timeout, in milliseconds. */
 const TOP_UP_TIMEOUT_MS = 60_000
 
@@ -101,13 +109,44 @@ function sameBalance(a: PriceAmount | null, b: PriceAmount): boolean {
  *
  * Construction touches nothing, so importing this module on a server is safe.
  */
-export class CreditWallet<R = unknown> {
+export class CreditWallet<R = unknown> extends Notifier {
+	#fields: WalletFields = {
+		balance: null,
+		phase: "idle",
+		error: null
+	}
+
 	/** The last balance that landed, or null before the first. */
-	balance = $state<PriceAmount | null>(null)
+	get balance(): PriceAmount | null {
+		return this.#fields.balance
+	}
+
 	/** Where the balance read stands. */
-	phase = $state<WalletPhase>("idle")
+	get phase(): WalletPhase {
+		return this.#fields.phase
+	}
+
 	/** The failure behind a failed phase, or null elsewhere. */
-	error = $state<unknown>(null)
+	get error(): unknown {
+		return this.#fields.error
+	}
+
+	/** Apply one change to the published state and notify once when a value
+	 * moved. Equal values notify nothing, the way a rune skipped them. */
+	#write(patch: Partial<WalletFields>): void {
+		let changed = false
+		const next = { ...this.#fields }
+		for (const key of Object.keys(patch) as (keyof WalletFields)[]) {
+			if (Object.is(next[key], patch[key])) continue
+			;(next as Record<keyof WalletFields, unknown>)[key] = patch[key]
+			changed = true
+		}
+		if (!changed) return
+		this.#fields = next
+		if (this.#depth > 0) this.#dirty = true
+		else this.notify()
+	}
+
 
 	#readBalance: (signal: AbortSignal) => Promise<R>
 	#toBalance: (reading: R) => PriceAmount
@@ -117,14 +156,16 @@ export class CreditWallet<R = unknown> {
 	#landed = 0
 	#refresh: AbortController | undefined = undefined
 	#settledPhase: WalletPhase = "idle"
-	#follower = $state<JobPoller<TaggedReading<R>> | undefined>(undefined)
-	#reference = $state<string | null>(null)
-	/** Bumps on every change of the follower. `JobPoller` is a plain
-	 * observable, so this rune carries its changes into the getters below
-	 * until the wallet moves off runes too. */
-	#followerTick = $state(0)
+	#follower: JobPoller<TaggedReading<R>> | undefined = undefined
+	#unfollow: (() => void) | undefined = undefined
+	#reference: string | null = null
+	/** Above zero while one logical change runs. Writes then only mark the
+	 * wallet dirty, and the change notifies once when it ends. */
+	#depth = 0
+	#dirty = false
 
 	constructor(options: CreditWalletOptions<R>) {
+		super()
 		this.#readBalance = options.readBalance
 		this.#toBalance = options.toBalance
 		this.#parseInsufficientFunds = options.parseInsufficientFunds
@@ -133,7 +174,6 @@ export class CreditWallet<R = unknown> {
 
 	/** Where the current top-up follow stands. */
 	get topUp(): TopUpPhase {
-		void this.#followerTick
 		const follower = this.#follower
 		if (follower === undefined) return "idle"
 		if (follower.progress.status === "done") return "landed"
@@ -149,7 +189,6 @@ export class CreditWallet<R = unknown> {
 
 	/** The failure that ended the last top-up follow, when it timed out or failed. */
 	get topUpError(): ChaayaError | undefined {
-		void this.#followerTick
 		return this.#follower?.error
 	}
 
@@ -163,20 +202,29 @@ export class CreditWallet<R = unknown> {
 		const controller = new AbortController()
 		this.#refresh = controller
 		const ticket = this.#ticket()
-		this.phase = "reading"
+		this.#write({ phase: "reading" })
 		try {
 			const reading = await this.#readBalance(controller.signal)
 			if (this.#refresh !== controller) return this.balance
-			this.#land(ticket, this.#toBalance(reading))
-			this.#refresh = undefined
-			this.error = null
-			this.phase = "ready"
-			this.#settledPhase = "ready"
+			const balance = this.#toBalance(reading)
+			// The balance and the phase land as one change.
+			this.#depth += 1
+			try {
+				this.#land(ticket, balance)
+				this.#refresh = undefined
+				this.#write({ error: null, phase: "ready" })
+				this.#settledPhase = "ready"
+			} finally {
+				this.#depth -= 1
+				if (this.#depth === 0 && this.#dirty) {
+					this.#dirty = false
+					this.notify()
+				}
+			}
 		} catch (error) {
 			if (this.#refresh !== controller) return this.balance
 			this.#refresh = undefined
-			this.error = error
-			this.phase = "failed"
+			this.#write({ error, phase: "failed" })
 			this.#settledPhase = "failed"
 		}
 		return this.balance
@@ -205,15 +253,14 @@ export class CreditWallet<R = unknown> {
 	/**
 	 * Follow the balance after a top-up return until the adapter sees the
 	 * reference credited or the timeout passes. A newer follow closes the
-	 * older one. Each answer publishes the balance as a refresh would. Call
-	 * it during component initialisation, or pass a cleanup runner.
+	 * older one. Each answer publishes the balance as a refresh would, and
+	 * notifies once. Returns the teardown, which stops this follow; a
+	 * teardown of a follow a newer one replaced does nothing. A Svelte
+	 * component returns it from `onMount` or from an effect.
 	 */
-	followTopUp(
-		reference: string,
-		options: TopUpFollowOptions<R>,
-		registerCleanup: (task: () => () => void) => void = runInEffect
-	): void {
+	followTopUp(reference: string, options: TopUpFollowOptions<R>): () => void {
 		this.#follower?.close()
+		this.#unfollow?.()
 		const isCredited = options.isCredited
 		const follower = new JobPoller<TaggedReading<R>>({
 			fetchState: async (signal) => {
@@ -223,8 +270,15 @@ export class CreditWallet<R = unknown> {
 			toProgress: ({ ticket, reading }) => {
 				const balance = this.#toBalance(reading)
 				const credited = isCredited(reading, reference)
-				this.#land(ticket, balance)
-				this.#followed()
+				// Quiet: the follower notifies once this answer lands, and the
+				// wallet re-notifies then, so one answer notifies once.
+				this.#depth += 1
+				try {
+					this.#land(ticket, balance)
+					this.#followed()
+				} finally {
+					this.#depth -= 1
+				}
 				return {
 					status: credited ? "done" : "running",
 					detail: { amount: balance.amount, currency: balance.currency }
@@ -240,13 +294,18 @@ export class CreditWallet<R = unknown> {
 		})
 		this.#reference = reference
 		this.#follower = follower
-		follower.subscribe(() => {
-			this.#followerTick += 1
+		const unsubscribe = follower.subscribe(() => {
+			this.#dirty = false
+			this.notify()
 		})
-		/** The poll starts before the runner registers its teardown, as it did
-		 * when the runner went to the poller. */
+		this.#unfollow = unsubscribe
+		this.notify()
 		const teardown = follower.attach()
-		registerCleanup(() => teardown)
+		return () => {
+			teardown()
+			unsubscribe()
+			if (this.#unfollow === unsubscribe) this.#unfollow = undefined
+		}
 	}
 
 	/** Stop the top-up follow and abort a refresh in flight. The wallet keeps
@@ -256,7 +315,7 @@ export class CreditWallet<R = unknown> {
 		if (this.#refresh !== undefined) {
 			this.#refresh.abort()
 			this.#refresh = undefined
-			this.phase = this.#settledPhase
+			this.#write({ phase: this.#settledPhase })
 		}
 	}
 
@@ -264,8 +323,7 @@ export class CreditWallet<R = unknown> {
 	 * flight, the phase says so, and an earlier refresh failure clears. */
 	#followed(): void {
 		if (this.#refresh !== undefined) return
-		this.error = null
-		this.phase = "ready"
+		this.#write({ error: null, phase: "ready" })
 		this.#settledPhase = "ready"
 	}
 
@@ -280,10 +338,11 @@ export class CreditWallet<R = unknown> {
 		this.#landed = ticket
 		const previous = this.balance
 		if (sameBalance(previous, next)) return
-		this.balance = { amount: next.amount, currency: next.currency }
+		const balance = { amount: next.amount, currency: next.currency }
+		this.#write({ balance })
 		if (this.#onChange === undefined) return
 		try {
-			this.#onChange(this.balance, previous)
+			this.#onChange(balance, previous)
 		} catch {
 			// The change hook is the app's. Its failure never changes the balance.
 		}

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onDestroy } from "svelte";
+	import { reactive } from "$lib/svelte/index.js";
 	import { CreditWallet, consumeTopUpReturn, type InsufficientFunds, type PriceQuote } from "$lib/priced/index.js";
 
 	/* The backend lives in session storage, so it survives the reload a hosted
@@ -53,7 +55,7 @@
 		}
 	}
 
-	const wallet = new CreditWallet<Answer>({
+	const wallet = reactive(new CreditWallet<Answer>({
 		readBalance: async () => {
 			reads += 1;
 			await new Promise((resolve) => setTimeout(resolve, 20));
@@ -68,11 +70,11 @@
 		onChange: (next) => {
 			changes = [...changes, next.amount];
 		}
-	});
+	}));
 
 	/* The app keeps the quote across the checkout and hands it back on return. */
 	const kept = load().kept;
-	const action = wallet.action<string>({
+	const action = reactive(wallet.action<string>({
 		initialQuote: kept ?? undefined,
 		quote: async () => {
 			const backend = load();
@@ -93,7 +95,7 @@
 			save(backend);
 			return `ok ${quoteId}`;
 		}
-	});
+	}));
 
 	/* Leave for the checkout. The provider confirms the credit a little after
 	 * the return lands, and the return URL names the reference. */
@@ -113,13 +115,16 @@
 
 	const reference = consumeTopUpReturn(undefined, { param: "topup", path: "/tests/credit-wallet" });
 	if (reference === undefined) void wallet.refresh();
-	else
-		wallet.followTopUp(reference, {
+	else {
+		// The follow starts at init, as before, and stops with the page.
+		const stop = wallet.followTopUp(reference, {
 			isCredited: (answer, ref) => answer.applied.includes(ref),
 			intervalMs: 250,
 			maxIntervalMs: 500,
 			timeoutMs: 10_000
 		});
+		onDestroy(stop);
+	}
 </script>
 
 <main>

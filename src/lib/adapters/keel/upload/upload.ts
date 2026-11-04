@@ -1,3 +1,4 @@
+import { Notifier } from "../../../core/observable.js"
 import type { Uploader } from "../../../core/upload.js"
 import { ChunkBuffer, defaultChunkSize, sha256Hex } from "./chunk.js"
 import {
@@ -25,6 +26,20 @@ import type {
 	UploadStore
 } from "./types.js"
 
+/** The state an uploader publishes. One write may set several fields, and a
+ * view hears it once. */
+interface UploaderFields {
+	state: UploadState
+	id: string | undefined
+	capturedBytes: number
+	acknowledged: number
+	pending: number
+	retries: number
+	stored: number
+	receipt: UploadReceipt | undefined
+	error: UploadError | undefined
+}
+
 /** How long the drain waits before it looks for work again. */
 const idlePollMs = 20
 
@@ -47,25 +62,79 @@ function wait(ms: number): Promise<void> {
  * start() and finish() resolve when their work ends, and the state reports the
  * outcome. A caller reads state, error and receipt instead of catching.
  */
-export class ChunkUploader implements Uploader {
+export class ChunkUploader extends Notifier implements Uploader {
+	#fields: UploaderFields = {
+		state: "idle",
+		id: undefined,
+		capturedBytes: 0,
+		acknowledged: 0,
+		pending: 0,
+		retries: 0,
+		stored: 0,
+		receipt: undefined,
+		error: undefined
+	}
+
 	/** Where the upload stands. */
-	state = $state<UploadState>("idle")
+	get state(): UploadState {
+		return this.#fields.state
+	}
+
 	/** The id the server gave the upload, once it opened. */
-	id = $state<string | undefined>(undefined)
+	get id(): string | undefined {
+		return this.#fields.id
+	}
+
 	/** How many bytes the capture has handed over. */
-	capturedBytes = $state(0)
+	get capturedBytes(): number {
+		return this.#fields.capturedBytes
+	}
+
 	/** How many chunks the server has acknowledged. */
-	acknowledged = $state(0)
+	get acknowledged(): number {
+		return this.#fields.acknowledged
+	}
+
 	/** How many chunks wait for a send. */
-	pending = $state(0)
+	get pending(): number {
+		return this.#fields.pending
+	}
+
 	/** How many failed attempts will run again. */
-	retries = $state(0)
+	get retries(): number {
+		return this.#fields.retries
+	}
+
 	/** How many bytes the server holds. */
-	stored = $state(0)
+	get stored(): number {
+		return this.#fields.stored
+	}
+
 	/** What a finished upload reported. */
-	receipt = $state<UploadReceipt | undefined>(undefined)
+	get receipt(): UploadReceipt | undefined {
+		return this.#fields.receipt
+	}
+
 	/** Why the upload stopped, when it failed. */
-	error = $state<UploadError | undefined>(undefined)
+	get error(): UploadError | undefined {
+		return this.#fields.error
+	}
+
+	/** Apply one change to the published state and notify once when a value
+	 * moved. Equal values notify nothing, the way a rune skipped them. */
+	#write(patch: Partial<UploaderFields>): void {
+		let changed = false
+		const next = { ...this.#fields }
+		for (const key of Object.keys(patch) as (keyof UploaderFields)[]) {
+			if (Object.is(next[key], patch[key])) continue
+			;(next as Record<keyof UploaderFields, unknown>)[key] = patch[key]
+			changed = true
+		}
+		if (!changed) return
+		this.#fields = next
+		this.notify()
+	}
+
 
 	readonly #options: UploadOptions
 	readonly #store: UploadStore
@@ -87,6 +156,7 @@ export class ChunkUploader implements Uploader {
 	 * overwrite the total the capture recorded. */
 	#opened = false
 	constructor(options: UploadOptions) {
+		super()
 		this.#options = options
 		this.#store = options.store ?? new IndexedDbStore()
 		this.#buffer = new ChunkBuffer(options.chunkSize ?? defaultChunkSize)
@@ -99,7 +169,7 @@ export class ChunkUploader implements Uploader {
 	 */
 	async start(): Promise<void> {
 		if (this.state !== "idle") return
-		this.state = "opening"
+		this.#write({ state: "opening" })
 		const options = this.#options
 		const chunkSize = options.chunkSize ?? defaultChunkSize
 		const visibility = options.visibility ?? "private"
@@ -113,8 +183,7 @@ export class ChunkUploader implements Uploader {
 			const parsed = parseUploadSnapshot(await response.text())
 			if (!parsed.ok) throw new UploadFailure("invalid_response", parsed.failure.message)
 			if (this.#failure !== undefined) return
-			this.id = parsed.value.id
-			this.stored = parsed.value.storedBytes
+			this.#write({ id: parsed.value.id, stored: parsed.value.storedBytes })
 			this.#opened = true
 			this.#drainHeld()
 			await this.#store.putSession({
@@ -127,7 +196,7 @@ export class ChunkUploader implements Uploader {
 				startedAt: Date.now()
 			})
 			if (this.#failure !== undefined) return
-			this.state = "streaming"
+			this.#write({ state: "streaming" })
 		} catch (error) {
 			this.#fail(toUploadFailure(error))
 		}
@@ -143,7 +212,7 @@ export class ChunkUploader implements Uploader {
 	append(bytes: Uint8Array<ArrayBuffer>): void {
 		if (this.#frozen || this.#failure !== undefined)
 			return
-		this.capturedBytes += bytes.byteLength
+		this.#write({ capturedBytes: this.capturedBytes + bytes.byteLength })
 		if (this.id === undefined) {
 			this.#held.push(bytes)
 			return
@@ -192,7 +261,7 @@ export class ChunkUploader implements Uploader {
 	/** Finish one capture. Only one runs at a time. */
 	async #close(): Promise<void> {
 		this.#frozen = true
-		this.state = "finishing"
+		this.#write({ state: "finishing" })
 		const tail = this.#buffer.flush()
 		if (tail !== null) this.#accept(tail)
 		await this.#recordTotal()
@@ -248,22 +317,24 @@ export class ChunkUploader implements Uploader {
 
 	/** Take over one recorded session. */
 	async #adopt(record: SessionRecord): Promise<void> {
-		this.id = record.id
-		this.state = "streaming"
+		this.#write({ id: record.id, state: "streaming" })
 		try {
 			const stored = await this.#store.listChunks(record.id)
+			let captured = this.capturedBytes
 			for (const chunk of stored) {
-				this.capturedBytes += chunk.bytes.byteLength
+				captured += chunk.bytes.byteLength
 				this.#queue.push({ index: chunk.index, bytes: new Uint8Array(chunk.bytes), sha256: chunk.sha256 })
 			}
 			const last = stored.at(-1)
 			if (last !== undefined) this.#nextIndex = last.index + 1
-			this.pending = this.#queue.length
+			this.#write({ capturedBytes: captured, pending: this.#queue.length })
 			const state = await this.#attempt(() => this.#readState())
 			this.#queue = this.#queue.filter((chunk) => !state.received.includes(chunk.index))
-			this.acknowledged = state.received.length
-			this.stored = state.storedBytes
-			this.pending = this.#queue.length
+			this.#write({
+				acknowledged: state.received.length,
+				stored: state.storedBytes,
+				pending: this.#queue.length
+			})
 			this.#kick()
 		} catch (error) {
 			this.#fail(toUploadFailure(error))
@@ -285,7 +356,7 @@ export class ChunkUploader implements Uploader {
 				const sha256 = await sha256Hex(bytes)
 				await this.#store.putChunk({ id, index, sha256, bytes: bytes.slice().buffer })
 				this.#queue.push({ index, bytes, sha256 })
-				this.pending = this.#queue.length
+				this.#write({ pending: this.#queue.length })
 				this.#kick()
 			})
 			.catch((error: unknown) => {
@@ -316,8 +387,7 @@ export class ChunkUploader implements Uploader {
 				return
 			}
 			this.#queue.shift()
-			this.acknowledged += 1
-			this.pending = this.#queue.length
+			this.#write({ acknowledged: this.acknowledged + 1, pending: this.#queue.length })
 		}
 	}
 
@@ -335,7 +405,7 @@ export class ChunkUploader implements Uploader {
 	async #send(chunk: UploadChunk): Promise<void> {
 		const body = await this.#attempt(() => this.#put(chunk))
 		const parsed = parseUploadSnapshot(body)
-		if (parsed.ok) this.stored = parsed.value.storedBytes
+		if (parsed.ok) this.#write({ stored: parsed.value.storedBytes })
 	}
 
 	/** Run one request, and retry it while a retry can answer it. */
@@ -349,7 +419,7 @@ export class ChunkUploader implements Uploader {
 				attempt += 1
 				const delay = retryDelayMs(attempt)
 				if (!failure.retryable || delay === null) throw failure
-				this.retries += 1
+				this.#write({ retries: this.retries + 1 })
 				await wait(delay)
 			}
 		}
@@ -389,7 +459,7 @@ export class ChunkUploader implements Uploader {
 			if (chunk === undefined) continue
 			this.#queue.push({ index, bytes: new Uint8Array(chunk.bytes), sha256: chunk.sha256 })
 		}
-		this.pending = this.#queue.length
+		this.#write({ pending: this.#queue.length })
 		this.#kick()
 	}
 
@@ -424,8 +494,7 @@ export class ChunkUploader implements Uploader {
 			if (!parsed.ok) throw new UploadFailure("invalid_response", parsed.failure.message)
 			await this.#requireDurable(parsed.value.sizeBytes)
 			if (this.#failure !== undefined) return
-			this.receipt = parsed.value
-			this.state = "done"
+			this.#write({ receipt: parsed.value, state: "done" })
 			try {
 				await this.#store.deleteChunks(parsed.value.id)
 				await this.#store.deleteSession(parsed.value.id)
@@ -522,7 +591,7 @@ export class ChunkUploader implements Uploader {
 	#fail(failure: UploadFailure): void {
 		if (this.#failure !== undefined) return
 		this.#failure = failure
-		this.error =
+		const error: UploadError =
 			failure.detail === undefined
 				? { code: failure.code, message: failure.message, retryable: failure.retryable }
 				: {
@@ -531,6 +600,6 @@ export class ChunkUploader implements Uploader {
 						detail: failure.detail,
 						retryable: failure.retryable
 					}
-		this.state = "failed"
+		this.#write({ error, state: "failed" })
 	}
 }

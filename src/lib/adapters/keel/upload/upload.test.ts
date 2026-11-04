@@ -10,7 +10,7 @@ import uploadState from "../wire/fixtures/upload-state.json?raw"
 import { ChunkBuffer, sha256Hex } from "./chunk"
 import { parseUploadReceipt, parseUploadSnapshot, refusal } from "./protocol"
 import { isRetryableStatus, retryDelayMs } from "./retry"
-import { ChunkUploader } from "./upload.svelte"
+import { ChunkUploader } from "./upload"
 import type { SessionRecord, StoredChunk, UploadStore } from "./types"
 
 const uploadId = "00000000000000000000000000000001"
@@ -582,5 +582,49 @@ describe("durable completion", () => {
 		expect((resumed as ChunkUploader).state).toBe("failed")
 		expect((resumed as ChunkUploader).error?.code).toBe("incomplete")
 		expect(server.completions).toBe(completions)
+	})
+})
+
+describe("notifications", () => {
+	test("each step notifies once, and a failure lands its error and state together", async () => {
+		const server = new UploadServer()
+		server.mismatchIndex = 1
+		vi.stubGlobal("fetch", server.handle)
+		const uploader = new ChunkUploader({
+			url: base,
+			owner: "owner-1",
+			contentType: "audio/webm",
+			chunkSize,
+			store: new MemoryStore()
+		})
+		const seen: string[] = []
+		uploader.subscribe(() => seen.push(`${uploader.state}:${uploader.error?.code ?? ""}`))
+		await uploader.start()
+		// The open, the id and stored bytes as one change, then streaming.
+		expect(seen).toEqual(["opening:", "opening:", "streaming:"])
+		for (const text of goldenChunks) uploader.append(bytesOf(text))
+		await uploader.finish()
+		expect(uploader.state).toBe("failed")
+		// The state never reads failed without its error: both land in one
+		// notification. Later counts may still move, so only the first
+		// failed entry is checked.
+		expect(seen.find((entry) => entry.startsWith("failed"))).toBe("failed:chunk_mismatch")
+		expect(seen).not.toContain("failed:")
+	})
+
+	test("an acknowledgement moves the count and the queue in one notification", async () => {
+		const server = new UploadServer()
+		vi.stubGlobal("fetch", server.handle)
+		const uploader = new ChunkUploader({ url: base, owner: "owner-1", contentType: "audio/webm", chunkSize, store: new MemoryStore() })
+		await uploader.start()
+		const pairs: [number, number][] = []
+		uploader.subscribe(() => pairs.push([uploader.acknowledged, uploader.pending]))
+		for (const text of goldenChunks) uploader.append(bytesOf(text))
+		await uploader.finish()
+		expect(uploader.state).toBe("done")
+		// No notification shows an acknowledged chunk still counted as pending.
+		for (const [acknowledged, pending] of pairs) {
+			expect(acknowledged + pending).toBeLessThanOrEqual(goldenChunks.length)
+		}
 	})
 })

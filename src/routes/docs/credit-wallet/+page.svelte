@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { reactive } from "$lib/svelte/index.js";
 	import { resolve } from "$app/paths";
 	import referenceCss from "$lib/tokens/reference.css?raw";
 	import { onDestroy, onMount } from "svelte";
@@ -13,14 +14,14 @@
 
 	class Short extends Error {}
 
-	const wallet = new CreditWallet<{ amount: number; credited: string[] }>({
+	const wallet = reactive(new CreditWallet<{ amount: number; credited: string[] }>({
 		readBalance: async () => ({ amount: stored, credited: [...credited] }),
 		toBalance: (answer) => ({ amount: answer.amount, currency: "credit.label" }),
 		parseInsufficientFunds: (error) => (error instanceof Short ? {} : undefined)
-	});
+	}));
 
 	let quotes = 0;
-	const action = wallet.action<string>({
+	const action = reactive(wallet.action<string>({
 		quote: async () => {
 			quotes += 1;
 			return { id: `quote-${quotes}`, price: { amount: 40, currency: "credit.label" } };
@@ -30,7 +31,7 @@
 			stored -= 40;
 			return `spent once against ${quoteId}`;
 		}
-	});
+	}));
 
 	let hydrated = $state(false);
 	let checks = $state("");
@@ -62,12 +63,9 @@
 		const returned = consumeTopUpReturn(undefined, { param: "topup", path: "/docs/credit-wallet" });
 		if (returned === undefined) return;
 		cleanup?.();
-		wallet.followTopUp(
+		cleanup = wallet.followTopUp(
 			returned,
-			{ isCredited: (answer, ref) => answer.credited.includes(ref), intervalMs: 300, maxIntervalMs: 600, timeoutMs: 10_000 },
-			(task) => {
-				cleanup = task();
-			}
+			{ isCredited: (answer, ref) => answer.credited.includes(ref), intervalMs: 300, maxIntervalMs: 600, timeoutMs: 10_000 }
 		);
 	}
 
@@ -114,7 +112,8 @@
 		quote id unless the quote lapsed. A hosted checkout leaves the page and the provider confirms
 		later, so <code>consumeTopUpReturn</code> reads the reference once from a caller-named param
 		and replaces history. <code>followTopUp</code> then polls the balance through
-		<code>JobPoller</code> until the adapter sees the credit or the timeout passes. An app that
+		<code>JobPoller</code> until the adapter sees the credit or the timeout passes, and returns
+		the teardown that stops it. An app that
 		keeps the quote across the checkout passes it back as <code>initialQuote</code>.
 	</p>
 	<p data-testid="demo-balance">

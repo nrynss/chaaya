@@ -139,11 +139,11 @@
 			const inner = media.getUserMedia.bind(media);
 			media.getUserMedia = async () => generated.stream;
 			const context = await shared();
-			const uploader = new ChunkUploader({
+			const uploader = reactive(new ChunkUploader({
 				url: "/docs/audio-capture/chunks",
 				owner: "docs",
 				contentType: "audio/x-pcm-f32le"
-			});
+			}));
 			const take = reactive(new AudioRecorder({
 				mode: "pcm",
 				context,
